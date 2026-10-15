@@ -226,3 +226,62 @@ input.step-text:focus { outline: 1px solid var(--border); border-radius: .3rem; 
 .toast-success { background: var(--ok); }
 
 .about { max-width: 760px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; }
+
+/* the two views: Notebook and Protocols */
+.view-tabs { display: flex; gap: .2rem; margin-left: .5rem; }
+.view-tab { text-decoration: none; color: var(--muted); font-size: .9rem; padding: .3rem .7rem; border-radius: .4rem; }
+.view-tab:hover { background: var(--hover); color: var(--text); }
+.view-tab.active { background: var(--accent-soft); color: #92400e; font-weight: 600; }
+
+/* search */
+.search-box { padding: 0 .4rem .6rem; }
+.search-box input { font: inherit; font-size: .9rem; width: 100%; padding: .4rem .6rem; border: 1px solid var(--border); border-radius: .4rem; background: var(--bg); }
+.search-box input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); background: #fff; }
+.search-list { list-style: none; margin: 0; padding: 0; }
+.search-hit { padding: .4rem .5rem; border-radius: .35rem; cursor: pointer; }
+.search-hit:hover, .search-hit:focus { background: var(--hover); outline: none; }
+.search-title { font-size: .9rem; font-weight: 600; }
+.search-snippet { font-size: .8rem; color: var(--muted); margin-top: .1rem; }
+.search-hit mark { background: #fde68a; color: inherit; border-radius: .15rem; }
+
+/* a + on each note in the tree, shown on hover as in Trilium */
+.tree-add {
+    margin-left: auto; border: 0; background: none; cursor: pointer; color: var(--muted);
+    padding: 0 .35rem; border-radius: .3rem; font-size: .9rem; visibility: hidden;
+}
+.tree-row:hover .tree-add, .tree-row.active .tree-add { visibility: visible; }
+.tree-add:hover { background: var(--accent-soft); color: #92400e; }
+
+/* favourite protocols */
+.tree-head-link { font-size: .75rem; text-transform: none; letter-spacing: 0; font-weight: 500; text-decoration: none; }
+.fav-list { list-style: none; margin: 0; padding: 0 0 0 .3rem; }
+.fav-item { display: flex; align-items: center; gap: .3rem; padding: .18rem .35rem; border-radius: .35rem; cursor: pointer; font-size: .9rem; white-space: nowrap; overflow: hidden; }
+.fav-item:hover { background: var(--hover); }
+.fav-item.active { background: var(--accent-soft); font-weight: 600; }
+.fav-empty { padding: .2rem .4rem; }
+.btn.star.on { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+
+/* the protocol library */
+.library { max-width: 1100px; }
+.library-head { display: flex; align-items: center; gap: 1rem; }
+.library-head h1 { margin: .2rem 0; font-size: 1.6rem; }
+.library-filters { display: flex; align-items: center; gap: 1rem; margin: .6rem 0 1rem; }
+.library-search { font: inherit; flex: 1; padding: .5rem .7rem; border: 1px solid var(--border); border-radius: .45rem; }
+.library-folder { font-size: .95rem; margin: 1rem 0 .3rem; color: var(--muted); }
+.library-table { width: 100%; table-layout: fixed; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: .5rem; }
+.library-table td { padding: .5rem .6rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.library-table tr:last-child td { border-bottom: 0; }
+.library-table tr:hover td { background: var(--hover); }
+.library-title { font-weight: 600; text-decoration: none; color: var(--text); }
+.library-title:hover { color: var(--primary); }
+.star-cell { width: 2.5rem; }
+.uses-cell { width: 8rem; }
+.use-cell { width: 8rem; text-align: right; }
+@media (max-width: 800px) {
+    .topbar { flex-wrap: wrap; gap: .5rem; }
+    .topbar-nav { display: none; }
+    .uses-cell { display: none; }
+}
+.star-btn { border: 0; background: none; cursor: pointer; font-size: 1.15rem; color: var(--muted); line-height: 1; }
+.star-btn.on { color: #f59e0b; }
+.checkbox { display: inline-flex; align-items: center; gap: .3rem; font-size: .9rem; white-space: nowrap; }

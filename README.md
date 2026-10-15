@@ -3,8 +3,11 @@
 The Gardiner Lab suite's digital lab notebook.
 
 - **A notebook for everyone.** "Start today" files a page for the day under its year and month.
-  Pages can hold pages, and a page can sit in two places at once.
-- **A shared protocol library.** Anyone can add a protocol and use any of them. Whoever wrote a
+  Pages can hold pages (the ＋ beside each note adds one), and a page can sit in two places at once.
+- **Search.** Titles and everything written in pages and protocols, from the box at the top
+  (Ctrl+K). `#label=value` finds labelled pages.
+- **A shared protocol library**, in a Protocols tab of its own, with folders, search and
+  favourites. Your starred protocols are listed in the sidebar. Anyone can add a protocol and use any of them. Whoever wrote a
   protocol, their lab's lead and administrators can change it. Every version is kept, and a protocol
   used on a day keeps the version that was used.
 - **Active tables.** Volumes scale with the number of reactions, cells can hold formulas (`=B*N`,

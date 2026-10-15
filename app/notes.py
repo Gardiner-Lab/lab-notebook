@@ -133,6 +133,8 @@ def get(person: Person, note_id: str) -> dict:
             'placements': placements,
             'can_edit': can_edit(person, row),
             'can_add': can_add_under(person, row),
+            'favorite': bool(conn.execute('SELECT 1 FROM favorites WHERE username = ? AND note_id = ?',
+                                          (person.username, note_id)).fetchone()),
         }
     note['backlinks'] = [summary(b) for b in backlinks if can_view(person, b)]
     return note
@@ -163,9 +165,9 @@ def _create(conn, *, title: str, type: str, space: str, owner: Optional[str], by
             kind: str = 'created') -> str:
     note_id = content_mod.new_id() + content_mod.new_id()
     body = json.dumps(content or [])
-    conn.execute('INSERT INTO notes (id, title, type, space, owner, content, revision, version, '
-                 'created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?)',
-                 (note_id, title, type, space, owner, body, by, by))
+    conn.execute('INSERT INTO notes (id, title, type, space, owner, content, search_text, revision, version, '
+                 'created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?)',
+                 (note_id, title, type, space, owner, body, content_mod.plain_text(content or []), by, by))
     conn.execute('INSERT INTO revisions (note_id, number, title, content, kind, changed_by) '
                  'VALUES (?, 1, ?, ?, ?, ?)', (note_id, title, body, kind, by))
     if parent_id:
@@ -311,9 +313,9 @@ def save(person: Person, note_id: str, title: Optional[str] = None, content: Opt
         return get(person, note_id)
     with connect() as conn:
         number = _keep_revision(conn, note_id, new_title, body, person.username, 'edited')
-        conn.execute('UPDATE notes SET title = ?, content = ?, revision = ?, version = version + 1, '
-                     'updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-                     (new_title, body, number, person.username, note_id))
+        conn.execute('UPDATE notes SET title = ?, content = ?, search_text = ?, revision = ?, '
+                     'version = version + 1, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                     (new_title, body, content_mod.plain_text(blocks), number, person.username, note_id))
         _index_links(conn, note_id, blocks)
     return get(person, note_id)
 
@@ -462,29 +464,113 @@ def restore(person: Person, note_id: str, number: int) -> dict:
             raise ValueError('This is already the current version')
         new = _keep_revision(conn, note_id, r['title'], r['content'], person.username, 'restored',
                              f'Rolled back to version {number}')
-        conn.execute('UPDATE notes SET title = ?, content = ?, revision = ?, version = version + 1, '
-                     'updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-                     (r['title'], r['content'], new, person.username, note_id))
+        conn.execute('UPDATE notes SET title = ?, content = ?, search_text = ?, revision = ?, '
+                     'version = version + 1, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                     (r['title'], r['content'], content_mod.plain_text(json.loads(r['content'])), new,
+                      person.username, note_id))
         _index_links(conn, note_id, json.loads(r['content']))
     return get(person, note_id)
 
 
 # --- finding notes -------------------------------------------------------------
 
+def _snippet(text: str, words: List[str], width: int = 70) -> str:
+    """A piece of the text around the first word found, to show why a note matched."""
+    low = text.lower()
+    hits = [low.find(w) for w in words if w and low.find(w) >= 0]
+    if not hits:
+        return text[:width * 2] + ('…' if len(text) > width * 2 else '')
+    at = min(hits)
+    start = max(0, at - width)
+    return ('…' if start else '') + text[start:at + width] + ('…' if at + width < len(text) else '')
+
+
 def search(person: Person, query: str, types: Optional[List[str]] = None, limit: int = 30) -> List[dict]:
+    """
+    Notes this person may open, by the words in their title and content (all of
+    them must appear): title matches first, then the most recently changed.
+    "#name" or "#name=value" finds notes by label instead, as in Trilium.
+    """
     query = (query or '').strip()
-    sql = 'SELECT * FROM notes WHERE deleted_at IS NULL AND type NOT IN (\'notebook\', \'library\')'
+    sql = "SELECT * FROM notes WHERE deleted_at IS NULL AND type NOT IN ('notebook', 'library')"
     args: List[Any] = []
-    if query:
-        sql += ' AND title LIKE ?'
-        args.append(f'%{query}%')
+    words: List[str] = []
+    if query.startswith('#'):
+        name, _, value = query[1:].partition('=')
+        sql += " AND id IN (SELECT note_id FROM attributes WHERE type = 'label' AND name = ?"
+        sql += ' AND value LIKE ?)' if value else ')'
+        args += [name.strip()] + ([f'%{value.strip()}%'] if value else [])
+    elif query:
+        words = [w.lower() for w in query.split()][:8]
+        for w in words:
+            sql += ' AND (title LIKE ? OR search_text LIKE ?)'
+            args += [f'%{w}%', f'%{w}%']
     if types:
         sql += f' AND type IN ({",".join("?" * len(types))})'
         args += types
-    sql += ' ORDER BY updated_at DESC LIMIT 500'
+    sql += ' ORDER BY updated_at DESC LIMIT 1000'
     with connect() as conn:
-        rows = conn.execute(sql, args).fetchall()
-    return [summary(r) for r in rows if can_view(person, r)][:limit]
+        rows = [r for r in conn.execute(sql, args).fetchall() if can_view(person, r)]
+
+        def in_title(r):
+            return all(w in r['title'].lower() for w in words)
+        rows.sort(key=lambda r: not in_title(r))
+        found = []
+        for r in rows[:limit]:
+            path = _path(conn, r['id'])
+            found.append({**summary(r), 'updated_at': r['updated_at'],
+                          'where': ' › '.join(p['title'] for p in path[1:-1]),
+                          'snippet': '' if not words or in_title(r) else _snippet(r['search_text'] or '', words)})
+    return found
+
+
+# --- protocols and favourites ---------------------------------------------------
+
+def protocols(person: Person, query: str = '') -> List[dict]:
+    """Every protocol in the library, with its folder, author, use and whether it is a favourite."""
+    library = library_root()
+    words = [w.lower() for w in (query or '').split()][:8]
+    sql = "SELECT * FROM notes WHERE space = 'library' AND type = 'protocol' AND deleted_at IS NULL"
+    args: List[Any] = []
+    for w in words:
+        sql += ' AND (title LIKE ? OR search_text LIKE ?)'
+        args += [f'%{w}%', f'%{w}%']
+    with connect() as conn:
+        rows = conn.execute(sql + ' ORDER BY title COLLATE NOCASE', args).fetchall()
+        favourites = {r['note_id'] for r in conn.execute('SELECT note_id FROM favorites WHERE username = ?',
+                                                         (person.username,))}
+        uses = dict(conn.execute(
+            "SELECT l.target_id, COUNT(*) FROM links l JOIN notes n ON n.id = l.note_id "
+            "WHERE l.target_type = 'note' AND n.deleted_at IS NULL AND n.space = 'notebook' "
+            'GROUP BY l.target_id').fetchall())
+        found = []
+        for r in rows:
+            path = [p for p in _path(conn, r['id'])[:-1] if p['id'] != library]
+            found.append({**summary(r), 'folder': ' › '.join(p['title'] for p in path),
+                          'created_by': r['created_by'], 'updated_by': r['updated_by'],
+                          'updated_at': r['updated_at'], 'favorite': r['id'] in favourites,
+                          'uses': uses.get(r['id'], 0), 'can_edit': can_edit(person, r)})
+    return found
+
+
+def favorites(person: Person) -> List[dict]:
+    with connect() as conn:
+        rows = conn.execute('SELECT n.* FROM favorites f JOIN notes n ON n.id = f.note_id '
+                            'WHERE f.username = ? AND n.deleted_at IS NULL ORDER BY n.title COLLATE NOCASE',
+                            (person.username,)).fetchall()
+    return [summary(r) for r in rows if can_view(person, r)]
+
+
+def set_favorite(person: Person, note_id: str, favorite: bool) -> None:
+    with connect() as conn:
+        row = _row(conn, note_id)
+        if row['type'] != 'protocol':
+            raise ValueError('Only protocols can be favourites')
+        if favorite:
+            conn.execute('INSERT OR IGNORE INTO favorites (username, note_id) VALUES (?, ?)',
+                         (person.username, note_id))
+        else:
+            conn.execute('DELETE FROM favorites WHERE username = ? AND note_id = ?', (person.username, note_id))
 
 
 def protocol_snapshot(person: Person, protocol_id: str) -> Dict[str, Any]:

@@ -74,14 +74,16 @@ function modal({ title, build, buttons = [{ label: 'Close', kind: 'secondary' }]
       class: `btn ${b.kind === 'secondary' ? 'btn-secondary' : b.kind === 'danger' ? 'btn-danger' : 'btn-primary'}`,
       type: 'button',
       onclick: async (ev) => {
-        ev.currentTarget.disabled = true;
+        // Kept now: the event forgets its target once the handler awaits.
+        const btn = ev.currentTarget;
+        btn.disabled = true;
         try {
           const keep = await b.onClick?.({ close, body });
           if (keep !== false) close();
         } catch (err) {
           toast(err.message, 'error', 6000);
         } finally {
-          ev.currentTarget.disabled = false;
+          btn.disabled = false;
         }
       },
     }, b.label)));
@@ -164,6 +166,17 @@ const pickNote = (types, title = 'Choose a note') => picker({
     n.owner && n.owner !== NB.person.username ? el('span', { class: 'hint' }, ` · ${n.owner}`) : null],
 });
 
+/** Choose a protocol: your favourites first, then the rest of the library. */
+const pickProtocol = () => picker({
+  title: 'Use a protocol', placeholder: 'Search the protocol library',
+  search: async (q) => {
+    const all = (await api('GET', `/protocols?q=${encodeURIComponent(q)}`)).protocols;
+    return [...all.filter((p) => p.favorite), ...all.filter((p) => !p.favorite)];
+  },
+  describe: (p) => [p.favorite ? '★ ' : '🧪 ', el('b', { text: p.title }),
+    el('span', { class: 'hint' }, `${p.folder ? ` · ${p.folder}` : ''} · by ${p.created_by || 'MoClo'}`)],
+});
+
 async function pickMocloReaction() {
   const { saved } = await api('GET', '/moclo/reactions');
   if (!saved.length) {
@@ -186,20 +199,20 @@ const Tree = {
 
   remember() { store.set('expanded', [...this.expanded]); },
 
-  async mount(container, rootId, { label } = {}) {
+  async mount(container, rootId, { label, editable = false } = {}) {
     put(container);
     if (label) {
-      container.append(this.node({ id: rootId, title: label, type: 'notebook', has_children: true }, true));
+      container.append(this.node({ id: rootId, title: label, type: 'notebook', has_children: true }, true, editable));
     } else {
-      container.append(await this.childList(rootId));
+      container.append(await this.childList(rootId, editable));
     }
   },
 
-  async childList(parentId) {
+  async childList(parentId, editable = false) {
     const list = el('ul', { class: 'tree-list' });
     try {
       const { children } = await api('GET', `/notes/${parentId}/children`);
-      for (const child of children) list.append(this.node(child));
+      for (const child of children) list.append(this.node(child, false, editable));
       if (!children.length) list.append(el('li', { class: 'tree-empty hint' }, 'Empty'));
     } catch (err) {
       list.append(el('li', { class: 'hint' }, err.message));
@@ -207,7 +220,7 @@ const Tree = {
     return list;
   },
 
-  node(item, isRoot = false) {
+  node(item, isRoot = false, editable = false) {
     const li = el('li', { class: 'tree-node', 'data-id': item.id });
     const open = this.expanded.has(item.id);
     const toggle = el('span', { class: `tree-toggle ${item.has_children ? '' : 'leaf'}` }, item.has_children ? (open ? '▾' : '▸') : '');
@@ -216,7 +229,12 @@ const Tree = {
       draggable: !isRoot && !['year', 'month', 'day'].includes(item.type) ? 'true' : null,
       title: item.cloned ? 'This note is in more than one place' : null,
     }, toggle, el('span', { class: 'tree-icon' }, ICONS[item.type] || '📄'),
-    el('span', { class: 'tree-title', text: item.title }), item.cloned ? el('span', { class: 'tree-clone' }, '⧉') : null);
+    el('span', { class: 'tree-title', text: item.title }), item.cloned ? el('span', { class: 'tree-clone' }, '⧉') : null,
+    // A page under this one, from right here, as in Trilium.
+    editable ? el('button', {
+      class: 'tree-add', title: `New page under “${item.title}”`,
+      onclick: (e) => { e.stopPropagation(); App.newNote('mine', item.id); },
+    }, '＋') : null);
     const kids = el('div', { class: 'tree-kids' });
     li.append(row, kids);
 
@@ -225,7 +243,7 @@ const Tree = {
       if (now) this.expanded.add(item.id); else this.expanded.delete(item.id);
       this.remember();
       toggle.textContent = item.has_children ? (now ? '▾' : '▸') : '';
-      put(kids, now ? await this.childList(item.id) : '');
+      put(kids, now ? await this.childList(item.id, editable) : '');
     };
     toggle.addEventListener('click', (e) => { e.stopPropagation(); if (item.has_children) expand(); });
     row.addEventListener('click', () => (isRoot ? expand() : App.open(item.id)));
@@ -260,6 +278,61 @@ const Tree = {
 
   rename(id, title) {
     for (const t of document.querySelectorAll(`.tree-node[data-id="${CSS.escape(id)}"] > .tree-row .tree-title`)) t.textContent = title;
+  },
+};
+
+/* --- search -------------------------------------------------------------------------- */
+
+const Search = {
+  init() {
+    const input = document.getElementById('searchInput');
+    let timer;
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => this.run(input.value), 250); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { input.value = ''; this.run(''); }
+      if (e.key === 'Enter') document.querySelector('.search-hit')?.click();
+    });
+    // Ctrl+K (or /) jumps to search, from anywhere outside a text field.
+    document.addEventListener('keydown', (e) => {
+      const typing = e.target.closest('input, textarea, [contenteditable="true"]');
+      if ((e.key === 'k' && (e.ctrlKey || e.metaKey)) || (e.key === '/' && !typing)) {
+        e.preventDefault();
+        input.focus();
+        input.select();
+      }
+    });
+  },
+
+  async run(query) {
+    const q = query.trim();
+    const results = document.getElementById('searchResults');
+    document.getElementById('sidebarTrees').hidden = !!q;
+    results.hidden = !q;
+    if (!q) return;
+    this.ticket = (this.ticket || 0) + 1;
+    const mine = this.ticket;
+    let notes = [];
+    try { notes = (await api('GET', `/search?q=${encodeURIComponent(q)}`)).notes; } catch (err) { toast(err.message, 'error'); }
+    if (mine !== this.ticket) return;
+    const words = q.startsWith('#') ? [] : q.toLowerCase().split(/\s+/).filter(Boolean);
+    const mark = (text) => {
+      if (!words.length || !text) return text;
+      const re = new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+      return text.split(re).map((part, i) => (i % 2 ? el('mark', {}, part) : part));
+    };
+    put(results,
+      el('div', { class: 'tree-head' }, el('span', {}, `${notes.length}${notes.length === 30 ? '+' : ''} found`),
+        el('button', { class: 'icon-btn', title: 'Clear the search (Esc)', onclick: () => {
+          const input = document.getElementById('searchInput'); input.value = ''; this.run(''); input.focus();
+        } }, '✕')),
+      notes.length ? el('ul', { class: 'search-list' }, notes.map((n) => el('li', {
+        class: 'search-hit', tabindex: '0', onclick: () => App.open(n.id),
+        onkeydown: (e) => { if (e.key === 'Enter') App.open(n.id); },
+      }, el('div', { class: 'search-title' }, `${ICONS[n.type] || '📄'} `, mark(n.title)),
+      el('div', { class: 'hint' }, [n.space === 'library' ? 'Protocol library' : (n.owner !== NB.person.username ? `${n.owner}'s notebook` : ''),
+        n.where].filter(Boolean).join(' › ')),
+      n.snippet ? el('div', { class: 'search-snippet' }, mark(n.snippet)) : null)))
+        : el('p', { class: 'hint', style: 'padding:.4rem' }, q.startsWith('#') ? 'No notes with that label.' : 'Nothing found. Try fewer words.'));
   },
 };
 
@@ -626,23 +699,61 @@ const App = {
     }
     document.getElementById('btnToday').addEventListener('click', () => this.startDay());
     document.getElementById('dayPicker').addEventListener('change', (e) => { if (e.target.value) this.startDay(e.target.value); });
-    document.getElementById('btnNewPage').addEventListener('click', () => this.newNote('mine'));
-    document.getElementById('btnNewProtocol').addEventListener('click', () => this.newNote('library'));
-    window.addEventListener('hashchange', () => {
-      const id = this.hashNote();
-      if (id && id !== this.note?.id) this.open(id);
+    document.getElementById('btnNewPage').addEventListener('click', () => this.newNote('mine', this.me.notebook));
+    document.getElementById('tabNotebook').addEventListener('click', (e) => {
+      e.preventDefault();
+      const last = store.get('last', null);
+      if (last) this.open(last, { quiet: true }); else this.showEmpty();
     });
+    window.addEventListener('hashchange', () => this.route());
     window.addEventListener('beforeunload', () => { if (this.dirty) this.save({ keepalive: true }); });
-    await this.reloadTrees();
-    const start = this.hashNote() || store.get('last', null);
-    if (start) this.open(start, { quiet: true });
+    Search.init();
+    await Promise.all([this.reloadTrees(), this.loadFavorites()]);
+    if (location.hash.startsWith('#protocols')) this.route();
+    else {
+      const start = this.hashNote() || store.get('last', null);
+      if (start) this.open(start, { quiet: true });
+    }
+  },
+
+  /** Follow the address: #note=<id> opens a note, #protocols the library. */
+  route() {
+    if (location.hash.startsWith('#protocols')) { this.showLibrary(); return; }
+    const id = this.hashNote();
+    if (id && (id !== this.note?.id || !document.getElementById('library').hidden)) this.open(id);
+  },
+
+  setTab(name) {
+    document.getElementById('tabNotebook').classList.toggle('active', name === 'notebook');
+    document.getElementById('tabProtocols').classList.toggle('active', name === 'protocols');
+  },
+
+  showEmpty() {
+    document.getElementById('note').hidden = true;
+    document.getElementById('library').hidden = true;
+    document.getElementById('emptyState').hidden = false;
+    this.setTab('notebook');
+  },
+
+  async loadFavorites(list) {
+    const favs = list || (await api('GET', '/favorites')).favorites;
+    this.favorites = new Set(favs.map((f) => f.id));
+    put(document.getElementById('favList'), favs.length
+      ? favs.map((f) => el('li', { class: `fav-item ${this.note?.id === f.id ? 'active' : ''}`, 'data-id': f.id,
+        onclick: () => this.open(f.id) }, el('span', { class: 'tree-icon' }, '🧪'), el('span', { class: 'tree-title', text: f.title })))
+      : el('li', { class: 'hint fav-empty' }, 'Star a protocol (☆) to keep it here.'));
+  },
+
+  async toggleFavorite(id, on) {
+    const { favorites } = await api(on ? 'PUT' : 'DELETE', `/favorites/${id}`);
+    await this.loadFavorites(favorites);
+    return on;
   },
 
   hashNote() { return (location.hash.match(/note=([\w-]+)/) || [])[1] || null; },
 
   async reloadTrees() {
-    await Tree.mount(document.getElementById('treeMine'), this.me.notebook);
-    await Tree.mount(document.getElementById('treeLibrary'), this.me.library);
+    await Tree.mount(document.getElementById('treeMine'), this.me.notebook, { editable: true });
     const others = this.me.others || [];
     const section = document.getElementById('othersSection');
     section.hidden = !others.length;
@@ -670,20 +781,14 @@ const App = {
     } catch (err) { toast(err.message, 'error'); }
   },
 
-  async newNote(where) {
+  async newNote(where, parent, type) {
     await this.flush();
-    const here = this.note;
-    let parent;
-    if (where === 'library') {
-      parent = here && here.space === 'library' && here.can_add && here.type !== 'protocol' ? here.id : this.me.library;
-    } else {
-      parent = here && here.space === 'notebook' && here.owner === NB.person.username
-        && !['year', 'month'].includes(here.type) ? here.id : this.me.notebook;
-    }
+    parent = parent || (where === 'library' ? this.me.library : this.me.notebook);
+    type = type || (where === 'library' ? 'protocol' : 'page');
     try {
       const { note } = await api('POST', '/notes', {
-        parent_id: parent, type: where === 'library' ? 'protocol' : 'page',
-        title: where === 'library' ? 'New protocol' : 'Untitled',
+        parent_id: parent, type,
+        title: type === 'protocol' ? 'New protocol' : type === 'folder' ? 'New folder' : 'Untitled',
       });
       Tree.expanded.add(parent);
       Tree.remember();
@@ -710,18 +815,26 @@ const App = {
     this.note = note;
     this.dirty = false;
     store.set('last', note.id);
-    if (this.hashNote() !== note.id) history.replaceState(null, '', `#note=${note.id}`);
+    if (this.hashNote() !== note.id || location.hash.startsWith('#protocols')) {
+      history.pushState(null, '', `#note=${note.id}`);
+    }
     document.getElementById('emptyState').hidden = true;
+    document.getElementById('library').hidden = true;
     const box = document.getElementById('note');
     box.hidden = false;
+    this.setTab(note.space === 'library' ? 'protocols' : 'notebook');
     Tree.markActive(note.id);
+    for (const f of document.querySelectorAll('.fav-item')) f.classList.toggle('active', f.dataset.id === note.id);
     const editable = note.can_edit;
     const ctx = { editable, changed: () => this.changed() };
 
     const crumbs = el('nav', { class: 'crumbs' }, note.path.slice(0, -1).map((p, i) => [
       i ? el('span', { class: 'crumb-sep' }, '›') : null,
-      el('a', { href: `#note=${p.id}`, onclick: (e) => { e.preventDefault(); if (!['notebook', 'library'].includes(p.type)) this.open(p.id); } },
-        p.title)]));
+      el('a', { href: p.type === 'library' ? '#protocols' : `#note=${p.id}`, onclick: (e) => {
+        if (p.type === 'library') return;          // the Protocols tab, by its address
+        e.preventDefault();
+        if (p.type !== 'notebook') this.open(p.id);
+      } }, p.title)]));
 
     const fixedTitle = !editable || ['day', 'month', 'year'].includes(note.type);
     const title = fixedTitle
@@ -737,6 +850,20 @@ const App = {
       el('span', { class: 'hint' }, `Last saved by ${note.updated_by || note.created_by || '—'} · ${localTime(note.updated_at)}`),
       el('span', { class: 'save-state', id: 'saveState' }),
       el('span', { class: 'note-actions' },
+        note.type === 'protocol' ? el('button', {
+          class: `btn btn-sm star ${note.favorite ? 'on' : 'btn-secondary'}`,
+          title: note.favorite ? 'Remove from your favourite protocols' : 'Add to your favourite protocols, listed on the left',
+          onclick: async (e) => {
+            const btn = e.currentTarget;
+            note.favorite = await this.toggleFavorite(note.id, !note.favorite);
+            btn.textContent = note.favorite ? '★ Favourite' : '☆ Favourite';
+            btn.className = `btn btn-sm star ${note.favorite ? 'on' : 'btn-secondary'}`;
+          },
+        }, note.favorite ? '★ Favourite' : '☆ Favourite') : null,
+        note.space === 'notebook' || note.type !== 'protocol' ? null : el('button', {
+          class: 'btn btn-secondary btn-sm', title: "Put this protocol into today's page",
+          onclick: () => this.useToday(note.id),
+        }, '＋ Use today'),
         el('button', { class: 'btn btn-secondary btn-sm', onclick: () => this.history() }, '🕘 History'),
         editable || note.can_add ? el('button', { class: 'btn btn-secondary btn-sm', onclick: () => this.moreMenu() }, '⋯') : null));
 
@@ -766,7 +893,7 @@ const App = {
       }) }, '▦ Table'),
       el('button', { class: 'btn btn-secondary btn-sm', onclick: () => add({ id: newId(), type: 'steps', title: '', items: [{ id: newId(), text: '' }] }) }, '☑ Steps'),
       note.space === 'notebook' ? el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
-        const protocol = await pickNote(['protocol'], 'Use a protocol');
+        const protocol = await pickProtocol();
         if (!protocol) return;
         try { add((await api('GET', `/protocols/${protocol.id}/snapshot`)).section); } catch (err) { toast(err.message, 'error'); }
       } }, '🧪 Protocol…') : null,
@@ -867,16 +994,14 @@ const App = {
             toast(`Now also under ${where.title}`, 'success');
           } catch (err) { toast(err.message, 'error'); }
         } }, '⧉ Show also under another page…', el('div', { class: 'hint' }, 'One note in two places, as in Trilium: a change shows in both.')) : null,
+        note.can_edit && !['day', 'month', 'year'].includes(note.type) ? el('button', { class: 'menu-item', onclick: async () => {
+          close();
+          await this.moveNote(note);
+        } }, '↪ Move to…', el('div', { class: 'hint' }, note.space === 'library' ? 'Into a folder of the library.' : 'Under another page or day.')) : null,
         note.can_add ? el('button', { class: 'menu-item', onclick: async () => {
           close();
-          try {
-            const { note: child } = await api('POST', '/notes', { parent_id: note.id, type: note.space === 'library' ? 'protocol' : 'page',
-              title: note.space === 'library' ? 'New protocol' : 'Untitled' });
-            Tree.expanded.add(note.id); Tree.remember();
-            await this.reloadTrees();
-            this.show(child);
-          } catch (err) { toast(err.message, 'error'); }
-        } }, '＋ New page under this one') : null,
+          this.newNote(note.space === 'library' ? 'library' : 'mine', note.id, note.space === 'library' ? 'protocol' : 'page');
+        } }, note.space === 'library' ? '＋ New protocol in this folder' : '＋ New page under this one') : null,
         note.can_edit && !['day', 'month', 'year'].includes(note.type) ? el('button', { class: 'menu-item danger', onclick: () => {
           close();
           modal({
@@ -896,6 +1021,112 @@ const App = {
           });
         } }, '🗑 Delete') : null)),
     });
+  },
+
+  /** Move a note under another (or to the top), by its first place. */
+  async moveNote(note) {
+    const top = { id: note.space === 'library' ? this.me.library : this.me.notebook,
+      title: note.space === 'library' ? 'The top of the library' : 'The top of my notebook', type: 'notebook' };
+    const target = await picker({
+      title: `Move “${note.title}” to…`, placeholder: 'Search by title',
+      search: async (q) => {
+        const types = note.space === 'library' ? ['folder'] : ['page', 'folder', 'day', 'month', 'year'];
+        const found = (await api('GET', `/search?q=${encodeURIComponent(q)}&types=${types.join(',')}`)).notes
+          .filter((n) => n.space === note.space && n.id !== note.id && (note.space === 'library' || n.owner === NB.person.username));
+        return q ? found : [top, ...found];
+      },
+      describe: (n) => [`${ICONS[n.type] || '📄'} `, el('b', { text: n.title }), n.where ? el('span', { class: 'hint' }, ` · ${n.where}`) : null],
+    });
+    if (!target) return;
+    try {
+      await api('POST', `/branches/${note.placements[0].branch_id}/move`, { parent_id: target.id });
+      Tree.expanded.add(target.id); Tree.remember();
+      await this.reloadTrees();
+      await this.open(note.id);
+      toast(`Moved to ${target.title}`, 'success');
+    } catch (err) { toast(err.message, 'error'); }
+  },
+
+  /** Today's page, with this protocol put at its end. */
+  async useToday(protocolId) {
+    await this.flush();
+    try {
+      const { section } = await api('GET', `/protocols/${protocolId}/snapshot`);
+      const { note: day } = await api('POST', '/days', {});
+      const { note: saved } = await api('PUT', `/notes/${day.id}`, {
+        content: [...day.content.filter((b) => b.type !== 'text' || (b.html || '').trim()), section],
+        base_version: day.version,
+      });
+      for (const step of saved.path.slice(0, -1)) Tree.expanded.add(step.id);
+      Tree.remember();
+      await this.reloadTrees();
+      this.show(saved);
+      document.querySelector('.blocks')?.lastElementChild?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      toast(`Added to ${saved.title}`, 'success');
+    } catch (err) { toast(err.message, 'error'); }
+  },
+
+  /** The whole protocol library: search, folders, favourites. */
+  async showLibrary() {
+    await this.flush();
+    this.note = null;
+    Tree.markActive('');
+    this.setTab('protocols');
+    document.getElementById('emptyState').hidden = true;
+    document.getElementById('note').hidden = true;
+    const box = document.getElementById('library');
+    box.hidden = false;
+    const query = el('input', { type: 'search', class: 'library-search', placeholder: 'Search protocols by name or by what is in them',
+      value: this._libraryQuery || '' });
+    const onlyFav = el('input', { type: 'checkbox', checked: !!this._onlyFav });
+    const list = el('div', { class: 'library-list' });
+    const draw = async () => {
+      this._libraryQuery = query.value;
+      this._onlyFav = onlyFav.checked;
+      let protocols = (await api('GET', `/protocols?q=${encodeURIComponent(query.value.trim())}`)).protocols;
+      if (onlyFav.checked) protocols = protocols.filter((p) => p.favorite);
+      const groups = new Map();
+      for (const p of protocols) {
+        if (!groups.has(p.folder)) groups.set(p.folder, []);
+        groups.get(p.folder).push(p);
+      }
+      const folders = [...groups.keys()].sort((a, b) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)));
+      put(list, protocols.length ? folders.map((folder) => el('div', { class: 'library-group' },
+        folder ? el('h3', { class: 'library-folder' }, `📁 ${folder}`) : null,
+        el('table', { class: 'library-table' }, el('tbody', {}, groups.get(folder).map((p) => el('tr', {},
+          el('td', { class: 'star-cell' }, el('button', {
+            class: `star-btn ${p.favorite ? 'on' : ''}`, title: p.favorite ? 'Remove from favourites' : 'Add to favourites',
+            onclick: async (e) => {
+              const star = e.currentTarget;
+              p.favorite = await this.toggleFavorite(p.id, !p.favorite);
+              star.textContent = p.favorite ? '★' : '☆';
+              star.classList.toggle('on', p.favorite);
+              star.title = p.favorite ? 'Remove from favourites' : 'Add to favourites';
+            },
+          }, p.favorite ? '★' : '☆')),
+          el('td', {}, el('a', { href: `#note=${p.id}`, class: 'library-title', onclick: (e) => { e.preventDefault(); this.open(p.id); } }, p.title),
+            el('div', { class: 'hint' }, `by ${p.created_by || 'the MoClo Library Tool'}`,
+              p.updated_by && p.updated_by !== p.created_by ? ` · changed by ${p.updated_by}` : '', ` · ${localTime(p.updated_at).slice(0, 10)}`)),
+          el('td', { class: 'hint nowrap uses-cell' }, p.uses ? `used ${p.uses}×` : 'not used yet'),
+          el('td', { class: 'nowrap use-cell' }, el('button', { class: 'btn btn-secondary btn-sm', title: "Put it into today's page",
+            onclick: () => this.useToday(p.id) }, '＋ Use today'))))))))
+        : el('p', { class: 'hint' }, query.value || onlyFav.checked ? 'No protocols match.' : 'No protocols yet: add the first.'));
+    };
+    let timer;
+    query.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(draw, 250); });
+    onlyFav.addEventListener('change', draw);
+    put(box,
+      el('div', { class: 'library-head' },
+        el('h1', {}, '🧪 Protocol library'),
+        el('span', { class: 'note-actions' },
+          el('button', { class: 'btn btn-primary btn-sm', onclick: () => this.newNote('library', this.me.library, 'protocol') }, '＋ New protocol'),
+          el('button', { class: 'btn btn-secondary btn-sm', onclick: () => this.newNote('library', this.me.library, 'folder') }, '＋ New folder'))),
+      el('p', { class: 'hint' }, 'Shared by the whole lab. Anyone can add a protocol; its author, their lab lead and administrators can change it. ',
+        'Star the ones you use most: they are listed on the left, and offered first when you add a protocol to a page.'),
+      el('div', { class: 'library-filters' }, query, el('label', { class: 'checkbox' }, onlyFav, ' Favourites only')),
+      list);
+    query.focus();
+    await draw();
   },
 
   async history() {

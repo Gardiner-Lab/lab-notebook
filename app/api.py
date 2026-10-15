@@ -153,6 +153,32 @@ def search(person):
     return jsonify({'notes': notes.search(person, request.args.get('q', ''), types or None)})
 
 
+@api.get('/protocols')
+@signed_in
+def list_protocols(person):
+    return jsonify({'protocols': notes.protocols(person, request.args.get('q', ''))})
+
+
+@api.get('/favorites')
+@signed_in
+def list_favorites(person):
+    return jsonify({'favorites': notes.favorites(person)})
+
+
+@api.put('/favorites/<note_id>')
+@signed_in
+def add_favorite(person, note_id):
+    notes.set_favorite(person, note_id, True)
+    return jsonify({'favorites': notes.favorites(person)})
+
+
+@api.delete('/favorites/<note_id>')
+@signed_in
+def remove_favorite(person, note_id):
+    notes.set_favorite(person, note_id, False)
+    return jsonify({'favorites': notes.favorites(person)})
+
+
 @api.get('/protocols/<protocol_id>/snapshot')
 @signed_in
 def protocol_snapshot(person, protocol_id):

@@ -13,6 +13,7 @@ a tick that is new in this save gets them, one that was already there keeps
 its own.
 """
 
+import html
 import re
 import secrets
 from datetime import datetime, timezone
@@ -168,6 +169,31 @@ def clean_blocks(blocks: Any, previous: Optional[List[dict]] = None, username: s
         raise ValueError('content must be a list of blocks')
     cleaner = _Cleaner(previous, username)
     return [b for b in (cleaner.block(x) for x in blocks[:MAX_BLOCKS]) if b]
+
+
+_TAG = re.compile(r'<[^>]+>')
+
+
+def plain_text(blocks: List[dict]) -> str:
+    """The words in some content, without markup: what search looks through."""
+    words: List[str] = []
+
+    def walk(items):
+        for block in items or []:
+            kind = block.get('type')
+            words.append(str(block.get('title') or ''))
+            if kind == 'text':
+                words.append(html.unescape(_TAG.sub(' ', block.get('html') or '')))
+            elif kind == 'steps':
+                words.extend(str(i.get('text') or '') for i in block.get('items') or [])
+            elif kind == 'table':
+                words.extend(str(c.get('name') or '') for c in block.get('columns') or [])
+                for row in block.get('rows') or []:
+                    words.extend(c for c in row.get('cells') or [] if isinstance(c, str) and not c.startswith('='))
+            elif kind == 'section':
+                walk(block.get('blocks'))
+    walk(blocks)
+    return re.sub(r'\s+', ' ', ' '.join(words)).strip()
 
 
 def links(blocks: List[dict]) -> List[Tuple[str, str]]:

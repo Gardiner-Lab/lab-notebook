@@ -11,6 +11,10 @@
 <header class="topbar">
     <a class="topbar-back" href="{{ links.suite_home }}">← Lab tools</a>
     <span class="topbar-title">📓 Lab Notebook</span>
+    <nav class="view-tabs" aria-label="Views">
+        <a class="view-tab" id="tabNotebook" href="#">📓 Notebook</a>
+        <a class="view-tab" id="tabProtocols" href="#protocols">🧪 Protocols</a>
+    </nav>
     <nav class="topbar-nav">
         <a href="{{ links.editor }}/editor" target="_blank" rel="noopener">Plasmid Editor ↗</a>
         <a href="{{ links.moclo }}/parts" target="_blank" rel="noopener">MoClo ↗</a>
@@ -22,6 +26,12 @@
 
 <div class="shell">
     <aside class="sidebar" id="sidebar">
+        <div class="search-box">
+            <input type="search" id="searchInput" placeholder="Search notes and protocols…"
+                   title="Words in titles and text; #label or #label=value for labels" autocomplete="off">
+        </div>
+        <section class="search-results" id="searchResults" hidden></section>
+        <div id="sidebarTrees">
         <section class="tree-section">
             <div class="tree-head">
                 <span>My notebook</span>
@@ -35,15 +45,16 @@
         </section>
         <section class="tree-section">
             <div class="tree-head">
-                <span>Protocol library</span>
-                <button class="icon-btn" id="btnNewProtocol" title="New protocol in the shared library">＋</button>
+                <span>Favourite protocols</span>
+                <a class="tree-head-link" href="#protocols" title="The whole protocol library">All protocols →</a>
             </div>
-            <div class="tree" id="treeLibrary"></div>
+            <ul class="fav-list" id="favList"></ul>
         </section>
         <section class="tree-section" id="othersSection" hidden>
             <div class="tree-head"><span id="othersTitle">Lab notebooks</span></div>
             <div class="tree" id="treeOthers"></div>
         </section>
+        </div>
     </aside>
 
     <main class="main" id="main">
@@ -52,6 +63,7 @@
             <p>Start today's page, or open a page or protocol on the left.</p>
         </div>
         <article class="note" id="note" hidden></article>
+        <section class="library" id="library" hidden></section>
     </main>
 </div>
 

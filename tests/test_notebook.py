@@ -238,3 +238,66 @@ def test_attributes_and_deleting(as_user):
     assert ana.delete(f"/api/notes/{page['id']}").status_code == 200
     assert ana.get(f"/api/notes/{page['id']}").status_code == 404
     assert ana.delete(f'/api/notes/{root}').status_code == 403
+
+
+def test_search_finds_words_in_pages_and_labels(as_user):
+    ana, ben, lead = as_user('ana'), as_user('ben'), as_user('lead')
+    root = _me(ana)['notebook']
+    gel = _page(ana, root, 'Gel run', [
+        {'type': 'text', 'html': '<p>Ran the <b>colony PCR</b> products on a 1% agarose gel.</p>'},
+        {'type': 'table', 'columns': [{'name': 'Lane'}, {'name': 'Sample'}], 'rows': [{'cells': ['1', 'pGFP clone 4']}]},
+        {'type': 'steps', 'items': [{'text': 'Stain with SYBR Safe'}]}])
+    _page(ana, root, 'Agarose stock recipe')
+
+    found = ana.get('/api/search?q=agarose').get_json()['notes']
+    assert [n['title'] for n in found] == ['Agarose stock recipe', 'Gel run'], 'title matches come first'
+    assert 'agarose gel' in found[1]['snippet'] and found[1]['where'] == ''
+    # Every word must appear, in text, table cells or steps.
+    assert [n['id'] for n in ana.get('/api/search?q=SYBR colony').get_json()['notes']] == [gel['id']]
+    assert [n['id'] for n in ana.get('/api/search?q=clone 4').get_json()['notes']] == [gel['id']]
+    assert ana.get('/api/search?q=<b>').get_json()['notes'] == [], 'markup is not searched'
+    # Others find it only where they may open it.
+    assert ben.get('/api/search?q=agarose').get_json()['notes'] == []
+    assert len(lead.get('/api/search?q=agarose').get_json()['notes']) == 2
+
+    ana.post(f"/api/notes/{gel['id']}/attributes", json={'name': 'project', 'value': 'GFP'})
+    assert [n['id'] for n in ana.get('/api/search?q=%23project').get_json()['notes']] == [gel['id']]
+    assert [n['id'] for n in ana.get('/api/search?q=%23project=gfp').get_json()['notes']] == [gel['id']]
+    assert ana.get('/api/search?q=%23project=RFP').get_json()['notes'] == []
+
+    # Saving changes what is found.
+    ana.put(f"/api/notes/{gel['id']}", json={'content': [{'type': 'text', 'html': '<p>Western blot</p>'}]})
+    assert [n['id'] for n in ana.get('/api/search?q=agarose').get_json()['notes']] != [gel['id']]
+    assert [n['id'] for n in ana.get('/api/search?q=western').get_json()['notes']] == [gel['id']]
+
+
+def test_the_protocol_list_and_favourites(as_user):
+    ana, ben = as_user('ana'), as_user('ben')
+    library = _me(ana)['library']
+    folder = ana.post('/api/notes', json={'parent_id': library, 'title': 'Cloning', 'type': 'folder'}).get_json()['note']
+    mini = ana.post('/api/notes', json={'parent_id': folder['id'], 'title': 'Miniprep', 'type': 'protocol',
+                                        'content': [{'type': 'steps', 'items': [{'text': 'Lyse with buffer P2'}]}]}).get_json()['note']
+    listed = {p['title']: p for p in ben.get('/api/protocols').get_json()['protocols']}
+    assert set(listed) == {'MoClo Golden Gate assembly', 'Miniprep'}
+    assert listed['Miniprep']['folder'] == 'Cloning' and listed['Miniprep']['created_by'] == 'ana'
+    assert listed['Miniprep']['can_edit'] is False and listed['Miniprep']['favorite'] is False
+    assert [p['title'] for p in ben.get('/api/protocols?q=lyse').get_json()['protocols']] == ['Miniprep']
+
+    # Used on a day: counted.
+    day = ana.post('/api/days', json={'date': '2026-10-20'}).get_json()['note']
+    snap = ana.get(f"/api/protocols/{mini['id']}/snapshot").get_json()['section']
+    ana.put(f"/api/notes/{day['id']}", json={'content': [snap]})
+    assert {p['title']: p['uses'] for p in ana.get('/api/protocols').get_json()['protocols']}['Miniprep'] == 1
+
+    # Favourites are each person's own.
+    r = ben.put(f"/api/favorites/{mini['id']}")
+    assert r.status_code == 200 and [f['title'] for f in r.get_json()['favorites']] == ['Miniprep']
+    assert ana.get('/api/favorites').get_json()['favorites'] == []
+    assert ben.get(f"/api/notes/{mini['id']}").get_json()['note']['favorite'] is True
+    assert {p['title']: p['favorite'] for p in ben.get('/api/protocols').get_json()['protocols']}['Miniprep'] is True
+    assert ben.put(f"/api/favorites/{day['id']}").status_code in (400, 403, 404)
+    assert ben.delete(f"/api/favorites/{mini['id']}").get_json()['favorites'] == []
+    # A deleted protocol leaves the favourites.
+    ben.put(f"/api/favorites/{mini['id']}")
+    ana.delete(f"/api/notes/{mini['id']}")
+    assert ben.get('/api/favorites').get_json()['favorites'] == []

@@ -215,6 +215,15 @@ def moclo_protocol() -> List[dict]:
     ]
 
 
+def fill_search_text() -> None:
+    """Notes saved before search looked into content get their words now."""
+    with connect() as conn:
+        rows = conn.execute("SELECT id, content FROM notes WHERE search_text = '' AND content != '[]'").fetchall()
+        for r in rows:
+            conn.execute('UPDATE notes SET search_text = ? WHERE id = ?',
+                         (content_mod.plain_text(json.loads(r['content'] or '[]')), r['id']))
+
+
 def seed_library() -> None:
     """Put MoClo's protocol into the library, once: deleting it keeps it out."""
     from app import notes

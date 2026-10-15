@@ -76,6 +76,14 @@ CREATE TABLE IF NOT EXISTS revisions (
     PRIMARY KEY (note_id, number)
 );
 
+-- Each person's favourite protocols, listed in their sidebar.
+CREATE TABLE IF NOT EXISTS favorites (
+    username TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (username, note_id)
+);
+
 -- What each note links to, kept from its content: other notes and plasmids.
 CREATE TABLE IF NOT EXISTS links (
     note_id TEXT NOT NULL,
@@ -85,6 +93,13 @@ CREATE TABLE IF NOT EXISTS links (
 );
 CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_type, target_id);
 """
+
+
+# Columns added after the first release, put into older databases on start-up.
+_ADDED_COLUMNS = [
+    # The words of a note's content, without markup, for searching.
+    ('search_text', "TEXT NOT NULL DEFAULT ''"),
+]
 
 
 def set_path(path: str) -> None:
@@ -131,3 +146,7 @@ def initialize(db_path: Optional[str] = None) -> None:
     with connect() as conn:
         conn.execute('PRAGMA journal_mode = WAL')
         conn.executescript(SCHEMA)
+        columns = {r['name'] for r in conn.execute('PRAGMA table_info(notes)')}
+        for name, decl in _ADDED_COLUMNS:
+            if name not in columns:
+                conn.execute(f'ALTER TABLE notes ADD COLUMN {name} {decl}')
