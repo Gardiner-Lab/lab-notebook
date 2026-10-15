@@ -5,6 +5,8 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-15
+
 ### Added
 - **🗑 Deleted**, at the bottom of the sidebar. It lists deleted pages and protocols with where they
   were, who deleted them and when; View shows one, and Restore brings it back.
