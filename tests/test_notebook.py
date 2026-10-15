@@ -1,5 +1,6 @@
 """The notebook: days, pages, who may see and change what, history and links."""
 
+import io
 from datetime import date
 
 
@@ -435,3 +436,93 @@ def test_a_note_whose_place_is_gone_comes_back_at_the_top(as_user):
     assert as_user('lead').get('/api/deleted').get_json()['deleted'][0]['title'] == 'PCR'   # ana's lead may change it
     ana.post(f"/api/deleted/{proto['id']}/restore")
     assert [f['title'] for f in as_user('ben').get('/api/favorites').get_json()['favorites']] == ['PCR']
+
+
+PNG = b'\x89PNG\r\n\x1a\n' + b'\x00' * 64
+
+
+def _attach(client, note_id, *files):
+    data = {'file': [(io.BytesIO(body), name) for name, body in files]}
+    return client.post(f'/api/notes/{note_id}/attachments', data=data, content_type='multipart/form-data')
+
+
+def test_photos_and_files_attach_to_notes(as_user):
+    ana = as_user('ana')
+    page = _page(ana, _me(ana)['notebook'], 'Gel photos')
+    r = _attach(ana, page['id'], ('gel.png', PNG), ('protocol.pdf', b'%PDF-1.4 test'))
+    assert r.status_code == 201
+    gel, pdf = r.get_json()['attachments']
+    assert (gel['filename'], gel['image'], gel['mime'], gel['created_by']) == ('gel.png', True, 'image/png', 'ana')
+    assert pdf['image'] is False and pdf['size'] == len(b'%PDF-1.4 test')
+    assert [a['id'] for a in ana.get(f"/api/notes/{page['id']}").get_json()['note']['attachments']] == [gel['id'], pdf['id']]
+
+    # A photo shows in the page; anything else only downloads, and is never read as a page.
+    shown = ana.get(f"/api/attachments/{gel['id']}")
+    assert shown.status_code == 200 and shown.data == PNG and shown.mimetype == 'image/png'
+    assert shown.headers['Content-Disposition'].startswith('inline')
+    assert shown.headers['X-Content-Type-Options'] == 'nosniff' and 'sandbox' in shown.headers['Content-Security-Policy']
+    got = ana.get(f"/api/attachments/{pdf['id']}")
+    assert got.headers['Content-Disposition'].startswith('attachment') and got.mimetype == 'application/octet-stream'
+    assert ana.get(f"/api/attachments/{gel['id']}?download").headers['Content-Disposition'].startswith('attachment')
+
+    # Text can show it by its attachment, never by an address of its own.
+    saved = ana.put(f"/api/notes/{page['id']}", json={'content': [{'type': 'text', 'html':
+        f'<p><img data-attachment="{gel["id"]}" alt="gel" src="https://evil.example/x.png" onerror="alert(1)"></p>'}]}).get_json()['note']
+    html = saved['content'][0]['html']
+    assert f'data-attachment="{gel["id"]}"' in html and 'src=' not in html and 'onerror' not in html
+
+
+def test_files_that_could_run_as_a_page_only_download(as_user):
+    ana = as_user('ana')
+    page = _page(ana, _me(ana)['notebook'], 'Risky')
+    svg, html, fake = _attach(ana, page['id'], ('x.svg', b'<svg onload="alert(1)"/>'),
+                              ('x.html', b'<script>alert(1)</script>'), ('photo.png', b'not really a png')).get_json()['attachments']
+    for a in (svg, html, fake):
+        assert a['image'] is False
+        r = ana.get(f"/api/attachments/{a['id']}")
+        assert r.headers['Content-Disposition'].startswith('attachment') and r.mimetype == 'application/octet-stream'
+
+
+def test_who_may_see_and_add_attachments(as_user):
+    ana, ben, lead, zoe = (as_user(u) for u in ('ana', 'ben', 'lead', 'zoe'))
+    page = _page(ana, _me(ana)['notebook'], 'Private photo')
+    att = _attach(ana, page['id'], ('gel.png', PNG)).get_json()['attachments'][0]
+    assert lead.get(f"/api/attachments/{att['id']}").status_code == 200         # reads the lab's notebooks
+    assert ben.get(f"/api/attachments/{att['id']}").status_code == 403
+    assert zoe.get(f"/api/attachments/{att['id']}").status_code == 403
+    assert _attach(lead, page['id'], ('x.png', PNG)).status_code == 403          # but does not add
+    assert lead.delete(f"/api/attachments/{att['id']}").status_code == 403
+    # Protocol photos: everyone sees them, the author adds them.
+    proto = ana.post('/api/notes', json={'parent_id': _me(ana)['library'], 'title': 'Western', 'type': 'protocol'}).get_json()['note']
+    patt = _attach(ana, proto['id'], ('setup.png', PNG)).get_json()['attachments'][0]
+    assert zoe.get(f"/api/attachments/{patt['id']}").status_code == 200
+    assert _attach(ben, proto['id'], ('x.png', PNG)).status_code == 403
+
+
+def test_attachment_limits_and_removal(as_user, monkeypatch):
+    from app import attachments
+    monkeypatch.setattr(attachments, 'MAX_BYTES', 100)
+    ana = as_user('ana')
+    page = _page(ana, _me(ana)['notebook'], 'Limits')
+    assert _attach(ana, page['id'], ('big.bin', b'x' * 101)).status_code == 400
+    assert _attach(ana, page['id'], ('empty.txt', b'')).status_code == 400
+    att = _attach(ana, page['id'], ('../../etc/pass\x00wd', b'abc')).get_json()['attachments'][0]
+    assert '/' not in att['filename'] and '\x00' not in att['filename']
+
+    assert ana.delete(f"/api/attachments/{att['id']}").status_code == 200
+    assert ana.get(f"/api/notes/{page['id']}").get_json()['note']['attachments'] == []
+    # Still there for the versions that show it.
+    assert ana.get(f"/api/attachments/{att['id']}").status_code == 200
+    assert ana.delete(f"/api/attachments/{att['id']}").status_code == 404
+
+
+def test_a_copy_gets_its_own_attachments(as_user):
+    ana = as_user('ana')
+    proto = ana.post('/api/notes', json={'parent_id': _me(ana)['library'], 'title': 'Imaging', 'type': 'protocol'}).get_json()['note']
+    att = _attach(ana, proto['id'], ('scope.png', PNG)).get_json()['attachments'][0]
+    ana.put(f"/api/notes/{proto['id']}", json={'content': [{'type': 'text', 'html': f'<p><img data-attachment="{att["id"]}"></p>'}]})
+    copy = as_user('ben').post(f"/api/notes/{proto['id']}/copy").get_json()['note']
+    [mine] = copy['attachments']
+    assert mine['id'] != att['id'] and mine['filename'] == 'scope.png' and mine['created_by'] == 'ben'
+    assert f'data-attachment="{mine["id"]}"' in copy['content'][0]['html']
+    assert as_user('ben').get(f"/api/attachments/{mine['id']}").data == PNG

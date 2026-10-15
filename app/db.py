@@ -76,6 +76,23 @@ CREATE TABLE IF NOT EXISTS revisions (
     PRIMARY KEY (note_id, number)
 );
 
+-- Photos and files attached to notes, kept here so a backup takes them along.
+-- Removing one hides it from its note but keeps it for the note's history.
+CREATE TABLE IF NOT EXISTS attachments (
+    id TEXT PRIMARY KEY,
+    note_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    data BLOB NOT NULL,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP,
+    deleted_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_attachments_note ON attachments(note_id);
+
 -- Each person's favourite protocols, listed in their sidebar.
 CREATE TABLE IF NOT EXISTS favorites (
     username TEXT NOT NULL,

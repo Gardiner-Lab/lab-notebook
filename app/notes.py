@@ -18,6 +18,7 @@ import json
 from datetime import date
 from typing import Any, Dict, List, Optional
 
+from app import attachments
 from app import content as content_mod
 from app.db import connect
 from app.people import Person
@@ -135,6 +136,7 @@ def get(person: Person, note_id: str) -> dict:
             'can_add': can_add_under(person, row),
             'favorite': bool(conn.execute('SELECT 1 FROM favorites WHERE username = ? AND note_id = ?',
                                           (person.username, note_id)).fetchone()),
+            'attachments': attachments.listed(conn, note_id),
         }
     note['backlinks'] = [summary(b) for b in backlinks if can_view(person, b)]
     return note
@@ -362,7 +364,17 @@ def copy(person: Person, note_id: str) -> str:
             b.pop('id', None)
     untick(blocks)
     note_type = row['type'] if row['type'] in NOTE_TYPES else 'page'
-    return create(person, parent, f"{row['title']} (copy)", note_type, blocks)
+    new_id = create(person, parent, f"{row['title']} (copy)", note_type, blocks)
+    # Its own copies of the attachments, so the copy does not depend on the original.
+    with connect() as conn:
+        mapping = attachments.copy_all(conn, note_id, new_id, person.username)
+        if mapping:
+            body = conn.execute('SELECT content FROM notes WHERE id = ?', (new_id,)).fetchone()['content']
+            for old, new in mapping.items():
+                body = body.replace(old, new)       # ids are random, 24 characters: no false matches
+            conn.execute('UPDATE notes SET content = ? WHERE id = ?', (body, new_id))
+            conn.execute('UPDATE revisions SET content = ? WHERE note_id = ? AND number = 1', (body, new_id))
+    return new_id
 
 
 def delete(person: Person, note_id: str) -> None:

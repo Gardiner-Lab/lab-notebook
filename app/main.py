@@ -34,7 +34,8 @@ def create_app() -> Flask:
     from app.api import api
 
     app = Flask(__name__)
-    app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024
+    # Room for several photos at once; each file is limited to 25 MB (app/attachments.py).
+    app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024
     db.initialize(os.environ.get('NOTEBOOK_DATABASE_PATH', '/notebook/notebook.db'))
     sources.seed_library()
     sources.fill_search_text()

@@ -22,6 +22,8 @@ The Gardiner Lab suite's digital lab notebook.
   opens the plasmid in the Plasmid Editor.
 - **Who sees what.** Your notebook is yours. Lab leads can read their lab's notebooks, and
   administrators can read all of them. Only the owner changes a notebook.
+- **Photos and files.** Attach them to pages and protocols with 📎 Attach…, or paste or drop them into
+  text. Photos show in the page, and the backup includes them.
 - **History.** Every change is kept with who made it, and any version can be restored.
 
 ## Running it

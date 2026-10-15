@@ -22,8 +22,11 @@ from typing import Any, Dict, List, Optional, Tuple
 import nh3
 
 TEXT_TAGS = {'p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'sub', 'sup', 'h1', 'h2', 'h3',
-             'ul', 'ol', 'li', 'a', 'code', 'pre', 'blockquote', 'span', 'mark', 'hr'}
-TEXT_ATTRIBUTES = {'a': {'href', 'data-plasmid', 'data-note', 'class', 'title'},
+             'ul', 'ol', 'li', 'a', 'code', 'pre', 'blockquote', 'span', 'mark', 'hr', 'img'}
+# A picture or file is named by its attachment, never by an address: the page
+# works out where to fetch it from, so text cannot point images elsewhere.
+TEXT_ATTRIBUTES = {'a': {'href', 'data-plasmid', 'data-note', 'data-attachment', 'class', 'title'},
+                   'img': {'data-attachment', 'alt', 'title'},
                    'span': {'class'}, 'mark': {'class'}}
 COLUMN_KINDS = ('text', 'number', 'scaled', 'fill', 'check', 'formula')
 MAX_HTML = 200_000

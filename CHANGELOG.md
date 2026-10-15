@@ -5,6 +5,18 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Photos and attachments**, as in Trilium, on pages and protocols.
+  - Add them with **📎 Attach…**, by pasting a screenshot into text, or by dropping files onto it.
+  - Photos show in the text; other files become download links. Every note lists its attachments.
+  - The files are kept in the notebook's database, so the suite's backup includes them.
+  - Who sees and adds them follows the note.
+  - Only PNG, JPEG, GIF, WebP and BMP photos show in pages. Everything else, SVG and HTML
+    included, only downloads, so no file can run in the notebook.
+  - Files are limited to 25 MB each.
+  - A copy of a note gets its own copies of the attachments.
+  - Removing one leaves the note's earlier versions intact.
+
 ## [0.2.0] - 2026-10-15
 
 ### Added

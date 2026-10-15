@@ -107,6 +107,13 @@ function localTime(stamp) {
 }
 
 const newId = () => Math.random().toString(16).slice(2, 14);
+const attachmentUrl = (id, download = false) => url(`/api/attachments/${encodeURIComponent(id)}${download ? '?download' : ''}`);
+const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (ch) => `&#${ch.charCodeAt(0)};`);
+const sizeLabel = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} kB`);
+/** An attachment as it sits in text: a photo shown, any other file a link. */
+const attachmentHtml = (a) => (a.image
+  ? `<p><img data-attachment="${a.id}" alt="${escapeHtml(a.filename)}"></p>`
+  : `<p><a data-attachment="${a.id}">📎 ${escapeHtml(a.filename)}</a></p>`);
 const store = {
   get(key, fallback) { try { return JSON.parse(localStorage.getItem(`nb:${key}`)) ?? fallback; } catch (e) { return fallback; } },
   set(key, value) { try { localStorage.setItem(`nb:${key}`, JSON.stringify(value)); } catch (e) { /* private window */ } },
@@ -395,10 +402,13 @@ const Blocks = {
     area.innerHTML = block.html || '';          // cleaned by the server
     this.decorateLinks(area);
     area.addEventListener('click', (e) => {
+      const photo = e.target.closest('img[data-attachment]');
+      if (photo) { window.open(attachmentUrl(photo.dataset.attachment), '_blank', 'noopener'); return; }
       const link = e.target.closest('a');
       if (!link) return;
       e.preventDefault();
-      if (link.dataset.plasmid) window.open(editorLink(link.dataset.plasmid), '_blank', 'noopener');
+      if (link.dataset.attachment) window.open(attachmentUrl(link.dataset.attachment, true), '_blank', 'noopener');
+      else if (link.dataset.plasmid) window.open(editorLink(link.dataset.plasmid), '_blank', 'noopener');
       else if (link.dataset.note) App.open(link.dataset.note);
       else if (/^https?:/.test(link.getAttribute('href') || '')) window.open(link.href, '_blank', 'noopener');
     });
@@ -420,9 +430,25 @@ const Blocks = {
       }
     });
     // Pasted text comes in as plain text: what else a page holds is added with the tools.
+    // A pasted picture (a screenshot, say) is attached to the note and shown where it was pasted.
     area.addEventListener('paste', (e) => {
       e.preventDefault();
+      const files = [...(e.clipboardData.files || [])];
+      if (files.length) { App.attachHere(area, files, sync); return; }
       document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+    });
+    // Photos and files dragged in are attached where they are dropped.
+    area.addEventListener('dragover', (e) => {
+      if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); area.classList.add('drop-files'); }
+    });
+    area.addEventListener('dragleave', () => area.classList.remove('drop-files'));
+    area.addEventListener('drop', (e) => {
+      if (!e.dataTransfer.files.length) return;
+      e.preventDefault();
+      area.classList.remove('drop-files');
+      const at = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+      if (at) { const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(at); }
+      App.attachHere(area, [...e.dataTransfer.files], sync);
     });
     area.addEventListener('focus', () => App.showFormatBar(area, sync));
     return area;
@@ -431,8 +457,11 @@ const Blocks = {
   /** The text as kept: links by what they point at, not by this page's address for it. */
   storable(area) {
     const copy = area.cloneNode(true);
-    for (const a of copy.querySelectorAll('a[data-plasmid], a[data-note]')) {
+    for (const a of copy.querySelectorAll('a[data-plasmid], a[data-note], a[data-attachment]')) {
       for (const attr of ['href', 'class', 'title']) a.removeAttribute(attr);
+    }
+    for (const img of copy.querySelectorAll('img[data-attachment]')) {
+      for (const attr of ['src', 'loading', 'class']) img.removeAttribute(attr);
     }
     return copy.innerHTML;
   },
@@ -446,6 +475,16 @@ const Blocks = {
     for (const a of area.querySelectorAll('a[data-note]')) {
       a.href = `#note=${a.dataset.note}`;
       a.classList.add('note-link');
+    }
+    for (const img of area.querySelectorAll('img[data-attachment]')) {
+      img.src = attachmentUrl(img.dataset.attachment);
+      img.loading = 'lazy';
+      img.title = 'Open the full picture';
+    }
+    for (const a of area.querySelectorAll('a[data-attachment]')) {
+      a.href = attachmentUrl(a.dataset.attachment, true);
+      a.classList.add('file-link');
+      a.title = 'Download';
     }
   },
 
@@ -879,8 +918,9 @@ const App = {
     const blocks = el('div', { class: 'blocks' });
     Blocks.renderList(note.content, blocks, ctx);
 
+    this._blocks = { blocks, ctx };
     put(box, crumbs, el('div', { class: 'note-head' }, title), meta, this.attributeBar(note),
-      blocks, editable ? this.insertBar(note, blocks, ctx) : null, this.linksPanel(note));
+      blocks, editable ? this.insertBar(note, blocks, ctx) : null, this.attachmentPanel(note), this.linksPanel(note));
   },
 
   insertBar(note, blocks, ctx) {
@@ -909,6 +949,24 @@ const App = {
       el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
         try { const section = await pickMocloReaction(); if (section) add(section); } catch (err) { toast(err.message, 'error'); }
       } }, '🧬 MoClo reaction…'),
+      el('label', { class: 'btn btn-secondary btn-sm', title: 'Attach photos or files: they are shown or linked here, and listed under Attachments. You can also paste or drop them into text.' },
+        '📎 Attach…', el('input', { type: 'file', multiple: true, hidden: true, onchange: async (e) => {
+          const files = [...e.target.files];
+          e.target.value = '';
+          const added = await this.upload(note, files);
+          if (!added.length) return;
+          const html = added.map(attachmentHtml).join('');
+          const last = note.content[note.content.length - 1];
+          if (last && last.type === 'text' && (last.html || '').trim()) {
+            last.html = `${last.html}${html}`;
+            Blocks.renderList(note.content, blocks, ctx);
+            this.changed();
+          } else if (last && last.type === 'text') {
+            last.html = html;
+            Blocks.renderList(note.content, blocks, ctx);
+            this.changed();
+          } else add({ id: newId(), type: 'text', html });
+        } })),
       el('button', { class: 'btn btn-secondary btn-sm', title: 'Add a link to a plasmid, which opens it in the Plasmid Editor', onclick: async () => {
         const p = await pickPlasmid();
         if (!p) return;
@@ -920,6 +978,84 @@ const App = {
           this.changed();
         } else add({ id: newId(), type: 'text', html: `<p>${link}</p>` });
       } }, '🔗 Plasmid…'));
+  },
+
+  /** Send files to be attached to a note; resolves with what was attached. */
+  async upload(note, files) {
+    if (!files.length) return [];
+    const form = new FormData();
+    for (const f of files) form.append('file', f, f.name || `pasted-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`);
+    this.setState(`Attaching ${files.length} file${files.length > 1 ? 's' : ''}…`);
+    try {
+      const res = await fetch(url(`/api/notes/${note.id}/attachments`), { method: 'POST', body: form, credentials: 'same-origin' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || (res.status === 413 ? 'Too large to send at once' : `${res.status} ${res.statusText}`));
+      note.attachments = [...(note.attachments || []), ...data.attachments];
+      document.getElementById('attachmentPanel')?.replaceWith(this.attachmentPanel(note));
+      this.setState('Attached', 'ok');
+      return data.attachments;
+    } catch (err) {
+      this.setState(`Not attached: ${err.message}`, 'error');
+      toast(`Not attached: ${err.message}`, 'error', 7000);
+      return [];
+    }
+  },
+
+  /** Attach files and show them at the caret in this text. */
+  async attachHere(area, files, sync) {
+    const note = this.note;
+    if (!note?.can_edit) return;
+    const sel = window.getSelection();
+    const range = sel.rangeCount && area.contains(sel.anchorNode) ? sel.getRangeAt(0).cloneRange() : null;
+    const added = await this.upload(note, files);
+    if (!added.length) return;
+    area.focus();
+    if (range) { sel.removeAllRanges(); sel.addRange(range); }
+    document.execCommand('insertHTML', false, added.map(attachmentHtml).join(''));
+    Blocks.decorateLinks(area);
+    sync();
+  },
+
+  /** The note's photos and files, with a way to open, put in the text, or remove each. */
+  attachmentPanel(note) {
+    const list = note.attachments || [];
+    if (!list.length) return el('span', { id: 'attachmentPanel' });
+    const insert = (a) => {
+      const { blocks, ctx } = this._blocks;
+      const last = note.content[note.content.length - 1];
+      if (last && last.type === 'text') last.html = `${last.html || ''}${attachmentHtml(a)}`;
+      else note.content.push({ id: newId(), type: 'text', html: attachmentHtml(a) });
+      Blocks.renderList(note.content, blocks, ctx);
+      this.changed();
+    };
+    return el('section', { class: 'attachments-panel', id: 'attachmentPanel' },
+      el('div', { class: 'tree-head' }, `📎 Attachments (${list.length})`),
+      el('ul', { class: 'attachment-list' }, list.map((a) => el('li', { class: 'attachment' },
+        a.image
+          ? el('img', { class: 'attachment-thumb', src: attachmentUrl(a.id), alt: '', loading: 'lazy',
+            onclick: () => window.open(attachmentUrl(a.id), '_blank', 'noopener') })
+          : el('span', { class: 'attachment-icon' }, '📄'),
+        el('div', { class: 'attachment-info' },
+          el('a', { href: attachmentUrl(a.id, !a.image), target: '_blank', rel: 'noopener', text: a.filename }),
+          el('div', { class: 'hint' }, `${sizeLabel(a.size)} · ${a.created_by || '—'} · ${localTime(a.created_at)}`)),
+        el('span', { class: 'attachment-actions' },
+          el('a', { class: 'btn btn-secondary btn-sm', href: attachmentUrl(a.id, true), title: 'Download' }, '⤓'),
+          note.can_edit ? el('button', { class: 'btn btn-secondary btn-sm', title: 'Show it at the end of the page',
+            onclick: () => insert(a) }, 'Insert') : null,
+          note.can_edit ? el('button', { class: 'btn btn-secondary btn-sm', title: 'Remove from this note (earlier versions keep it)',
+            onclick: () => modal({
+              title: `Remove “${a.filename}”?`,
+              build: (b) => b.append(el('p', {}, 'It leaves this note and its list. Earlier versions in the history still show it. ',
+                'Take it out of the text as well if it is shown there.')),
+              buttons: [{ label: 'Cancel', kind: 'secondary' }, {
+                label: 'Remove', kind: 'danger',
+                onClick: async () => {
+                  await api('DELETE', `/attachments/${a.id}`);
+                  note.attachments = note.attachments.filter((x) => x.id !== a.id);
+                  document.getElementById('attachmentPanel')?.replaceWith(this.attachmentPanel(note));
+                },
+              }],
+            }) }, '✕') : null)))));
   },
 
   attributeBar(note) {

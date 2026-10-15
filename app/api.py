@@ -3,9 +3,11 @@
 from datetime import date
 from functools import wraps
 
-from flask import Blueprint, jsonify, request
+from urllib.parse import quote
 
-from app import notes, people, sources
+from flask import Blueprint, Response, jsonify, request
+
+from app import attachments, notes, people, sources
 
 api = Blueprint('api', __name__)
 
@@ -82,6 +84,37 @@ def copy_note(person, note_id):
 @signed_in
 def delete_note(person, note_id):
     notes.delete(person, note_id)
+    return jsonify({'ok': True})
+
+
+@api.post('/notes/<note_id>/attachments')
+@signed_in
+def add_attachments(person, note_id):
+    files = [(f.filename or 'file', f.read(attachments.MAX_BYTES + 1)) for f in request.files.getlist('file')]
+    return jsonify({'attachments': attachments.add(person, note_id, files)}), 201
+
+
+@api.get('/attachments/<att_id>')
+@signed_in
+def get_attachment(person, att_id):
+    found = attachments.fetch(person, att_id)
+    inline = found['inline'] and request.args.get('download') is None
+    name = quote(found['filename'])
+    response = Response(found['data'], mimetype=found['mime'] if found['inline'] else 'application/octet-stream')
+    response.headers['Content-Disposition'] = (f"{'inline' if inline else 'attachment'}; "
+                                               f"filename*=UTF-8''{name}")
+    # Never read as anything but what it is, and never run as a page.
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Content-Security-Policy'] = "default-src 'none'; sandbox"
+    response.headers['Cache-Control'] = 'private, max-age=86400'
+    response.headers['ETag'] = found['sha256']
+    return response
+
+
+@api.delete('/attachments/<att_id>')
+@signed_in
+def remove_attachment(person, att_id):
+    attachments.remove(person, att_id)
     return jsonify({'ok': True})
 
 
