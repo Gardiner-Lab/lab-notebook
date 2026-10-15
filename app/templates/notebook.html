@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Lab Notebook</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📓</text></svg>">
+    <link rel="stylesheet" href="{{ request.script_root }}/static/css/notebook.css?v={{ version }}">
+</head>
+<body>
+<header class="topbar">
+    <a class="topbar-back" href="{{ links.suite_home }}">← Lab tools</a>
+    <span class="topbar-title">📓 Lab Notebook</span>
+    <nav class="topbar-nav">
+        <a href="{{ links.editor }}/editor" target="_blank" rel="noopener">Plasmid Editor ↗</a>
+        <a href="{{ links.moclo }}/parts" target="_blank" rel="noopener">MoClo ↗</a>
+        <a href="{{ request.script_root }}/about">About</a>
+    </nav>
+    <span class="topbar-user">{{ person.username }}{% if person.role != 'member' %} · {{ 'admin' if person.role == 'admin' else 'lab lead' }}{% endif %}</span>
+    <a class="topbar-logout" href="{{ links.logout }}">Log out</a>
+</header>
+
+<div class="shell">
+    <aside class="sidebar" id="sidebar">
+        <section class="tree-section">
+            <div class="tree-head">
+                <span>My notebook</span>
+                <button class="icon-btn" id="btnNewPage" title="New page in my notebook">＋</button>
+            </div>
+            <div class="day-bar">
+                <button class="btn btn-primary" id="btnToday" title="Open today's page, starting it if needed">📅 Start today</button>
+                <input type="date" id="dayPicker" title="Open or start another day">
+            </div>
+            <div class="tree" id="treeMine"></div>
+        </section>
+        <section class="tree-section">
+            <div class="tree-head">
+                <span>Protocol library</span>
+                <button class="icon-btn" id="btnNewProtocol" title="New protocol in the shared library">＋</button>
+            </div>
+            <div class="tree" id="treeLibrary"></div>
+        </section>
+        <section class="tree-section" id="othersSection" hidden>
+            <div class="tree-head"><span id="othersTitle">Lab notebooks</span></div>
+            <div class="tree" id="treeOthers"></div>
+        </section>
+    </aside>
+
+    <main class="main" id="main">
+        <div class="empty-state" id="emptyState">
+            <h2>Your lab notebook</h2>
+            <p>Start today's page, or open a page or protocol on the left.</p>
+        </div>
+        <article class="note" id="note" hidden></article>
+    </main>
+</div>
+
+<div id="toasts" class="toasts"></div>
+
+<script>
+    window.NB = {
+        base: {{ request.script_root | tojson }},
+        editor: {{ links.editor | tojson }},
+        person: {{ person.to_dict() | tojson }},
+    };
+</script>
+<script src="{{ request.script_root }}/static/js/sheet.js?v={{ version }}"></script>
+<script src="{{ request.script_root }}/static/js/notebook.js?v={{ version }}"></script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+Lab Notebook
+Copyright (C) 2026 Gardiner Lab, Utrecht University
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, version 3 or (at your option) any later version. See
+LICENSE.
+
+
+Trilium Notes
+-------------
+
+The Lab Notebook's design follows Trilium Notes (TriliumNext), a hierarchical
+note-taking application:
+
+    https://github.com/TriliumNext/Trilium
+    Copyright (C) zadam, Elian Doran and other contributors
+    Licensed under the GNU Affero General Public License v3.0
+
+Taken from Trilium are its ideas, not its source code:
+
+  - notes kept apart from where they sit in the tree (notes and branches), so
+    one note can appear in several places ("clones");
+  - attributes on notes: labels (#name=value) and relations (~name=@note);
+  - a revision kept for every change to a note, folding edits made close
+    together into one;
+  - day notes filed under their year and month, as in Trilium's journal;
+  - internal links between notes, and the notes linking to each one.
+
+The Lab Notebook is a separate program, written for the Gardiner Lab suite in
+Python and plain JavaScript. It contains no code copied from Trilium. It is
+released under the same licence as Trilium, the AGPL v3.0, so that ideas and,
+where useful, code can move between the two.

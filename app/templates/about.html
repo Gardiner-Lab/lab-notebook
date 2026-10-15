@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>About · Lab Notebook</title>
+    <link rel="stylesheet" href="{{ request.script_root }}/static/css/notebook.css?v={{ version }}">
+</head>
+<body>
+<header class="topbar">
+    <a class="topbar-back" href="{{ request.script_root }}/">← Notebook</a>
+    <span class="topbar-title">📓 Lab Notebook</span>
+</header>
+<main class="about">
+    <h1>Lab Notebook {{ version }}</h1>
+    <p>The Gardiner Lab suite's digital lab notebook: a notebook of days and pages for everyone,
+       a shared library of protocols with active tables, MoClo reactions, and links to plasmids
+       that open in the Plasmid Editor.</p>
+
+    <h2>Built on Trilium's design</h2>
+    <p>Its structure follows <a href="https://github.com/TriliumNext/Trilium" rel="noopener">Trilium Notes</a>
+       (TriliumNext; originally by zadam), a hierarchical note-taking application:
+       content is kept in notes, and where a note sits in the tree is kept apart from it, so one note
+       can appear in several places; notes carry labels and relations; every change is kept as a revision;
+       and days are filed under their year and month as in Trilium's journal.
+       The Lab Notebook is a separate program written for the lab suite, with its own code;
+       it shares Trilium's ideas, not its source.</p>
+    <p>Trilium Notes is © zadam, Elian Doran and contributors, and licensed under the
+       GNU Affero General Public License v3.0. See the <code>NOTICE</code> file.</p>
+
+    <h2>Licence</h2>
+    <p>The Lab Notebook is free software under the GNU Affero General Public License v3.0, as Trilium is.
+       Anyone using it over a network may have its source code: it is published at
+       <a href="https://github.com/Gardiner-Lab/lab-notebook" rel="noopener">github.com/Gardiner-Lab/lab-notebook</a>.</p>
+</main>
+</body>
+</html>
