@@ -709,7 +709,7 @@ const App = {
     window.addEventListener('beforeunload', () => { if (this.dirty) this.save({ keepalive: true }); });
     Search.init();
     await Promise.all([this.reloadTrees(), this.loadFavorites()]);
-    if (location.hash.startsWith('#protocols')) this.route();
+    if (location.hash.startsWith('#protocols') || location.hash.startsWith('#deleted')) this.route();
     else {
       const start = this.hashNote() || store.get('last', null);
       if (start) this.open(start, { quiet: true });
@@ -719,6 +719,7 @@ const App = {
   /** Follow the address: #note=<id> opens a note, #protocols the library. */
   route() {
     if (location.hash.startsWith('#protocols')) { this.showLibrary(); return; }
+    if (location.hash.startsWith('#deleted')) { this.showDeleted(); return; }
     const id = this.hashNote();
     if (id && (id !== this.note?.id || !document.getElementById('library').hidden)) this.open(id);
   },
@@ -728,9 +729,17 @@ const App = {
     document.getElementById('tabProtocols').classList.toggle('active', name === 'protocols');
   },
 
+  /** Show one of the main views (note, library, deleted, or none), hiding the others. */
+  view(name) {
+    for (const [id, key] of [['note', 'note'], ['library', 'library'], ['deletedView', 'deleted'], ['emptyState', 'empty']]) {
+      document.getElementById(id).hidden = key !== name;
+    }
+  },
+
   showEmpty() {
     document.getElementById('note').hidden = true;
     document.getElementById('library').hidden = true;
+    document.getElementById('deletedView').hidden = true;
     document.getElementById('emptyState').hidden = false;
     this.setTab('notebook');
   },
@@ -818,10 +827,8 @@ const App = {
     if (this.hashNote() !== note.id || location.hash.startsWith('#protocols')) {
       history.pushState(null, '', `#note=${note.id}`);
     }
-    document.getElementById('emptyState').hidden = true;
-    document.getElementById('library').hidden = true;
+    this.view('note');
     const box = document.getElementById('note');
-    box.hidden = false;
     this.setTab(note.space === 'library' ? 'protocols' : 'notebook');
     Tree.markActive(note.id);
     for (const f of document.querySelectorAll('.fav-item')) f.classList.toggle('active', f.dataset.id === note.id);
@@ -1021,7 +1028,8 @@ const App = {
           close();
           modal({
             title: `Delete “${note.title}”?`,
-            build: (b) => b.append(el('p', {}, 'It and the pages under it leave the notebook. Ask an administrator to bring it back if needed.')),
+            build: (b) => b.append(el('p', {}, 'It and the pages under it go to 🗑 Deleted, at the bottom of the left-hand side, ',
+              'where you (or an administrator) can bring them back.')),
             buttons: [{ label: 'Cancel', kind: 'secondary' }, {
               label: 'Delete', kind: 'danger',
               onClick: async () => {
@@ -1030,7 +1038,8 @@ const App = {
                 this.note = null;
                 await this.reloadTrees();
                 if (parent && !['notebook', 'library'].includes(parent.type)) this.open(parent.id);
-                else { document.getElementById('note').hidden = true; document.getElementById('emptyState').hidden = false; }
+                else this.showEmpty();
+                toast('Deleted: it can be brought back from 🗑 Deleted', 'success', 5000);
               },
             }],
           });
@@ -1087,10 +1096,8 @@ const App = {
     this.note = null;
     Tree.markActive('');
     this.setTab('protocols');
-    document.getElementById('emptyState').hidden = true;
-    document.getElementById('note').hidden = true;
+    this.view('library');
     const box = document.getElementById('library');
-    box.hidden = false;
     const query = el('input', { type: 'search', class: 'library-search', placeholder: 'Search protocols by name or by what is in them',
       value: this._libraryQuery || '' });
     const onlyFav = el('input', { type: 'checkbox', checked: !!this._onlyFav });
@@ -1141,6 +1148,49 @@ const App = {
       el('div', { class: 'library-filters' }, query, el('label', { class: 'checkbox' }, onlyFav, ' Favourites only')),
       list);
     query.focus();
+    await draw();
+  },
+
+  /** Deleted pages and protocols this person may bring back. */
+  async showDeleted() {
+    await this.flush();
+    this.note = null;
+    Tree.markActive('');
+    this.setTab('notebook');
+    this.view('deleted');
+    const box = document.getElementById('deletedView');
+    const draw = async () => {
+      const { deleted } = await api('GET', '/deleted');
+      put(box,
+        el('div', { class: 'library-head' }, el('h1', {}, '🗑 Deleted')),
+        el('p', { class: 'hint' }, NB.person.role === 'admin'
+          ? 'Everything deleted from any notebook or the protocol library. Restoring brings back what was deleted with it, to where it was.'
+          : 'What you deleted from your notebook, and protocols you may change. Restoring brings back what was deleted with it, to where it was.'),
+        deleted.length ? el('table', { class: 'library-table deleted-table' }, el('tbody', {}, deleted.map((d) => el('tr', {},
+          el('td', {}, el('div', { class: 'library-title' }, `${ICONS[d.type] || '📄'} ${d.title}`),
+            el('div', { class: 'hint' },
+              d.space === 'library' ? 'Protocol library' : (d.owner !== NB.person.username ? `${d.owner}'s notebook` : 'My notebook'),
+              d.was_under ? ` › ${d.was_under}${d.parent_deleted ? ' (deleted too)' : ''}` : '',
+              d.pages > 1 ? ` · with ${d.pages - 1} page${d.pages > 2 ? 's' : ''} under it` : '')),
+          el('td', { class: 'hint' }, `deleted by ${d.deleted_by || '—'}`, el('div', {}, localTime(d.deleted_at))),
+          el('td', { class: 'nowrap use-cell' },
+            el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
+              const { note } = await api('GET', `/deleted/${d.id}`);
+              const inner = el('div', { class: 'blocks' });
+              Blocks.renderList(note.content, inner, { editable: false, changed() {} });
+              modal({ title: `${note.title} (deleted)`, wide: true, build: (b) => b.append(inner) });
+            } }, 'View'), ' ',
+            el('button', { class: 'btn btn-primary btn-sm', onclick: async () => {
+              try {
+                const res = await api('POST', `/deleted/${d.id}/restore`);
+                await this.reloadTrees();
+                await this.loadFavorites();
+                toast(`Restored “${d.title}”${d.parent_deleted ? ', to the top, as its old place is deleted too' : ''}`, 'success', 6000);
+                if (res.note) this.show(res.note); else draw();
+              } catch (err) { toast(err.message, 'error'); }
+            } }, 'Restore'))))))
+          : el('p', { class: 'hint' }, 'Nothing deleted.'));
+    };
     await draw();
   },
 

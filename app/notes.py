@@ -372,8 +372,82 @@ def delete(person: Person, note_id: str) -> None:
         if row['type'] in ('notebook', 'library') or not can_edit(person, row):
             raise Forbidden('You cannot delete this note')
         for nid in _subtree(conn, note_id):
-            conn.execute('UPDATE notes SET deleted_at = CURRENT_TIMESTAMP, updated_by = ? '
-                         'WHERE id = ? AND deleted_at IS NULL', (person.username, nid))
+            # Notes already deleted on their own stay their own deletion.
+            conn.execute('UPDATE notes SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ?, deleted_root = ? '
+                         'WHERE id = ? AND deleted_at IS NULL', (person.username, note_id, nid))
+
+
+# --- deleted notes ---------------------------------------------------------------
+
+def _can_restore(person: Person, row) -> bool:
+    """Whoever could have deleted it, and administrators, for anything."""
+    if person.is_admin:
+        return True
+    return can_edit(person, row)
+
+
+def deleted(person: Person) -> List[dict]:
+    """Deletions this person may undo, newest first: each with what went with it."""
+    with connect() as conn:
+        rows = conn.execute(
+            'SELECT n.*, (SELECT COUNT(*) FROM notes g WHERE g.deleted_root = n.id) AS with_it '
+            'FROM notes n WHERE n.deleted_at IS NOT NULL AND (n.deleted_root = n.id OR n.deleted_root IS NULL) '
+            'ORDER BY n.deleted_at DESC LIMIT 500').fetchall()
+        found = []
+        for r in rows:
+            if not _can_restore(person, r):
+                continue
+            parent = conn.execute('SELECT p.id, p.title, p.type, p.deleted_at FROM branches b JOIN notes p ON p.id = b.parent_id '
+                                  'WHERE b.note_id = ? ORDER BY b.rowid LIMIT 1', (r['id'],)).fetchone()
+            found.append({**summary(r), 'deleted_at': r['deleted_at'], 'deleted_by': r['deleted_by'] or r['updated_by'],
+                          'pages': max(1, r['with_it']),
+                          # Where it was, unless at the top of its notebook or the library.
+                          'was_under': parent['title'] if parent and parent['type'] not in ('notebook', 'library') else None,
+                          'parent_deleted': bool(parent and parent['deleted_at'])})
+    return found
+
+
+def _deleted_row(conn, note_id: str):
+    row = conn.execute('SELECT * FROM notes WHERE id = ? AND deleted_at IS NOT NULL', (note_id,)).fetchone()
+    if row is None:
+        raise NotFound('No such deleted note')
+    return row
+
+
+def deleted_note(person: Person, note_id: str) -> dict:
+    """A deleted note's content, to look at before bringing it back."""
+    with connect() as conn:
+        row = _deleted_row(conn, note_id)
+    if not _can_restore(person, row):
+        raise Forbidden('You cannot see this deleted note')
+    return {**summary(row), 'content': json.loads(row['content'] or '[]'), 'deleted_at': row['deleted_at']}
+
+
+def undelete(person: Person, note_id: str) -> str:
+    """
+    Bring a deleted note back, with what was deleted together with it, to its
+    old place; if that place is gone too, to the top of its notebook or library.
+    """
+    with connect() as conn:
+        row = _deleted_row(conn, note_id)
+        if not _can_restore(person, row):
+            raise Forbidden('You cannot restore this note')
+        group = [r['id'] for r in conn.execute('SELECT id FROM notes WHERE deleted_root = ?', (note_id,))] or [note_id]
+        if note_id not in group:
+            group.append(note_id)
+        conn.executemany('UPDATE notes SET deleted_at = NULL, deleted_by = NULL, deleted_root = NULL '
+                         'WHERE id = ?', [(i,) for i in group])
+        alive = [b for b in conn.execute('SELECT b.id, p.deleted_at FROM branches b JOIN notes p ON p.id = b.parent_id '
+                                         'WHERE b.note_id = ?', (note_id,)) if not b['deleted_at']]
+    if not alive:
+        root = library_root() if row['space'] == 'library' else notebook_root(row['owner'])
+        with connect() as conn:
+            conn.execute('DELETE FROM branches WHERE note_id = ?', (note_id,))
+            position = conn.execute('SELECT COALESCE(MAX(position), 0) + 10 FROM branches WHERE parent_id = ?',
+                                    (root,)).fetchone()[0]
+            conn.execute('INSERT INTO branches (id, note_id, parent_id, position) VALUES (?, ?, ?, ?)',
+                         (content_mod.new_id(), note_id, root, position))
+    return note_id
 
 
 def _check_target(conn, person: Person, note, parent_id: str) -> None:

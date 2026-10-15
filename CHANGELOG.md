@@ -5,6 +5,14 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **🗑 Deleted**, at the bottom of the sidebar. It lists deleted pages and protocols with where they
+  were, who deleted them and when; View shows one, and Restore brings it back.
+  - A restore brings back what was deleted with it, to its old place, or to the top when that place
+    is deleted too.
+  - Owners restore their own pages; a protocol's author, their lab lead or an admin restores it;
+    administrators can restore anything.
+
 ## [0.1.1] - 2026-10-15
 
 ### Fixed

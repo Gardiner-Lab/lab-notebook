@@ -99,6 +99,10 @@ CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_type, target_id);
 _ADDED_COLUMNS = [
     # The words of a note's content, without markup, for searching.
     ('search_text', "TEXT NOT NULL DEFAULT ''"),
+    # Who deleted a note, and the note whose deletion took it (itself, or a
+    # page above it), so what went together comes back together.
+    ('deleted_by', 'TEXT'),
+    ('deleted_root', 'TEXT'),
 ]
 
 

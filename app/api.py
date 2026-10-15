@@ -85,6 +85,29 @@ def delete_note(person, note_id):
     return jsonify({'ok': True})
 
 
+@api.get('/deleted')
+@signed_in
+def list_deleted(person):
+    return jsonify({'deleted': notes.deleted(person)})
+
+
+@api.get('/deleted/<note_id>')
+@signed_in
+def get_deleted(person, note_id):
+    return jsonify({'note': notes.deleted_note(person, note_id)})
+
+
+@api.post('/deleted/<note_id>/restore')
+@signed_in
+def restore_deleted(person, note_id):
+    restored = notes.undelete(person, note_id)
+    # Shown as its owner or the library sees it; an admin may restore what they cannot open.
+    try:
+        return jsonify({'note': notes.get(person, restored)})
+    except notes.Forbidden:
+        return jsonify({'note': None, 'restored': restored})
+
+
 @api.post('/branches/<branch_id>/move')
 @signed_in
 def move_branch(person, branch_id):

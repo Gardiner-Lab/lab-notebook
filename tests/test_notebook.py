@@ -378,3 +378,60 @@ def test_no_one_sees_into_another_labs_notebooks(as_user):
         assert all(n['owner'] != 'ana' for n in dated)
     # And ana's lead cannot read the other lab.
     assert as_user('lead').get(f"/api/notes/{zday['id']}").status_code == 403
+
+
+def test_deleted_notes_can_be_brought_back(as_user):
+    ana, ben, lead, boss = (as_user(u) for u in ('ana', 'ben', 'lead', 'boss'))
+    root = _me(ana)['notebook']
+    project = _page(ana, root, 'Project GFP', [{'type': 'text', 'html': '<p>plan</p>'}])
+    gel = _page(ana, project['id'], 'Gel')
+    blot = _page(ana, project['id'], 'Blot')
+    ana.delete(f"/api/notes/{blot['id']}")            # on its own, first
+    ana.delete(f"/api/notes/{project['id']}")         # then the project, with the gel
+
+    listed = {d['title']: d for d in ana.get('/api/deleted').get_json()['deleted']}
+    assert {t: (d['pages'], d['deleted_by']) for t, d in listed.items()} == {'Project GFP': (2, 'ana'), 'Blot': (1, 'ana')}
+    assert listed['Blot']['was_under'] == 'Project GFP' and listed['Blot']['parent_deleted'] is True
+    assert ana.get(f"/api/deleted/{project['id']}").get_json()['note']['content'][0]['html'] == '<p>plan</p>'
+    assert ana.get('/api/search?q=gel').get_json()['notes'] == []
+
+    # Others: not ben; ana's lead reads notebooks but does not restore them; an admin can.
+    assert ben.get('/api/deleted').get_json()['deleted'] == []
+    assert ben.post(f"/api/deleted/{project['id']}/restore").status_code == 403
+    assert lead.get('/api/deleted').get_json()['deleted'] == []
+    assert {d['title'] for d in boss.get('/api/deleted').get_json()['deleted']} == {'Project GFP', 'Blot'}
+
+    # Restoring the project brings the gel back with it, where it was; the blot stays deleted.
+    r = ana.post(f"/api/deleted/{project['id']}/restore")
+    assert r.status_code == 200 and r.get_json()['note']['path'][-2]['id'] == root
+    kids = [c['title'] for c in ana.get(f"/api/notes/{project['id']}/children").get_json()['children']]
+    assert kids == ['Gel']
+    assert [d['title'] for d in ana.get('/api/deleted').get_json()['deleted']] == ['Blot']
+
+    # An admin restores the blot for ana: back under its project.
+    r = boss.post(f"/api/deleted/{blot['id']}/restore")
+    assert r.status_code == 200
+    assert sorted(c['title'] for c in ana.get(f"/api/notes/{project['id']}/children").get_json()['children']) == ['Blot', 'Gel']
+    assert ana.get('/api/deleted').get_json()['deleted'] == []
+    assert ana.post(f"/api/deleted/{gel['id']}/restore").status_code == 404
+
+
+def test_a_note_whose_place_is_gone_comes_back_at_the_top(as_user):
+    ana = as_user('ana')
+    root = _me(ana)['notebook']
+    folder = _page(ana, root, 'Old folder')
+    note = _page(ana, folder['id'], 'Keep me')
+    ana.delete(f"/api/notes/{note['id']}")
+    ana.delete(f"/api/notes/{folder['id']}")
+    restored = ana.post(f"/api/deleted/{note['id']}/restore").get_json()['note']
+    assert [p['title'] for p in restored['path']] == ["ana's notebook", 'Keep me']
+
+    # A deleted protocol: its author restores it, and it is a favourite again.
+    library = _me(ana)['library']
+    proto = ana.post('/api/notes', json={'parent_id': library, 'title': 'PCR', 'type': 'protocol'}).get_json()['note']
+    as_user('ben').put(f"/api/favorites/{proto['id']}")
+    ana.delete(f"/api/notes/{proto['id']}")
+    assert as_user('ben').get('/api/favorites').get_json()['favorites'] == []
+    assert as_user('lead').get('/api/deleted').get_json()['deleted'][0]['title'] == 'PCR'   # ana's lead may change it
+    ana.post(f"/api/deleted/{proto['id']}/restore")
+    assert [f['title'] for f in as_user('ben').get('/api/favorites').get_json()['favorites']] == ['PCR']
