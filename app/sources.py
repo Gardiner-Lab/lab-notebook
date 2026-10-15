@@ -215,6 +215,134 @@ def moclo_protocol() -> List[dict]:
     ]
 
 
+# --- how to write a protocol, by example ----------------------------------------------
+
+HOWTO_KEY = 'how-to-write-a-protocol'
+
+
+def _table(title, columns, rows, scale=None):
+    return {'type': 'table', 'title': title, 'scale': scale,
+            'columns': [dict(zip(('name', 'kind', 'unit', 'formula'), c)) for c in columns],
+            'rows': [{'cells': r} for r in rows]}
+
+
+def howto_protocol() -> List[dict]:
+    """A protocol about writing protocols, whose examples are templates to copy."""
+    text = lambda html: {'type': 'text', 'html': html}
+    return [
+        text('<p>This protocol shows how to write one, by example. Every table below is a working template: '
+             'change the numbers to see what happens, then use <b>⋯ › Make a copy</b> to start your own '
+             'protocol from this one, and delete what you do not need.</p>'
+             '<h3>1. Make a protocol</h3>'
+             '<ul><li>Open the <b>🧪 Protocols</b> tab and click <b>＋ New protocol</b>, or <b>＋ New folder</b> '
+             'to group protocols.</li>'
+             '<li>Give it a clear title: it is what people search for.</li>'
+             '<li>Add blocks with the <b>Add:</b> bar at the bottom: <b>¶ Text</b>, <b>▦ Table</b> and '
+             '<b>☑ Steps</b>. Hover over a block for ↑ ↓ to move it and ✕ to remove it.</li>'
+             '<li>Text has a small bar for <b>bold</b>, <i>italic</i>, headings and lists. Type <b>@</b> to '
+             'link a plasmid, which opens in the Plasmid Editor, or another protocol or page.</li>'
+             '<li>Everything saves as you go. <b>🕘 History</b> keeps every version, and can roll back to any of them.</li>'
+             '</ul>'
+             '<h3>2. Who can change it</h3>'
+             '<p>Everyone can use every protocol. A protocol can be changed by whoever wrote it, their lab lead '
+             'and administrators. Star it (<b>☆ Favourite</b>) to keep it in your sidebar.</p>'
+             '<h3>3. Using it on a day</h3>'
+             '<p><b>＋ Use today</b> puts the protocol into today\'s page, or use <b>🧪 Protocol…</b> on any '
+             'page. The page keeps a copy of the version used: change the volumes, fill in the yellow cells and '
+             'tick things off there, and the protocol itself stays as it is. The protocol lists the days it '
+             'was used on.</p>'
+             '<h3>4. Active tables</h3>'
+             '<p>Tables work things out. Each column has a <b>kind</b>, set with <b>⚙ Columns</b> under the '
+             'table:</p>'
+             '<ul><li><b>Text</b>: words, as typed.</li>'
+             '<li><b>Number</b>: a number, as typed.</li>'
+             '<li><b>Formula</b>: worked out by the column\'s formula, e.g. <code>=B*N</code>.</li>'
+             '<li><b>Scaled by reactions</b>: type the amount for one, and it shows the amount for all.</li>'
+             '<li><b>Fill in on the day</b>: left empty here, and shown yellow to be filled in when used.</li>'
+             '<li><b>Tick off</b>: a checkbox that records who ticked it, and when.</li></ul>'
+             '<p>Click a worked-out (purple) cell to see its formula. The examples follow.</p>'),
+
+        text('<h3>Example 1: a master mix that scales</h3>'
+             '<p>Set <b>Reactions</b> to how many you are making. <i>Total</i> is the column formula '
+             '<code>=B*N</code>: column B of the same row times N, the number of reactions. The water is a '
+             'cell formula of its own, <code>=20-SUM(B1:B6)</code>, which makes each reaction up to 20 µL.</p>'),
+        _table('PCR master mix (20 µL reactions)',
+               [('Component', 'text', '', ''), ('Per reaction', 'number', 'µL', ''),
+                ('Total', 'formula', 'µL', '=B*N'), ('Lot', 'fill', '', ''), ('Added', 'check', '', '')],
+               [['5x reaction buffer', '4', '', '', None],
+                ['10 mM dNTPs', '0.4', '', '', None],
+                ['Primer forward, 10 µM', '1', '', '', None],
+                ['Primer reverse, 10 µM', '1', '', '', None],
+                ['Polymerase', '0.2', '', '', None],
+                ['Template DNA', '1', '', '', None],
+                ['Water', '=20-SUM(B1:B6)', '', '', None]],
+               scale={'label': 'Reactions', 'value': 4, 'base': 1}),
+
+        text('<h3>Example 2: a scaled column</h3>'
+             '<p>The <i>Amount</i> column is <b>Scaled by reactions</b>, here counted in plates: type what one '
+             'plate needs and it shows what all of them need. Change <b>Plates</b> to see it.</p>'),
+        _table('LB agar plates (25 mL each)',
+               [('Ingredient', 'text', '', ''), ('Amount', 'scaled', '', ''), ('Unit', 'text', '', '')],
+               [['LB broth powder', '0.625', 'g'],
+                ['Agar', '0.375', 'g'],
+                ['Water', '25', 'mL'],
+                ['Kanamycin, 50 mg/mL (add below 55 °C)', '25', 'µL']],
+               scale={'label': 'Plates', 'value': 10, 'base': 1}),
+
+        text('<h3>Example 3: calculations</h3>'
+             '<p>A dilution worked out per sample: <i>Stock to add</i> is <code>=C*D/B</code> '
+             '(wanted concentration × final volume ÷ stock concentration) and <i>Water</i> is <code>=D-E</code>. '
+             'The last row overrides both columns with cell formulas of its own, <code>=SUM(E1:E3)</code> and '
+             '<code>=SUM(F1:F3)</code>, to add them up. Cells refer to each other as in a spreadsheet: A1 is '
+             'column A of the first row, and A1:A3 is a range.</p>'
+             '<p>A result waits, and stays empty, until everything it needs has been filled in. A blank stock '
+             'concentration would leave that row\'s volumes, and the totals, empty rather than wrong.</p>'),
+        _table('Dilute plasmids to 50 ng/µL',
+               [('Sample', 'text', '', ''), ('Stock', 'number', 'ng/µL', ''), ('Wanted', 'number', 'ng/µL', ''),
+                ('Final volume', 'number', 'µL', ''), ('Stock to add', 'formula', 'µL', '=C*D/B'),
+                ('Water', 'formula', 'µL', '=D-E')],
+               [['pGFP clone 1', '412', '50', '20', '', ''],
+                ['pGFP clone 2', '268', '50', '20', '', ''],
+                ['pRFP clone 4', '190', '50', '20', '', ''],
+                ['Total', '', '', '', '=SUM(E1:E3)', '=SUM(F1:F3)']]),
+
+        text('<h3>Example 4: recording what was done</h3>'
+             '<p>Yellow <b>fill in</b> cells stay empty in the protocol and are filled in on the day. '
+             '<b>Tick off</b> cells record who ticked them and when, so the page shows who did each step.</p>'),
+        _table('Heat-shock transformation: record',
+               [('Step', 'text', '', ''), ('Setting', 'text', '', ''), ('Actual', 'fill', '', ''),
+                ('Time', 'fill', '', ''), ('Done', 'check', '', '')],
+               [['Thaw competent cells on ice', '10 min', '', '', None],
+                ['Add DNA, mix gently, on ice', '5 µL, 30 min', '', '', None],
+                ['Heat shock', '42 °C, 45 s', '', '', None],
+                ['Recover in SOC, shaking', '37 °C, 1 h', '', '', None],
+                ['Plate on selective medium', '100 µL', '', '', None]]),
+
+        text('<h3>Example 5: steps to tick off</h3>'
+             '<p>A <b>☑ Steps</b> block is a numbered list to tick off as you go. Like ticks in tables, '
+             'each records who ticked it and when.</p>'),
+        {'type': 'steps', 'title': 'Writing your first protocol', 'items': [
+            {'text': 'Open this protocol and choose ⋯ › Make a copy'},
+            {'text': 'Rename the copy, and move it into a folder with ⋯ › Move to…'},
+            {'text': 'Delete the examples you do not need (hover, then ✕)'},
+            {'text': 'Change the tables: ⚙ Columns for names, kinds, units and formulas; ＋ Row for rows'},
+            {'text': 'Star it, and try it out with ＋ Use today'},
+        ]},
+
+        text('<h3>Formula cheat sheet</h3>'
+             '<ul><li>Start with <code>=</code>. Use <code>+ - * / ^</code> and brackets.</li>'
+             '<li><code>B</code> in a column formula means column B in the same row. <code>B2</code> is one cell, '
+             '<code>B1:B6</code> a range.</li>'
+             '<li><code>N</code> is the number set above the table (reactions, plates…).</li>'
+             '<li>Functions: <code>SUM</code>, <code>MIN</code>, <code>MAX</code>, <code>AVERAGE</code>, '
+             '<code>ROUND(x, 2)</code>, <code>ABS</code>, <code>IF(B1&gt;10, 1, 0)</code>.</li>'
+             '<li>A cell of its own that starts with <code>=</code> overrides its column\'s formula, as in the '
+             'Total row above.</li>'
+             '<li>Errors say what is wrong: <code>#DIV/0</code> (divided by zero), <code>#REF</code> (no such '
+             'cell), <code>#CYCLE</code> (a formula that needs itself).</li></ul>'),
+    ]
+
+
 def fill_search_text() -> None:
     """Notes saved before search looked into content get their words now."""
     with connect() as conn:
@@ -224,16 +352,23 @@ def fill_search_text() -> None:
                          (content_mod.plain_text(json.loads(r['content'] or '[]')), r['id']))
 
 
+SEEDS = [
+    # (key, title, blocks, source label)
+    (HOWTO_KEY, 'How to write a protocol (start here)', howto_protocol, 'Lab Notebook'),
+    (MOCLO_PROTOCOL_KEY, 'MoClo Golden Gate assembly', moclo_protocol, 'MoClo Library Tool'),
+]
+
+
 def seed_library() -> None:
-    """Put MoClo's protocol into the library, once: deleting it keeps it out."""
+    """Put the starting protocols into the library, each once: deleting one keeps it out."""
     from app import notes
     library = notes.library_root()
     with connect() as conn:
-        if conn.execute("SELECT 1 FROM attributes WHERE name = 'seed' AND value = ?",
-                        (MOCLO_PROTOCOL_KEY,)).fetchone():
-            return
-        blocks = content_mod.clean_blocks(moclo_protocol(), username='MoClo Library Tool')
-        note_id = notes._create(conn, title='MoClo Golden Gate assembly', type='protocol', space='library',
-                                owner=None, by=None, parent_id=library, content=blocks)
-        notes._label(conn, note_id, 'seed', MOCLO_PROTOCOL_KEY)
-        notes._label(conn, note_id, 'source', 'MoClo Library Tool')
+        for key, title, blocks, source in SEEDS:
+            if conn.execute("SELECT 1 FROM attributes WHERE name = 'seed' AND value = ?", (key,)).fetchone():
+                continue
+            cleaned = content_mod.clean_blocks(blocks(), username=source)
+            note_id = notes._create(conn, title=title, type='protocol', space='library',
+                                    owner=None, by=None, parent_id=library, content=cleaned)
+            notes._label(conn, note_id, 'seed', key)
+            notes._label(conn, note_id, 'source', source)

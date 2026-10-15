@@ -131,7 +131,7 @@ def test_the_protocol_library_is_shared_and_its_authors_keep_it(as_user):
     ana, ben, lead, zoe = (as_user(u) for u in ('ana', 'ben', 'lead', 'zoe'))
     library = _me(ana)['library']
     protocols = ana.get(f'/api/notes/{library}/children').get_json()['children']
-    assert [p['title'] for p in protocols] == ['MoClo Golden Gate assembly']
+    assert [p['title'] for p in protocols] == ['How to write a protocol (start here)', 'MoClo Golden Gate assembly']
 
     mine = _page(ana, library, 'Miniprep', [
         {'type': 'steps', 'items': [{'text': 'Spin down'}]},
@@ -148,7 +148,7 @@ def test_the_protocol_library_is_shared_and_its_authors_keep_it(as_user):
     assert lead.put(f"/api/notes/{proto['id']}", json=edit).status_code == 200   # the author's lab lead
     assert ana.put(f"/api/notes/{proto['id']}", json={'title': 'Miniprep v2'}).status_code == 200
     # Only admins change the protocol MoClo supplied.
-    moclo = protocols[0]['id']
+    moclo = protocols[1]['id']
     assert ana.put(f'/api/notes/{moclo}', json=edit).status_code == 403
     assert as_user('boss').put(f'/api/notes/{moclo}', json={'title': 'MoClo Golden Gate assembly'}).status_code == 200
 
@@ -156,7 +156,8 @@ def test_the_protocol_library_is_shared_and_its_authors_keep_it(as_user):
 def test_a_protocol_goes_into_a_day_as_the_version_used(as_user):
     ana = as_user('ana')
     library = _me(ana)['library']
-    moclo = ana.get(f'/api/notes/{library}/children').get_json()['children'][0]
+    moclo = next(c for c in ana.get(f'/api/notes/{library}/children').get_json()['children']
+                 if c['title'] == 'MoClo Golden Gate assembly')
     snap = ana.get(f"/api/protocols/{moclo['id']}/snapshot").get_json()['section']
     assert snap['source'] == {'kind': 'protocol', 'id': moclo['id'], 'version': 1,
                               'name': 'MoClo Golden Gate assembly'}
@@ -254,7 +255,7 @@ def test_search_finds_words_in_pages_and_labels(as_user):
     assert 'agarose gel' in found[1]['snippet'] and found[1]['where'] == ''
     # Every word must appear, in text, table cells or steps.
     assert [n['id'] for n in ana.get('/api/search?q=SYBR colony').get_json()['notes']] == [gel['id']]
-    assert [n['id'] for n in ana.get('/api/search?q=clone 4').get_json()['notes']] == [gel['id']]
+    assert [n['id'] for n in ana.get('/api/search?q=lane pgfp').get_json()['notes']] == [gel['id']]
     assert ana.get('/api/search?q=<b>').get_json()['notes'] == [], 'markup is not searched'
     # Others find it only where they may open it.
     assert ben.get('/api/search?q=agarose').get_json()['notes'] == []
@@ -278,7 +279,7 @@ def test_the_protocol_list_and_favourites(as_user):
     mini = ana.post('/api/notes', json={'parent_id': folder['id'], 'title': 'Miniprep', 'type': 'protocol',
                                         'content': [{'type': 'steps', 'items': [{'text': 'Lyse with buffer P2'}]}]}).get_json()['note']
     listed = {p['title']: p for p in ben.get('/api/protocols').get_json()['protocols']}
-    assert set(listed) == {'MoClo Golden Gate assembly', 'Miniprep'}
+    assert set(listed) == {'How to write a protocol (start here)', 'MoClo Golden Gate assembly', 'Miniprep'}
     assert listed['Miniprep']['folder'] == 'Cloning' and listed['Miniprep']['created_by'] == 'ana'
     assert listed['Miniprep']['can_edit'] is False and listed['Miniprep']['favorite'] is False
     assert [p['title'] for p in ben.get('/api/protocols?q=lyse').get_json()['protocols']] == ['Miniprep']
@@ -301,3 +302,47 @@ def test_the_protocol_list_and_favourites(as_user):
     ben.put(f"/api/favorites/{mini['id']}")
     ana.delete(f"/api/notes/{mini['id']}")
     assert ben.get('/api/favorites').get_json()['favorites'] == []
+
+
+def test_the_how_to_protocol_teaches_by_example(as_user):
+    ana = as_user('ana')
+    found = ana.get('/api/protocols?q=how to write').get_json()['protocols']
+    assert [p['title'] for p in found] == ['How to write a protocol (start here)']
+    note = ana.get(f"/api/notes/{found[0]['id']}").get_json()['note']
+    tables = [b for b in note['content'] if b['type'] == 'table']
+    kinds = {c['kind'] for t in tables for c in t['columns']}
+    assert kinds == {'text', 'number', 'formula', 'scaled', 'fill', 'check'}, 'every kind of column is shown'
+    assert any(t['scale'] for t in tables) and any(b['type'] == 'steps' for b in note['content'])
+    assert note['can_edit'] is False and as_user('boss').get(f"/api/notes/{found[0]['id']}").get_json()['note']['can_edit']
+    # First in the library, and its marker label stays.
+    assert ana.get('/api/protocols').get_json()['protocols'][0]['id'] == found[0]['id']
+    seed = next(a for a in note['attributes'] if a['name'] == 'seed')
+    assert as_user('boss').delete(f"/api/attributes/{seed['id']}").status_code == 400
+    # Found by what it teaches.
+    assert found[0]['id'] in [n['id'] for n in ana.get('/api/search?q=master mix').get_json()['notes']]
+
+
+def test_make_a_copy_to_start_from(as_user, world):
+    ana, ben = as_user('ana'), as_user('ben')
+    howto = ana.get('/api/protocols?q=how to write').get_json()['protocols'][0]
+    r = ben.post(f"/api/notes/{howto['id']}/copy")
+    assert r.status_code == 201
+    copy = r.get_json()['note']
+    assert copy['title'] == 'How to write a protocol (start here) (copy)' and copy['type'] == 'protocol'
+    assert copy['space'] == 'library' and copy['created_by'] == 'ben' and copy['can_edit'] is True
+    original = ben.get(f"/api/notes/{howto['id']}").get_json()['note']
+    assert [b['type'] for b in copy['content']] == [b['type'] for b in original['content']]
+    assert {b['id'] for b in copy['content']}.isdisjoint({b['id'] for b in original['content']})
+
+    # A page with ticks: copied into the copier's notebook, without the ticks.
+    day = ana.post('/api/days', json={'date': '2026-10-21'}).get_json()['note']
+    ana.put(f"/api/notes/{day['id']}", json={'content': [
+        {'type': 'steps', 'items': [{'text': 'Thaw', 'done': True}]},
+        {'type': 'table', 'columns': [{'name': 'x'}, {'name': 'ok', 'kind': 'check'}], 'rows': [{'cells': ['a', True]}]}]})
+    page = ana.post(f"/api/notes/{day['id']}/copy").get_json()['note']
+    assert page['type'] == 'page' and page['path'][-2]['id'] == day['path'][-2]['id'], 'beside the original'
+    assert page['content'][0]['items'][0]['by'] is None and page['content'][1]['rows'][0]['cells'][1] is None
+    # Someone who may only read a notebook copies into their own.
+    lead_copy = as_user('lead').post(f"/api/notes/{page['id']}/copy").get_json()['note']
+    assert lead_copy['owner'] == 'lead' and lead_copy['path'][0]['title'] == "lead's notebook"
+    assert ben.post(f"/api/notes/{page['id']}/copy").status_code == 403

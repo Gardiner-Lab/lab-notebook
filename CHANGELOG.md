@@ -21,6 +21,15 @@ after Trilium Notes.
   `#label` or `#label=value` finds notes by their labels.
 - **Protocols tab.** The library has a tab of its own, with search, folders, who wrote each protocol
   and how often it has been used, and "Use today" to put a protocol into today's page.
+- **How to write a protocol (start here).** A protocol in the library that teaches by example.
+  Each example is a working template:
+  - a master mix that scales with the number of reactions;
+  - a scaled column (LB plates);
+  - a dilution calculator with formulas and a total row;
+  - a run record with fill-in and tick-off cells;
+  - a step list;
+  - a formula cheat sheet.
+- **Make a copy** (⋯ menu) of any protocol or page, as your own to change. Ticks are not copied.
 - **Favourite protocols.** Star a protocol to list it in your sidebar. Favourites come first when
   you add a protocol to a page.
 - **Protocol library.** Shared by everyone. A protocol is changed by its author, their lab's lead

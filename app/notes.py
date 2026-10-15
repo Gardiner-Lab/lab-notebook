@@ -332,6 +332,39 @@ def _subtree(conn, note_id: str) -> List[str]:
     return found
 
 
+def copy(person: Person, note_id: str) -> str:
+    """
+    A new note with the same title and content, to start from: a protocol's copy
+    goes into the library (beside the original when possible) as the copier's
+    own, anything else into the copier's notebook. Ticks are not copied.
+    """
+    row = _visible(person, note_id)
+    if row['type'] in ('notebook', 'library', 'year', 'month'):
+        raise ValueError('This cannot be copied')
+    with connect() as conn:
+        parents = [r['parent_id'] for r in conn.execute('SELECT parent_id FROM branches WHERE note_id = ?',
+                                                        (note_id,))]
+        parent = next((p for p in parents if can_add_under(person, _row(conn, p))), None)
+    if parent is None:
+        parent = library_root() if row['space'] == 'library' else notebook_root(person.username)
+    blocks = json.loads(row['content'] or '[]')
+
+    def untick(items):
+        for b in items:
+            if b.get('type') == 'section':
+                untick(b.get('blocks') or [])
+            elif b.get('type') == 'steps':
+                for i in b.get('items') or []:
+                    i.update(by=None, at=None, done=False)
+            elif b.get('type') == 'table':
+                for r in b.get('rows') or []:
+                    r['cells'] = [None if isinstance(c, dict) else c for c in r.get('cells') or []]
+            b.pop('id', None)
+    untick(blocks)
+    note_type = row['type'] if row['type'] in NOTE_TYPES else 'page'
+    return create(person, parent, f"{row['title']} (copy)", note_type, blocks)
+
+
 def delete(person: Person, note_id: str) -> None:
     """Move a note, and everything under it, to the deleted notes (kept, not erased)."""
     with connect() as conn:
@@ -425,7 +458,9 @@ def remove_attribute(person: Person, attr_id: str) -> None:
             raise NotFound('Not found')
         if not can_edit(person, _row(conn, attr['note_id'])):
             raise Forbidden('You cannot change this note')
-        if attr['name'] in ('dateNote', 'monthNote', 'yearNote', 'notebookRoot', 'protocolLibrary'):
+        # 'seed' marks a protocol supplied with the notebook: without it, the next
+        # start would supply it again.
+        if attr['name'] in ('dateNote', 'monthNote', 'yearNote', 'notebookRoot', 'protocolLibrary', 'seed'):
             raise ValueError('This label keeps the notebook in order and cannot be removed')
         conn.execute('DELETE FROM attributes WHERE id = ?', (attr_id,))
 
@@ -543,6 +578,10 @@ def protocols(person: Person, query: str = '') -> List[dict]:
             "SELECT l.target_id, COUNT(*) FROM links l JOIN notes n ON n.id = l.note_id "
             "WHERE l.target_type = 'note' AND n.deleted_at IS NULL AND n.space = 'notebook' "
             'GROUP BY l.target_id').fetchall())
+        # The guide to writing protocols comes first, wherever the alphabet puts it.
+        pinned = {r['note_id'] for r in conn.execute(
+            "SELECT note_id FROM attributes WHERE name = 'seed' AND value = 'how-to-write-a-protocol'")}
+        rows = sorted(rows, key=lambda r: r['id'] not in pinned)
         found = []
         for r in rows:
             path = [p for p in _path(conn, r['id'])[:-1] if p['id'] != library]

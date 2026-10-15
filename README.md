@@ -10,6 +10,8 @@ The Gardiner Lab suite's digital lab notebook.
   favourites. Your starred protocols are listed in the sidebar. Anyone can add a protocol and use any of them. Whoever wrote a
   protocol, their lab's lead and administrators can change it. Every version is kept, and a protocol
   used on a day keeps the version that was used.
+- **A guide to start from.** "How to write a protocol (start here)", first in the library, shows
+  every kind of table by example. Make a copy of it to start your own.
 - **Active tables.** Volumes scale with the number of reactions, cells can hold formulas (`=B*N`,
   `=SUM(F1:F6)`), some cells are filled in on the day, and steps and rows can be ticked off. The
   server records who ticked each one and when.

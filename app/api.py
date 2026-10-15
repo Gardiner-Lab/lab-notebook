@@ -72,6 +72,12 @@ def save_note(person, note_id):
                                        data.get('base_version'))})
 
 
+@api.post('/notes/<note_id>/copy')
+@signed_in
+def copy_note(person, note_id):
+    return jsonify({'note': notes.get(person, notes.copy(person, note_id))}), 201
+
+
 @api.delete('/notes/<note_id>')
 @signed_in
 def delete_note(person, note_id):

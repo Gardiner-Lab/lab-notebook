@@ -847,7 +847,9 @@ const App = {
       el('span', { class: `badge badge-${note.type}` }, `${ICONS[note.type] || ''} ${note.type}`),
       owner ? el('span', { class: 'badge badge-owner' }, `${note.owner}'s notebook`) : null,
       !editable ? el('span', { class: 'badge badge-readonly' }, 'read only') : null,
-      el('span', { class: 'hint' }, `Last saved by ${note.updated_by || note.created_by || '—'} · ${localTime(note.updated_at)}`),
+      el('span', { class: 'hint' }, note.updated_by || note.created_by
+        ? `Last saved by ${note.updated_by || note.created_by} · ${localTime(note.updated_at)}`
+        : `Supplied with the Lab Notebook · ${localTime(note.updated_at)}`),
       el('span', { class: 'save-state', id: 'saveState' }),
       el('span', { class: 'note-actions' },
         note.type === 'protocol' ? el('button', {
@@ -865,7 +867,7 @@ const App = {
           onclick: () => this.useToday(note.id),
         }, '＋ Use today'),
         el('button', { class: 'btn btn-secondary btn-sm', onclick: () => this.history() }, '🕘 History'),
-        editable || note.can_add ? el('button', { class: 'btn btn-secondary btn-sm', onclick: () => this.moreMenu() }, '⋯') : null));
+        el('button', { class: 'btn btn-secondary btn-sm', title: 'Copy, move, place elsewhere, delete', onclick: () => this.moreMenu() }, '⋯')));
 
     const blocks = el('div', { class: 'blocks' });
     Blocks.renderList(note.content, blocks, ctx);
@@ -920,7 +922,7 @@ const App = {
       bar.append(el('span', { class: `attr attr-${a.type}` }, text,
         a.type === 'relation' ? el('a', { href: `#note=${a.value}`, onclick: (e) => { e.preventDefault(); this.open(a.value); } },
           a.target_title || 'a deleted note') : null,
-        note.can_edit && !['dateNote', 'monthNote', 'yearNote', 'notebookRoot', 'protocolLibrary'].includes(a.name)
+        note.can_edit && !['dateNote', 'monthNote', 'yearNote', 'notebookRoot', 'protocolLibrary', 'seed'].includes(a.name)
           ? el('button', { class: 'attr-x', title: 'Remove', onclick: async () => {
             try { await api('DELETE', `/attributes/${a.id}`); note.attributes = note.attributes.filter((x) => x !== a); bar.replaceWith(this.attributeBar(note)); } catch (err) { toast(err.message, 'error'); }
           } }, '×') : null));
@@ -994,11 +996,24 @@ const App = {
             toast(`Now also under ${where.title}`, 'success');
           } catch (err) { toast(err.message, 'error'); }
         } }, '⧉ Show also under another page…', el('div', { class: 'hint' }, 'One note in two places, as in Trilium: a change shows in both.')) : null,
+        !['month', 'year'].includes(note.type) ? el('button', { class: 'menu-item', onclick: async () => {
+          close();
+          try {
+            const { note: copy } = await api('POST', `/notes/${note.id}/copy`);
+            for (const step of copy.path.slice(0, -1)) Tree.expanded.add(step.id);
+            Tree.remember();
+            await this.reloadTrees();
+            this.show(copy);
+            toast(`Copied: this is your own “${copy.title}” to change`, 'success', 5000);
+            document.querySelector('input.note-title')?.select();
+          } catch (err) { toast(err.message, 'error'); }
+        } }, '⧉ Make a copy', el('div', { class: 'hint' }, note.space === 'library'
+          ? 'A protocol of your own to start from, in the library.' : 'A new page with the same content, in your notebook.')) : null,
         note.can_edit && !['day', 'month', 'year'].includes(note.type) ? el('button', { class: 'menu-item', onclick: async () => {
           close();
           await this.moveNote(note);
         } }, '↪ Move to…', el('div', { class: 'hint' }, note.space === 'library' ? 'Into a folder of the library.' : 'Under another page or day.')) : null,
-        note.can_add ? el('button', { class: 'menu-item', onclick: async () => {
+        note.can_add && !(note.space === 'library' && note.type === 'protocol') ? el('button', { class: 'menu-item', onclick: async () => {
           close();
           this.newNote(note.space === 'library' ? 'library' : 'mine', note.id, note.space === 'library' ? 'protocol' : 'page');
         } }, note.space === 'library' ? '＋ New protocol in this folder' : '＋ New page under this one') : null,
