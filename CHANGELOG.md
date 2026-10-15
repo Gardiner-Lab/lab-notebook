@@ -5,6 +5,10 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Links to the Seed Bank open the right page for codes that start with a lab code (GL-S-0042), as
+  well as older ones (S-0042).
+
 ## [0.4.0] - 2026-10-15
 
 ### Added

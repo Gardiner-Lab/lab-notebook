@@ -122,7 +122,8 @@ const store = {
 const ICONS = { notebook: '📓', library: '📚', year: '🗓️', month: '📆', day: '📅', page: '📄', folder: '📁', protocol: '🧪' };
 const editorLink = (id) => `${NB.editor}/editor?open=${encodeURIComponent(id)}`;
 const SEED_KINDS = { L: 'line', S: 'lot', P: 'plant' };
-const seedLink = (code) => `${NB.seeds}/#${SEED_KINDS[code[0]] || 'line'}=${encodeURIComponent(code)}`;
+// GL-S-0042 (or S-0042 from before lab codes): the letter before the number says what it is.
+const seedLink = (code) => `${NB.seeds}/#${SEED_KINDS[code.split('-').slice(-2, -1)[0]] || 'line'}=${encodeURIComponent(code)}`;
 
 /* --- pickers ------------------------------------------------------------------ */
 
