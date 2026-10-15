@@ -46,6 +46,7 @@ def create_app() -> Flask:
             'suite_home': os.environ.get('SUITE_HOME_URL', '/'),
             'editor': os.environ.get('EDITOR_URL', '/editor').rstrip('/'),
             'moclo': os.environ.get('MOCLO_URL', '/').rstrip('/'),
+            'seeds': os.environ.get('SEEDS_URL', '/seeds').rstrip('/'),
             'logout': os.environ.get('SUITE_LOGOUT_URL', '/account/logout'),
         }
 

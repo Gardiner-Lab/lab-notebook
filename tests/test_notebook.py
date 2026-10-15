@@ -552,3 +552,15 @@ def test_office_documents_and_other_files(as_user):
     # Named like a PDF, but not one: downloaded, not shown.
     r = ana.get(f"/api/attachments/{added['fake.pdf']['id']}")
     assert r.headers['Content-Disposition'].startswith('attachment') and added['fake.pdf']['preview'] is False
+
+
+def test_links_to_the_seed_bank_are_kept_and_indexed(as_user, world):
+    import sqlite3
+    ana = as_user('ana')
+    page = _page(ana, _me(ana)['notebook'], 'Sowing')
+    saved = ana.put(f"/api/notes/{page['id']}", json={'content': [{'type': 'text', 'html':
+        '<p>Sowed <a data-seed="S-0002" href="javascript:alert(1)">S-0002 35S:GFP-2 T2</a></p>'}]}).get_json()['note']
+    html = saved['content'][0]['html']
+    assert 'data-seed="S-0002"' in html and 'javascript:' not in html
+    conn = sqlite3.connect(world['paths']['notebook'])
+    assert conn.execute("SELECT target_id FROM links WHERE note_id = ? AND target_type = 'seed'", (page['id'],)).fetchall() == [('S-0002',)]

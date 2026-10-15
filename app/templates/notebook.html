@@ -75,6 +75,7 @@
     window.NB = {
         base: {{ request.script_root | tojson }},
         editor: {{ links.editor | tojson }},
+        seeds: {{ links.seeds | tojson }},
         person: {{ person.to_dict() | tojson }},
     };
 </script>

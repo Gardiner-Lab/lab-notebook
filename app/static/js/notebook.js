@@ -121,6 +121,8 @@ const store = {
 };
 const ICONS = { notebook: '📓', library: '📚', year: '🗓️', month: '📆', day: '📅', page: '📄', folder: '📁', protocol: '🧪' };
 const editorLink = (id) => `${NB.editor}/editor?open=${encodeURIComponent(id)}`;
+const SEED_KINDS = { L: 'line', S: 'lot', P: 'plant' };
+const seedLink = (code) => `${NB.seeds}/#${SEED_KINDS[code[0]] || 'line'}=${encodeURIComponent(code)}`;
 
 /* --- pickers ------------------------------------------------------------------ */
 
@@ -183,6 +185,18 @@ const pickProtocol = () => picker({
   },
   describe: (p) => [p.favorite ? '★ ' : '🧪 ', el('b', { text: p.title }),
     el('span', { class: 'hint' }, `${p.folder ? ` · ${p.folder}` : ''} · by ${p.created_by || 'MoClo'}`)],
+});
+
+/** Choose a line, seed lot or plant from the seed bank (the lab's own; other labs' are not found). */
+const pickSeed = () => picker({
+  title: 'Link a seed lot, plant or line', placeholder: 'Search the seed bank by code or name',
+  search: async (q) => {
+    const res = await fetch(`${NB.seeds}/api/search?q=${encodeURIComponent(q)}`, { credentials: 'same-origin' });
+    if (!res.ok) throw new Error(res.status === 404 ? 'The seed bank is not part of this suite' : `Seed bank: ${res.status}`);
+    return (await res.json()).results;
+  },
+  describe: (r) => [{ line: '🧬 ', lot: '🫘 ', plant: '🌱 ' }[r.kind], el('b', { text: r.code }), ` ${r.label.slice(r.code.length)}`,
+    el('span', { class: 'hint' }, ` · ${r.kind === 'lot' ? 'seed lot' : r.kind}`)],
 });
 
 async function pickMocloReaction() {
@@ -409,6 +423,7 @@ const Blocks = {
       if (!link) return;
       e.preventDefault();
       if (link.dataset.attachment) window.open(attachmentUrl(link.dataset.attachment), '_blank', 'noopener');
+      else if (link.dataset.seed) window.open(seedLink(link.dataset.seed), '_blank', 'noopener');
       else if (link.dataset.plasmid) window.open(editorLink(link.dataset.plasmid), '_blank', 'noopener');
       else if (link.dataset.note) App.open(link.dataset.note);
       else if (/^https?:/.test(link.getAttribute('href') || '')) window.open(link.href, '_blank', 'noopener');
@@ -458,7 +473,7 @@ const Blocks = {
   /** The text as kept: links by what they point at, not by this page's address for it. */
   storable(area) {
     const copy = area.cloneNode(true);
-    for (const a of copy.querySelectorAll('a[data-plasmid], a[data-note], a[data-attachment]')) {
+    for (const a of copy.querySelectorAll('a[data-plasmid], a[data-note], a[data-seed], a[data-attachment]')) {
       for (const attr of ['href', 'class', 'title']) a.removeAttribute(attr);
     }
     for (const img of copy.querySelectorAll('img[data-attachment]')) {
@@ -476,6 +491,11 @@ const Blocks = {
     for (const a of area.querySelectorAll('a[data-note]')) {
       a.href = `#note=${a.dataset.note}`;
       a.classList.add('note-link');
+    }
+    for (const a of area.querySelectorAll('a[data-seed]')) {
+      a.href = seedLink(a.dataset.seed);
+      a.classList.add('seed-link');
+      a.title = 'Open in the Seed Bank';
     }
     for (const img of area.querySelectorAll('img[data-attachment]')) {
       img.src = attachmentUrl(img.dataset.attachment);
@@ -498,15 +518,19 @@ const Blocks = {
         onClose: () => resolve(choice),
         build: (body, close) => body.append(el('div', { class: 'choice-row' },
           el('button', { class: 'btn btn-primary', onclick: () => { choice = 'plasmid'; close(); } }, '🧬 A plasmid'),
+          el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'seed'; close(); } }, '🌱 A seed lot, plant or line'),
           el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'note'; close(); } }, '📄 A page or protocol'))),
         buttons: [{ label: 'Just type @', kind: 'secondary' }],
       });
     });
     if (!kind) return;
-    const target = kind === 'plasmid' ? await pickPlasmid() : await pickNote([], 'Link to a page or protocol');
+    let target;
+    try {
+      target = kind === 'plasmid' ? await pickPlasmid() : kind === 'seed' ? await pickSeed() : await pickNote([], 'Link to a page or protocol');
+    } catch (err) { toast(err.message, 'error'); return; }
     if (!target) return;
-    const link = el('a', kind === 'plasmid' ? { 'data-plasmid': target.id } : { 'data-note': target.id },
-      kind === 'plasmid' ? target.name : target.title);
+    const link = el('a', kind === 'plasmid' ? { 'data-plasmid': target.id } : kind === 'seed' ? { 'data-seed': target.code } : { 'data-note': target.id },
+      kind === 'plasmid' ? target.name : kind === 'seed' ? target.label : target.title);
     range.deleteContents();
     range.insertNode(link);
     link.after(document.createTextNode(' '));
@@ -968,6 +992,18 @@ const App = {
             this.changed();
           } else add({ id: newId(), type: 'text', html });
         } })),
+      el('button', { class: 'btn btn-secondary btn-sm', title: 'Add a link to a seed lot, plant or line in the Seed Bank', onclick: async () => {
+        let s;
+        try { s = await pickSeed(); } catch (err) { toast(err.message, 'error'); return; }
+        if (!s) return;
+        const html = `<a data-seed="${s.code}">${s.label.replace(/[<>&"]/g, (ch) => `&#${ch.charCodeAt(0)};`)}</a>`;
+        const last = note.content[note.content.length - 1];
+        if (last && last.type === 'text') {
+          last.html = `${last.html || ''}${/<\/p>\s*$/.test(last.html || '') ? `<p>${html}</p>` : ` ${html}`}`;
+          Blocks.renderList(note.content, blocks, ctx);
+          this.changed();
+        } else add({ id: newId(), type: 'text', html: `<p>${html}</p>` });
+      } }, '🌱 Seed…'),
       el('button', { class: 'btn btn-secondary btn-sm', title: 'Add a link to a plasmid, which opens it in the Plasmid Editor', onclick: async () => {
         const p = await pickPlasmid();
         if (!p) return;

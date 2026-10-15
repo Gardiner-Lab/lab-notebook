@@ -5,6 +5,11 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Links to the Seed Bank.** Type `@` in a page, or use 🌱 Seed… in the Add bar, to link a seed
+  lot, plant or line from your lab's seed bank. The link opens it there, and the seed bank lists the
+  notebook pages that mention each record.
+
 ## [0.3.0] - 2026-10-15
 
 ### Added
