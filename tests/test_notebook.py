@@ -346,3 +346,12 @@ def test_make_a_copy_to_start_from(as_user, world):
     lead_copy = as_user('lead').post(f"/api/notes/{page['id']}/copy").get_json()['note']
     assert lead_copy['owner'] == 'lead' and lead_copy['path'][0]['title'] == "lead's notebook"
     assert ben.post(f"/api/notes/{page['id']}/copy").status_code == 403
+
+
+def test_the_database_can_be_read_from_a_read_only_copy(world):
+    """The suite's backup opens it read-only: that fails for a database in WAL mode."""
+    import sqlite3
+    path = world['paths']['notebook']
+    assert sqlite3.connect(path).execute('PRAGMA journal_mode').fetchone()[0] == 'delete'
+    ro = sqlite3.connect(f'file:{path}?mode=ro', uri=True)
+    assert ro.execute("SELECT COUNT(*) FROM notes WHERE type = 'protocol'").fetchone()[0] == 2

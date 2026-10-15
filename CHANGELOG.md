@@ -5,6 +5,13 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-15
+
+### Fixed
+- The suite's backup could not copy the notebook's database, and so failed altogether: the notebook
+  kept it in SQLite's WAL mode, which cannot be read from the backup's read-only mount. It now uses
+  the ordinary journal, as the other tools do, and switches an existing database over when it starts.
+
 ## [0.1.0] - 2026-10-15
 
 The first release: a digital lab notebook for the Gardiner Lab suite, designed

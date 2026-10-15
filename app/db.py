@@ -144,7 +144,11 @@ def initialize(db_path: Optional[str] = None) -> None:
     if directory:
         os.makedirs(directory, exist_ok=True)
     with connect() as conn:
-        conn.execute('PRAGMA journal_mode = WAL')
+        # The ordinary rollback journal, as the other tools use, not WAL: the
+        # suite's backup reads the database from a read-only mount, and SQLite
+        # cannot open a WAL database there. This also turns WAL off in a
+        # database made by 0.1.0.
+        conn.execute('PRAGMA journal_mode = DELETE')
         conn.executescript(SCHEMA)
         columns = {r['name'] for r in conn.execute('PRAGMA table_info(notes)')}
         for name, decl in _ADDED_COLUMNS:
