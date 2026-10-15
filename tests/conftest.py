@@ -27,7 +27,7 @@ def world(monkeypatch):
           'CREATE TABLE saved_items (id TEXT PRIMARY KEY, user_id TEXT, item_type TEXT, ref_id TEXT, '
           'title TEXT, summary TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);',
           [('INSERT INTO users VALUES (?, ?, ?)', (u, u, 1 if u == 'boss' else 0))
-           for u in ('ana', 'ben', 'lead', 'boss', 'zoe')]
+           for u in ('ana', 'ben', 'lead', 'boss', 'zoe', 'olead')]
           + [('INSERT INTO saved_items (id, user_id, item_type, title, summary) VALUES (?, ?, ?, ?, ?)',
               ('s1', 'ana', 'plasmid', 'pGFP L1', json.dumps({'reactions': [{
                   'label': 'Level 1', 'level': '1', 'enzyme': 'BsaI',
@@ -39,7 +39,8 @@ def world(monkeypatch):
           'CREATE TABLE members (username TEXT PRIMARY KEY, lab_id INTEGER, role TEXT);',
           [('INSERT INTO labs VALUES (1, ?)', ('Gardiner Lab',)), ('INSERT INTO labs VALUES (2, ?)', ('Other Lab',))]
           + [('INSERT INTO members VALUES (?, ?, ?)', m) for m in
-             [('ana', 1, 'member'), ('ben', 1, 'member'), ('lead', 1, 'lab_lead'), ('zoe', 2, 'member')]])
+             [('ana', 1, 'member'), ('ben', 1, 'member'), ('lead', 1, 'lab_lead'), ('zoe', 2, 'member'),
+              ('olead', 2, 'lab_lead')]])
     _make(paths['editor'],
           'CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT);'
           'CREATE TABLE sequences (id TEXT PRIMARY KEY, name TEXT, sequence TEXT, circular INTEGER, '

@@ -355,3 +355,26 @@ def test_the_database_can_be_read_from_a_read_only_copy(world):
     assert sqlite3.connect(path).execute('PRAGMA journal_mode').fetchone()[0] == 'delete'
     ro = sqlite3.connect(f'file:{path}?mode=ro', uri=True)
     assert ro.execute("SELECT COUNT(*) FROM notes WHERE type = 'protocol'").fetchone()[0] == 2
+
+
+def test_no_one_sees_into_another_labs_notebooks(as_user):
+    """A lab lead reads their own lab's notebooks, never another lab's, by any route."""
+    ana, zoe, olead = as_user('ana'), as_user('zoe'), as_user('olead')
+    day = ana.post('/api/days', json={'date': '2026-10-22'}).get_json()['note']
+    ana.put(f"/api/notes/{day['id']}", json={'content': [{'type': 'text', 'html': '<p>Secret gel result</p>'}]})
+    zday = zoe.post('/api/days', json={'date': '2026-10-22'}).get_json()['note']
+
+    # The other lab's lead reads their own lab, and nothing of ana's.
+    assert olead.get(f"/api/notes/{zday['id']}").status_code == 200
+    assert [n['owner'] for n in _me(olead)['others']] == ['zoe']
+    for client in (olead, zoe):
+        assert client.get(f"/api/notes/{day['id']}").status_code == 403
+        assert client.get(f"/api/notes/{day['id']}/children").status_code == 403
+        assert client.get(f"/api/notes/{day['id']}/revisions").status_code == 403
+        assert client.get(f"/api/notes/{day['id']}/revisions/1").status_code == 403
+        assert client.post(f"/api/notes/{day['id']}/copy").status_code == 403
+        assert client.get('/api/search?q=secret').get_json()['notes'] == []
+        dated = client.get('/api/search?q=%23dateNote=2026-10-22').get_json()['notes']
+        assert all(n['owner'] != 'ana' for n in dated)
+    # And ana's lead cannot read the other lab.
+    assert as_user('lead').get(f"/api/notes/{zday['id']}").status_code == 403
