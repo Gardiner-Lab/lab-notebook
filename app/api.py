@@ -98,14 +98,16 @@ def add_attachments(person, note_id):
 @signed_in
 def get_attachment(person, att_id):
     found = attachments.fetch(person, att_id)
-    inline = found['inline'] and request.args.get('download') is None
+    shown = (found['inline'] or found['preview']) and request.args.get('download') is None
     name = quote(found['filename'])
-    response = Response(found['data'], mimetype=found['mime'] if found['inline'] else 'application/octet-stream')
-    response.headers['Content-Disposition'] = (f"{'inline' if inline else 'attachment'}; "
+    response = Response(found['data'], mimetype=attachments.sent_as(found['mime']))
+    response.headers['Content-Disposition'] = (f"{'inline' if shown else 'attachment'}; "
                                                f"filename*=UTF-8''{name}")
-    # Never read as anything but what it is, and never run as a page.
+    # Never read as anything but what it is, and never run as a page. A PDF is
+    # shown by the browser's own viewer, which a sandbox would block.
     response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['Content-Security-Policy'] = "default-src 'none'; sandbox"
+    response.headers['Content-Security-Policy'] = ("default-src 'none'" if found['preview'] and shown
+                                                    else "default-src 'none'; sandbox")
     response.headers['Cache-Control'] = 'private, max-age=86400'
     response.headers['ETag'] = found['sha256']
     return response

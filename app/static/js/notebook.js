@@ -110,10 +110,11 @@ const newId = () => Math.random().toString(16).slice(2, 14);
 const attachmentUrl = (id, download = false) => url(`/api/attachments/${encodeURIComponent(id)}${download ? '?download' : ''}`);
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (ch) => `&#${ch.charCodeAt(0)};`);
 const sizeLabel = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} kB`);
-/** An attachment as it sits in text: a photo shown, any other file a link. */
+const FILE_ICONS = { pdf: '📕', word: '📝', powerpoint: '📽️', excel: '📊', archive: '🗜️', sequence: '🧬', text: '📄', image: '🖼️', file: '📎' };
+/** An attachment as it sits in text: a photo shown, any other file a link with its icon. */
 const attachmentHtml = (a) => (a.image
   ? `<p><img data-attachment="${a.id}" alt="${escapeHtml(a.filename)}"></p>`
-  : `<p><a data-attachment="${a.id}">📎 ${escapeHtml(a.filename)}</a></p>`);
+  : `<p><a data-attachment="${a.id}">${FILE_ICONS[a.kind] || '📎'} ${escapeHtml(a.filename)}</a></p>`);
 const store = {
   get(key, fallback) { try { return JSON.parse(localStorage.getItem(`nb:${key}`)) ?? fallback; } catch (e) { return fallback; } },
   set(key, value) { try { localStorage.setItem(`nb:${key}`, JSON.stringify(value)); } catch (e) { /* private window */ } },
@@ -407,7 +408,7 @@ const Blocks = {
       const link = e.target.closest('a');
       if (!link) return;
       e.preventDefault();
-      if (link.dataset.attachment) window.open(attachmentUrl(link.dataset.attachment, true), '_blank', 'noopener');
+      if (link.dataset.attachment) window.open(attachmentUrl(link.dataset.attachment), '_blank', 'noopener');
       else if (link.dataset.plasmid) window.open(editorLink(link.dataset.plasmid), '_blank', 'noopener');
       else if (link.dataset.note) App.open(link.dataset.note);
       else if (/^https?:/.test(link.getAttribute('href') || '')) window.open(link.href, '_blank', 'noopener');
@@ -482,9 +483,9 @@ const Blocks = {
       img.title = 'Open the full picture';
     }
     for (const a of area.querySelectorAll('a[data-attachment]')) {
-      a.href = attachmentUrl(a.dataset.attachment, true);
+      a.href = attachmentUrl(a.dataset.attachment);
       a.classList.add('file-link');
-      a.title = 'Download';
+      a.title = 'Open (PDFs open in the browser; other files download, to open in Word, PowerPoint…)';
     }
   },
 
@@ -1034,9 +1035,10 @@ const App = {
         a.image
           ? el('img', { class: 'attachment-thumb', src: attachmentUrl(a.id), alt: '', loading: 'lazy',
             onclick: () => window.open(attachmentUrl(a.id), '_blank', 'noopener') })
-          : el('span', { class: 'attachment-icon' }, '📄'),
+          : el('span', { class: 'attachment-icon', title: a.kind }, FILE_ICONS[a.kind] || '📎'),
         el('div', { class: 'attachment-info' },
-          el('a', { href: attachmentUrl(a.id, !a.image), target: '_blank', rel: 'noopener', text: a.filename }),
+          el('a', { href: attachmentUrl(a.id), target: '_blank', rel: 'noopener', text: a.filename,
+            title: a.image || a.preview ? 'Open it in a new tab' : 'Download, to open in its program' }),
           el('div', { class: 'hint' }, `${sizeLabel(a.size)} · ${a.created_by || '—'} · ${localTime(a.created_at)}`)),
         el('span', { class: 'attachment-actions' },
           el('a', { class: 'btn btn-secondary btn-sm', href: attachmentUrl(a.id, true), title: 'Download' }, '⤓'),

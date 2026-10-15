@@ -461,8 +461,10 @@ def test_photos_and_files_attach_to_notes(as_user):
     assert shown.status_code == 200 and shown.data == PNG and shown.mimetype == 'image/png'
     assert shown.headers['Content-Disposition'].startswith('inline')
     assert shown.headers['X-Content-Type-Options'] == 'nosniff' and 'sandbox' in shown.headers['Content-Security-Policy']
+    # A PDF opens in the browser's own viewer.
     got = ana.get(f"/api/attachments/{pdf['id']}")
-    assert got.headers['Content-Disposition'].startswith('attachment') and got.mimetype == 'application/octet-stream'
+    assert got.headers['Content-Disposition'].startswith('inline') and got.mimetype == 'application/pdf'
+    assert pdf['preview'] is True and pdf['kind'] == 'pdf'
     assert ana.get(f"/api/attachments/{gel['id']}?download").headers['Content-Disposition'].startswith('attachment')
 
     # Text can show it by its attachment, never by an address of its own.
@@ -526,3 +528,27 @@ def test_a_copy_gets_its_own_attachments(as_user):
     assert mine['id'] != att['id'] and mine['filename'] == 'scope.png' and mine['created_by'] == 'ben'
     assert f'data-attachment="{mine["id"]}"' in copy['content'][0]['html']
     assert as_user('ben').get(f"/api/attachments/{mine['id']}").data == PNG
+
+
+
+def test_office_documents_and_other_files(as_user):
+    ana = as_user('ana')
+    page = _page(ana, _me(ana)['notebook'], 'Documents')
+    zipped = b'PK\x03\x04' + b'\x00' * 40          # Office files are zip archives
+    files = [('Methods.docx', zipped), ('Lab meeting.pptx', zipped), ('Plate reader.xlsx', zipped),
+             ('old.doc', b'\xd0\xcf\x11\xe0 word'), ('counts.csv', b'a,b\n1,2\n'), ('pGFP.gb', b'LOCUS pGFP'),
+             ('notes.txt', b'hello'), ('fake.pdf', b'not a pdf')]
+    added = {a['filename']: a for a in _attach(ana, page['id'], *files).get_json()['attachments']}
+    assert {n: a['kind'] for n, a in added.items()} == {
+        'Methods.docx': 'word', 'Lab meeting.pptx': 'powerpoint', 'Plate reader.xlsx': 'excel', 'old.doc': 'word',
+        'counts.csv': 'excel', 'pGFP.gb': 'sequence', 'notes.txt': 'text', 'fake.pdf': 'file'}
+
+    # Office files download with their own type and name, so they open in Word or PowerPoint.
+    r = ana.get(f"/api/attachments/{added['Methods.docx']['id']}")
+    assert r.headers['Content-Disposition'] == "attachment; filename*=UTF-8''Methods.docx"
+    assert r.mimetype == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' and r.data == zipped
+    r = ana.get(f"/api/attachments/{added['Lab meeting.pptx']['id']}")
+    assert r.mimetype.endswith('presentationml.presentation') and "Lab%20meeting.pptx" in r.headers['Content-Disposition']
+    # Named like a PDF, but not one: downloaded, not shown.
+    r = ana.get(f"/api/attachments/{added['fake.pdf']['id']}")
+    assert r.headers['Content-Disposition'].startswith('attachment') and added['fake.pdf']['preview'] is False
