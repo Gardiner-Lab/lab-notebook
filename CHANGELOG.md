@@ -5,6 +5,8 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-15
+
 ### Added
 - **Photos and attachments**, as in Trilium, on pages and protocols.
   - Any kind of file: Word, PowerPoint, Excel, PDF, CSV, GenBank and SnapGene, archives, anything.
