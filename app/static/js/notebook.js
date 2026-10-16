@@ -236,10 +236,12 @@ const Tree = {
 
   remember() { store.set('expanded', [...this.expanded]); },
 
-  async mount(container, rootId, { label, editable = false } = {}) {
+  async mount(container, rootId, { label, editable = false, actions = null } = {}) {
     put(container);
     if (label) {
-      container.append(this.node({ id: rootId, title: label, type: 'notebook', has_children: true }, true, editable));
+      const root = this.node({ id: rootId, title: label, type: 'notebook', has_children: true }, true, editable);
+      if (actions) root.querySelector('.tree-row').append(...actions);
+      container.append(root);
     } else {
       container.append(await this.childList(rootId, editable));
     }
@@ -769,6 +771,108 @@ const Blocks = {
   },
 };
 
+/* --- exports and shares --------------------------------------------------------- */
+
+const Exports = {
+  /** Export a note and what is under it as a PDF or a Word document, following the job until it is ready. */
+  open({ id, title, hasChildren = true, kind = 'page' }) {
+    let format = store.get('exportFormat', 'pdf');
+    let timer = null;
+    modal({
+      title: `Export “${title}”`,
+      onClose: () => clearTimeout(timer),
+      build: (body) => {
+        const choice = (value, label, hint) => el('label', { class: 'checkbox export-choice' },
+          el('input', { type: 'radio', name: 'exportFormat', value, checked: format === value,
+            onchange: () => { format = value; store.set('exportFormat', value); } }),
+          el('span', {}, el('b', {}, label), el('div', { class: 'hint' }, hint)));
+        put(body,
+          choice('pdf', 'PDF', 'To keep, print or send. Photos are in the text, an attached PDF\'s pages are put in where it is attached, and other files are embedded in the PDF (open them from its paperclip or attachments panel).'),
+          choice('docx', 'Word document (.docx)', 'To edit. Photos and an attached PDF\'s pages are pictures in the document; other files come in a zip beside it, linked from the text.'),
+          hasChildren ? el('label', { class: 'checkbox' }, el('input', { type: 'checkbox', id: 'exportChildren', checked: true }),
+            ` Include everything under ${kind === 'notebook' ? 'it' : 'this one'}`) : null,
+          el('p', { class: 'hint', id: 'exportState' }));
+      },
+      buttons: [
+        { label: 'Close', kind: 'secondary' },
+        {
+          label: 'Export',
+          onClick: async ({ body }) => {
+            const state = body.querySelector('#exportState');
+            const { job } = await api('POST', `/notes/${id}/export`, {
+              format, children: body.querySelector('#exportChildren')?.checked !== false,
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, origin: location.origin,
+            });
+            const follow = async () => {
+              let now;
+              try { now = (await api('GET', `/exports/${job.id}`)).job; } catch (err) { put(state, err.message); return; }
+              if (now.status === 'done') {
+                const link = el('a', { href: url(`/api/exports/${job.id}/file`), download: now.filename }, `⤓ ${now.filename}`);
+                put(state, 'Ready: ', link, ' (kept for an hour)');
+                link.click();
+              } else if (now.status === 'failed') {
+                put(state, el('span', { class: 'error-text' }, now.error || 'The export failed'));
+              } else {
+                put(state, `${now.stage}…${now.total ? ` ${now.done} of ${now.total} pages` : ''}`);
+                timer = setTimeout(follow, 1000);
+              }
+            };
+            put(state, 'Starting…');
+            follow();
+            return false;
+          },
+        },
+      ],
+    });
+  },
+};
+
+const Shares = {
+  /** Who a notebook or protocol is shared with; share it with more, or retract a share. */
+  async open({ id, title, kind }) {
+    let data;
+    try { data = await api('GET', `/notes/${id}/shares`); } catch (err) { toast(err.message, 'error'); return; }
+    const notebook = kind === 'notebook';
+    modal({
+      title: `Share “${title}”`,
+      build: (body) => {
+        const list = el('div');
+        const draw = () => put(list, data.shares.length
+          ? el('table', { class: 'library-table share-table' }, el('tbody', {}, data.shares.map((s) => el('tr', {},
+            el('td', {}, s.target_type === 'lab' ? '🏛 ' : '👤 ', el('b', { text: s.label })),
+            el('td', { class: 'hint' }, `by ${s.created_by || '—'} · ${localTime(s.created_at)}`),
+            el('td', { class: 'nowrap' }, el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
+              try { data = await api('DELETE', `/shares/${s.id}`); draw(); toast(`No longer shared with ${s.label}`, 'success'); } catch (err) { toast(err.message, 'error'); }
+            } }, 'Retract'))))))
+          : el('p', { class: 'hint' }, notebook ? 'Not shared: only its owner, the lab\'s lead and administrators see it.'
+            : 'Not shared: only its own lab sees it.'));
+        const options = [
+          ...(data.labs || []).map((lab) => ({ value: `lab:${lab.id}`, label: `🏛 ${lab.name} (the whole lab)` })),
+          ...(data.people || []).map((u) => ({ value: `person:${u}`, label: `👤 ${u}` })),
+        ];
+        const select = el('select', { class: 'share-select' }, el('option', { value: '' }, notebook ? 'Choose a lab or a person…' : 'Choose a lab…'),
+          options.map((o) => el('option', { value: o.value }, o.label)));
+        body.append(
+          el('p', { class: 'hint' }, notebook
+            ? 'Whoever it is shared with can open, search and export this notebook. Only its owner changes it. '
+            : 'The lab it is shared with can open, use, copy and export this protocol. Only its author, their lead and administrators change it. ',
+          'A share stays until it is retracted here.'),
+          list,
+          el('div', { class: 'form-row' }, select, el('button', { class: 'btn btn-primary btn-sm', onclick: async () => {
+            if (!select.value) return;
+            const [target_type, ...rest] = select.value.split(':');
+            try {
+              data = await api('POST', `/notes/${id}/shares`, { target_type, target: rest.join(':') });
+              select.value = '';
+              draw();
+            } catch (err) { toast(err.message, 'error'); }
+          } }, 'Share')));
+        draw();
+      },
+    });
+  },
+};
+
 /* --- the note ------------------------------------------------------------------- */
 
 const App = {
@@ -788,6 +892,13 @@ const App = {
     document.getElementById('btnToday').addEventListener('click', () => this.startDay());
     document.getElementById('dayPicker').addEventListener('change', (e) => { if (e.target.value) this.startDay(e.target.value); });
     document.getElementById('btnNewPage').addEventListener('click', () => this.newNote('mine', this.me.notebook));
+    document.getElementById('btnExportMine').addEventListener('click', async () => {
+      await this.flush();
+      Exports.open({ id: this.me.notebook, title: 'My notebook', kind: 'notebook' });
+    });
+    const shareMine = document.getElementById('btnShareMine');
+    shareMine.hidden = !this.me.can_share_notebook;
+    shareMine.addEventListener('click', () => Shares.open({ id: this.me.notebook, title: 'My notebook', kind: 'notebook' }));
     document.getElementById('tabNotebook').addEventListener('click', (e) => {
       e.preventDefault();
       const last = store.get('last', null);
@@ -851,19 +962,31 @@ const App = {
 
   async reloadTrees() {
     await Tree.mount(document.getElementById('treeMine'), this.me.notebook, { editable: true });
-    const others = this.me.others || [];
-    const section = document.getElementById('othersSection');
-    section.hidden = !others.length;
-    if (others.length) {
-      document.getElementById('othersTitle').textContent = NB.person.role === 'admin' ? 'All notebooks' : 'My lab\'s notebooks';
-      const box = document.getElementById('treeOthers');
+    // A notebook's own buttons: export it whole, and share it (its lab's lead, or an admin).
+    const actions = (nb) => [
+      el('button', { class: 'tree-act', title: `Export ${nb.owner}'s notebook`, onclick: (e) => {
+        e.stopPropagation();
+        Exports.open({ id: nb.id, title: `${nb.owner}'s notebook`, kind: 'notebook' });
+      } }, '⤓'),
+      nb.can_share ? el('button', { class: 'tree-act', title: `Share ${nb.owner}'s notebook with a lab or a person`, onclick: (e) => {
+        e.stopPropagation();
+        Shares.open({ id: nb.id, title: `${nb.owner}'s notebook`, kind: 'notebook' });
+      } }, '👥') : null,
+    ].filter(Boolean);
+    const groups = [['othersSection', 'treeOthers', (this.me.others || []).filter((nb) => !nb.shared)],
+      ['sharedSection', 'treeShared', (this.me.others || []).filter((nb) => nb.shared)]];
+    for (const [sectionId, boxId, list] of groups) {
+      const section = document.getElementById(sectionId);
+      section.hidden = !list.length;
+      const box = document.getElementById(boxId);
       put(box);
-      for (const nb of others) {
+      for (const nb of list) {
         const holder = el('div');
         box.append(holder);
-        await Tree.mount(holder, nb.id, { label: nb.owner });
+        await Tree.mount(holder, nb.id, { label: nb.owner, actions: actions(nb) });
       }
     }
+    document.getElementById('othersTitle').textContent = NB.person.role === 'admin' ? 'All notebooks' : 'My lab\'s notebooks';
     if (this.note) Tree.markActive(this.note.id);
   },
 
@@ -961,6 +1084,14 @@ const App = {
           class: 'btn btn-secondary btn-sm', title: "Put this protocol into today's page",
           onclick: () => this.useToday(note.id),
         }, '＋ Use today'),
+        note.can_share ? el('button', {
+          class: 'btn btn-secondary btn-sm', title: 'Share this protocol with other labs',
+          onclick: () => Shares.open({ id: note.id, title: note.title, kind: note.type }),
+        }, '👥 Share') : null,
+        el('button', {
+          class: 'btn btn-secondary btn-sm', title: note.has_children ? 'Export this page and everything under it, as a PDF or a Word document' : 'Export as a PDF or a Word document',
+          onclick: async () => { await this.flush(); Exports.open({ id: note.id, title: note.title, hasChildren: note.has_children, kind: note.type }); },
+        }, '⤓ Export'),
         el('button', { class: 'btn btn-secondary btn-sm', onclick: () => this.history() }, '🕘 History'),
         el('button', { class: 'btn btn-secondary btn-sm', title: 'Copy, move, place elsewhere, delete', onclick: () => this.moreMenu() }, '⋯')));
 
@@ -1338,7 +1469,10 @@ const App = {
           }, p.favorite ? '★' : '☆')),
           el('td', {}, el('a', { href: `#note=${p.id}`, class: 'library-title', onclick: (e) => { e.preventDefault(); this.open(p.id); } }, p.title),
             el('div', { class: 'hint' }, `by ${p.created_by || 'the MoClo Library Tool'}`,
-              p.updated_by && p.updated_by !== p.created_by ? ` · changed by ${p.updated_by}` : '', ` · ${localTime(p.updated_at).slice(0, 10)}`)),
+              p.updated_by && p.updated_by !== p.created_by ? ` · changed by ${p.updated_by}` : '', ` · ${localTime(p.updated_at).slice(0, 10)}`,
+              p.shared && p.lab ? el('span', { class: 'badge badge-shared', title: 'Shared with your lab by another lab' }, ` shared by ${p.lab}`) : null,
+              !p.shared && p.shares ? el('span', { class: 'badge badge-shared', title: 'Shared with other labs' }, ` shared with ${p.shares} lab${p.shares > 1 ? 's' : ''}`) : null,
+              !p.lab && !p.shared ? el('span', { class: 'hint' }, ' · every lab') : null)),
           el('td', { class: 'hint nowrap uses-cell' }, p.uses ? `used ${p.uses}×` : 'not used yet'),
           el('td', { class: 'nowrap use-cell' }, el('button', { class: 'btn btn-secondary btn-sm', title: "Put it into today's page",
             onclick: () => this.useToday(p.id) }, '＋ Use today'))))))))
@@ -1352,8 +1486,11 @@ const App = {
         el('h1', {}, '🧪 Protocol library'),
         el('span', { class: 'note-actions' },
           el('button', { class: 'btn btn-primary btn-sm', onclick: () => this.newNote('library', this.me.library, 'protocol') }, '＋ New protocol'),
-          el('button', { class: 'btn btn-secondary btn-sm', onclick: () => this.newNote('library', this.me.library, 'folder') }, '＋ New folder'))),
-      el('p', { class: 'hint' }, 'Shared by the whole lab. Anyone can add a protocol; its author, their lab lead and administrators can change it. ',
+          el('button', { class: 'btn btn-secondary btn-sm', onclick: () => this.newNote('library', this.me.library, 'folder') }, '＋ New folder'),
+          el('button', { class: 'btn btn-secondary btn-sm', title: 'Every protocol you can see, as a PDF or a Word document',
+            onclick: () => Exports.open({ id: this.me.library, title: 'Protocol library', kind: 'notebook' }) }, '⤓ Export'))),
+      el('p', { class: 'hint' }, 'Your lab\'s protocols, the ones other labs share with it, and those supplied with the notebook. ',
+        'Anyone can add a protocol; its author, their lab lead and administrators can change it, and share it with other labs (👥 Share, on the protocol). ',
         'Star the ones you use most: they are listed on the left, and offered first when you add a protocol to a page.'),
       el('div', { class: 'library-filters' }, query, el('label', { class: 'checkbox' }, onlyFav, ' Favourites only')),
       list);

@@ -4,5 +4,17 @@ Flask==3.0.3
 # Cleaning the rich text people write, so a notebook cannot carry scripts
 nh3==0.2.18
 
+# Exports: PDFs laid out from HTML (needs Pango, see the Dockerfile), attached
+# PDFs placed into them, Word documents, and PDF pages as pictures for Word
+weasyprint==62.3
+# 0.11 changed what WeasyPrint 62 calls; keep the one it was made for
+pydyf==0.10.0
+pypdf==4.3.1
+python-docx==1.1.2
+pypdfium2==4.30.0
+Pillow==10.4.0
+# Time zones for the times printed in exports
+tzdata==2024.1
+
 # Testing
 pytest==8.3.4

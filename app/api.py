@@ -5,9 +5,9 @@ from functools import wraps
 
 from urllib.parse import quote
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, jsonify, request, send_file
 
-from app import attachments, notes, people, sources
+from app import attachments, exporting, notes, people, sources
 
 api = Blueprint('api', __name__)
 
@@ -39,8 +39,11 @@ def _body() -> dict:
 @api.get('/me')
 @signed_in
 def me(person):
+    notebook = notes.notebook_root(person.username)
     return jsonify({'person': person.to_dict(),
-                    'notebook': notes.notebook_root(person.username),
+                    'notebook': notebook,
+                    # A lab lead shares their notebook; anyone exports it.
+                    'can_share_notebook': person.is_admin or person.is_lab_lead,
                     'library': notes.library_root(),
                     'others': notes.notebooks(person)})
 
@@ -265,3 +268,51 @@ def moclo_reactions(person):
 @signed_in
 def moclo_reaction_section(person, item_id):
     return jsonify({'section': sources.reaction_section(person, item_id)})
+
+
+@api.get('/notes/<note_id>/shares')
+@signed_in
+def list_shares(person, note_id):
+    return jsonify(notes.shares(person, note_id))
+
+
+@api.post('/notes/<note_id>/shares')
+@signed_in
+def add_share(person, note_id):
+    data = _body()
+    return jsonify(notes.share(person, note_id, str(data.get('target_type') or ''),
+                               str(data.get('target') or ''))), 201
+
+
+@api.delete('/shares/<share_id>')
+@signed_in
+def remove_share(person, share_id):
+    return jsonify(notes.unshare(person, share_id))
+
+
+@api.post('/notes/<note_id>/export')
+@signed_in
+def start_export(person, note_id):
+    data = _body()
+    job = exporting.start(person, note_id, fmt=str(data.get('format') or 'pdf'),
+                          children=data.get('children') is not False,
+                          timezone=str(data.get('timezone') or ''), origin=str(data.get('origin') or ''),
+                          base=request.script_root)
+    return jsonify({'job': job}), 202
+
+
+@api.get('/exports/<job_id>')
+@signed_in
+def export_status(person, job_id):
+    return jsonify({'job': exporting.status(person, job_id)})
+
+
+@api.get('/exports/<job_id>/file')
+@signed_in
+def export_file(person, job_id):
+    found = exporting.result(person, job_id)
+    response = send_file(found['path'], mimetype=found['mime'], as_attachment=True,
+                         download_name=found['filename'])
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response

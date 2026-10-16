@@ -11,7 +11,7 @@ import os
 
 from flask import Flask, redirect, render_template, request
 
-APP_VERSION = '0.5.0'
+APP_VERSION = '0.6.0'
 
 
 class PrefixMiddleware:
@@ -30,7 +30,7 @@ class PrefixMiddleware:
 
 
 def create_app() -> Flask:
-    from app import db, people, sources
+    from app import db, notes, people, sources
     from app.api import api
 
     app = Flask(__name__)
@@ -39,6 +39,7 @@ def create_app() -> Flask:
     db.initialize(os.environ.get('NOTEBOOK_DATABASE_PATH', '/notebook/notebook.db'))
     sources.seed_library()
     sources.fill_search_text()
+    notes.assign_labs()
     app.register_blueprint(api, url_prefix='/api')
 
     def links() -> dict:

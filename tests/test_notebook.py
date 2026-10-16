@@ -494,9 +494,12 @@ def test_who_may_see_and_add_attachments(as_user):
     assert zoe.get(f"/api/attachments/{att['id']}").status_code == 403
     assert _attach(lead, page['id'], ('x.png', PNG)).status_code == 403          # but does not add
     assert lead.delete(f"/api/attachments/{att['id']}").status_code == 403
-    # Protocol photos: everyone sees them, the author adds them.
+    # Protocol photos: the lab sees them, other labs once it is shared with them; the author adds them.
     proto = ana.post('/api/notes', json={'parent_id': _me(ana)['library'], 'title': 'Western', 'type': 'protocol'}).get_json()['note']
     patt = _attach(ana, proto['id'], ('setup.png', PNG)).get_json()['attachments'][0]
+    assert ben.get(f"/api/attachments/{patt['id']}").status_code == 200
+    assert zoe.get(f"/api/attachments/{patt['id']}").status_code == 403
+    ana.post(f"/api/notes/{proto['id']}/shares", json={'target_type': 'lab', 'target': '2'})
     assert zoe.get(f"/api/attachments/{patt['id']}").status_code == 200
     assert _attach(ben, proto['id'], ('x.png', PNG)).status_code == 403
 

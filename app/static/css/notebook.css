@@ -309,3 +309,17 @@ input.step-text:focus { outline: 1px solid var(--border); border-radius: .3rem; 
 .star-btn { border: 0; background: none; cursor: pointer; font-size: 1.15rem; color: var(--muted); line-height: 1; }
 .star-btn.on { color: #f59e0b; }
 .checkbox { display: inline-flex; align-items: center; gap: .3rem; font-size: .9rem; white-space: nowrap; }
+
+/* exports and shares */
+.tree-head-tools { display: inline-flex; gap: .1rem; }
+.tree-act { margin-left: auto; font: inherit; font-size: .8rem; background: none; border: 0; cursor: pointer; color: var(--muted);
+    padding: 0 .3rem; border-radius: .3rem; opacity: 0; }
+.tree-row:hover .tree-act, .tree-act:focus { opacity: 1; }
+.tree-act:hover { background: var(--card); color: var(--text); }
+.export-choice { display: flex; align-items: flex-start; margin: .4rem 0; white-space: normal; }
+.export-choice input { margin-top: .25rem; }
+.error-text { color: var(--danger); }
+.badge-shared { background: #e0e7ff; color: #3730a3; border-radius: .6rem; padding: 0 .45rem; margin-left: .3rem; font-size: .75rem; }
+.share-table td { padding: .3rem .4rem; }
+.share-select { font: inherit; flex: 1; min-width: 0; padding: .25rem; border: 1px solid var(--border); border-radius: .4rem; }
+.tree-act ~ .tree-act { margin-left: 0; }

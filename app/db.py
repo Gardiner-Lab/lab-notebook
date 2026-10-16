@@ -109,6 +109,20 @@ CREATE TABLE IF NOT EXISTS links (
     PRIMARY KEY (note_id, target_type, target_id)
 );
 CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_type, target_id);
+
+-- A protocol shared with another lab, or a notebook shared with a lab or a
+-- person, by its lead. Kept until it is retracted. target is a lab's id (as
+-- text) or a username.
+CREATE TABLE IF NOT EXISTS shares (
+    id TEXT PRIMARY KEY,
+    note_id TEXT NOT NULL,
+    target_type TEXT NOT NULL CHECK (target_type IN ('lab', 'person')),
+    target TEXT NOT NULL,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (note_id, target_type, target)
+);
+CREATE INDEX IF NOT EXISTS idx_shares_target ON shares(target_type, target);
 """
 
 
@@ -120,6 +134,9 @@ _ADDED_COLUMNS = [
     # page above it), so what went together comes back together.
     ('deleted_by', 'TEXT'),
     ('deleted_root', 'TEXT'),
+    # The lab a protocol or library folder belongs to (the suite's lab id, as
+    # text): its author's, when it was written. None: every lab's.
+    ('lab', 'TEXT'),
 ]
 
 

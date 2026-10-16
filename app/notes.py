@@ -2,12 +2,17 @@
 Notes, where they sit, their attributes and their history, and who may do what.
 
     Everyone      has a notebook of their own: days, and pages under them.
-                  May add protocols to the shared library and use any of them.
-    A lab lead    may open the notebooks of their lab's members.
-    An admin      may open every notebook.
-    A protocol    may be changed by whoever wrote it, their lab's lead, or an admin.
+                  May add protocols to the library and use their lab's, the ones
+                  other labs share with it, and those supplied with the notebook.
+    A lab lead    may open the notebooks of their lab's members, and share them
+                  with other labs or people, to read and export.
+    An admin      may open every notebook and protocol.
+    A protocol    belongs to its author's lab. It may be changed by whoever wrote
+                  it, their lab's lead, or an admin, and shared by them with
+                  other labs.
 
-A notebook is changed only by its owner; leads and admins read it. Every
+A share lasts until it is retracted. A notebook is changed only by its owner;
+leads, admins and those it is shared with read it. Every
 change to a note is kept as a revision (one person's edits within a few
 minutes of each other make one revision, as in Trilium), and any revision can
 be restored, which is a revision too.
@@ -16,10 +21,13 @@ be restored, which is a revision too.
 import calendar
 import json
 from datetime import date
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
+
+from flask import g, has_app_context
 
 from app import attachments
 from app import content as content_mod
+from app import people as people_mod
 from app.db import connect
 from app.people import Person
 
@@ -52,10 +60,52 @@ def _row(conn, note_id: str):
     return row
 
 
+def note_lab(note) -> Optional[str]:
+    """The lab a library note belongs to: as recorded, else its author's now; None for every lab's."""
+    if note['lab']:
+        return note['lab']
+    if note['created_by']:
+        return (people_mod.membership(note['created_by']) or {}).get('lab_id')
+    return None
+
+
+def _shared_with(person: Person) -> Dict[str, Set[str]]:
+    """What is shared with this person or their lab: {'notes': note ids, 'owners': notebook owners}."""
+    key = f'shared_{person.username}'
+    if has_app_context() and key in g:
+        return g.get(key)
+    with connect() as conn:
+        rows = conn.execute(
+            'SELECT s.note_id, n.type, n.owner FROM shares s JOIN notes n ON n.id = s.note_id '
+            "WHERE n.deleted_at IS NULL AND ((s.target_type = 'person' AND s.target = ?) "
+            "OR (s.target_type = 'lab' AND s.target = ?))", (person.username, person.lab_id or '')).fetchall()
+    found = {'notes': {r['note_id'] for r in rows},
+             'owners': {r['owner'] for r in rows if r['type'] == 'notebook' and r['owner']}}
+    if has_app_context():
+        setattr(g, key, found)
+    return found
+
+
+def _forget_shares() -> None:
+    if has_app_context():
+        for key in [k for k in vars(g) if k.startswith('shared_')]:
+            delattr(g, key)
+
+
 def can_view(person: Person, note) -> bool:
     if note['space'] == 'library':
-        return True
-    return person.oversees(note['owner'])
+        if note['type'] == 'library' or person.is_admin:
+            return True
+        lab = note_lab(note)
+        if lab is None or lab == person.lab_id:
+            return True
+        shared = _shared_with(person)['notes']
+        if note['type'] == 'folder':
+            # Another lab's folder shows when it holds something shared with this lab.
+            with connect() as conn:
+                return bool(shared.intersection(_subtree(conn, note['id'])))
+        return note['id'] in shared
+    return person.oversees(note['owner']) or note['owner'] in _shared_with(person)['owners']
 
 
 def can_edit(person: Person, note) -> bool:
@@ -64,14 +114,22 @@ def can_edit(person: Person, note) -> bool:
         if note['type'] == 'library':
             return False
         author = note['created_by']
-        return person.is_admin or author == person.username or (person.is_lab_lead and person.oversees(author))
+        if person.is_admin or (author and author == person.username):
+            return True
+        lab = note_lab(note)
+        return bool(person.is_lab_lead and author and lab and lab == person.lab_id)
     return note['owner'] == person.username and note['type'] != 'notebook'
 
 
 def can_add_under(person: Person, parent) -> bool:
     """Put a new note (or a note moved here) under this one."""
     if parent['space'] == 'library':
-        return parent['type'] in ('library', 'folder') or can_edit(person, parent)
+        if parent['type'] == 'library':
+            return True
+        if parent['type'] == 'folder':
+            # Into the lab's own folders (or every lab's), not into one another lab shares from.
+            return person.is_admin or note_lab(parent) in (None, person.lab_id)
+        return can_edit(person, parent)
     return parent['owner'] == person.username
 
 
@@ -134,6 +192,10 @@ def get(person: Person, note_id: str) -> dict:
             'placements': placements,
             'can_edit': can_edit(person, row),
             'can_add': can_add_under(person, row),
+            'can_share': can_share(person, row),
+            'has_children': bool(conn.execute(
+                'SELECT 1 FROM branches b JOIN notes c ON c.id = b.note_id '
+                'WHERE b.parent_id = ? AND c.deleted_at IS NULL LIMIT 1', (note_id,)).fetchone()),
             'favorite': bool(conn.execute('SELECT 1 FROM favorites WHERE username = ? AND note_id = ?',
                                           (person.username, note_id)).fetchone()),
             'attachments': attachments.listed(conn, note_id),
@@ -157,19 +219,21 @@ def children(person: Person, parent_id: str) -> List[dict]:
             "CASE WHEN n.type IN ('year', 'month', 'day') THEN n.title END DESC, b.position, n.title",
             (parent_id,)).fetchall()
     return [{**summary(r), 'branch_id': r['branch_id'], 'has_children': r['child_count'] > 0,
-             'cloned': r['placements'] > 1} for r in rows]
+             'cloned': r['placements'] > 1} for r in rows
+            if r['space'] != 'library' or can_view(person, r)]
 
 
 # --- roots ---------------------------------------------------------------------
 
 def _create(conn, *, title: str, type: str, space: str, owner: Optional[str], by: Optional[str],
             parent_id: Optional[str] = None, content: Optional[list] = None,
-            kind: str = 'created') -> str:
+            kind: str = 'created', lab: Optional[str] = None) -> str:
     note_id = content_mod.new_id() + content_mod.new_id()
     body = json.dumps(content or [])
     conn.execute('INSERT INTO notes (id, title, type, space, owner, content, search_text, revision, version, '
-                 'created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?)',
-                 (note_id, title, type, space, owner, body, content_mod.plain_text(content or []), by, by))
+                 'created_by, updated_by, lab) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?)',
+                 (note_id, title, type, space, owner, body, content_mod.plain_text(content or []), by, by,
+                  lab if space == 'library' else None))
     conn.execute('INSERT INTO revisions (note_id, number, title, content, kind, changed_by) '
                  'VALUES (?, 1, ?, ?, ?, ?)', (note_id, title, body, kind, by))
     if parent_id:
@@ -209,13 +273,33 @@ def library_root() -> str:
 
 
 def notebooks(person: Person) -> List[dict]:
-    """The notebooks this person may open besides their own: their lab's, or all for an admin."""
-    if not (person.is_admin or person.is_lab_lead):
-        return []
+    """
+    The notebooks this person may open besides their own: their lab's (or all,
+    for an admin), and those shared with them or their lab, marked shared.
+    """
     with connect() as conn:
         rows = conn.execute("SELECT * FROM notes WHERE type = 'notebook' AND deleted_at IS NULL "
                             'AND owner != ? ORDER BY owner', (person.username,)).fetchall()
-    return [summary(r) for r in rows if person.oversees(r['owner'])]
+    shared = _shared_with(person)['owners']
+    found = []
+    for r in rows:
+        mine = (person.is_admin or person.is_lab_lead) and person.oversees(r['owner'])
+        if mine or r['owner'] in shared:
+            found.append({**summary(r), 'shared': not mine, 'can_share': can_share(person, r)})
+    return found
+
+
+def assign_labs() -> None:
+    """Give library notes written before labs were recorded their author's lab, once known."""
+    with connect() as conn:
+        rows = conn.execute("SELECT id, created_by FROM notes WHERE space = 'library' AND lab IS NULL "
+                            'AND created_by IS NOT NULL').fetchall()
+    if not rows:
+        return
+    labs = {u: m.get('lab_id') for u, m in people_mod.memberships().items()}
+    with connect() as conn:
+        conn.executemany('UPDATE notes SET lab = ? WHERE id = ?',
+                         [(labs[r['created_by']], r['id']) for r in rows if labs.get(r['created_by'])])
 
 
 # --- days ----------------------------------------------------------------------
@@ -269,7 +353,7 @@ def create(person: Person, parent_id: str, title: str, type: str = 'page',
     with connect() as conn:
         return _create(conn, title=(title or 'Untitled').strip()[:200] or 'Untitled', type=type,
                        space=parent['space'], owner=parent['owner'], by=person.username,
-                       parent_id=parent_id, content=blocks)
+                       parent_id=parent_id, content=blocks, lab=person.lab_id)
 
 
 def _index_links(conn, note_id: str, blocks: list) -> None:
@@ -667,14 +751,21 @@ def protocols(person: Person, query: str = '') -> List[dict]:
         # The guide to writing protocols comes first, wherever the alphabet puts it.
         pinned = {r['note_id'] for r in conn.execute(
             "SELECT note_id FROM attributes WHERE name = 'seed' AND value = 'how-to-write-a-protocol'")}
-        rows = sorted(rows, key=lambda r: r['id'] not in pinned)
+        rows = sorted((r for r in rows if can_view(person, r)), key=lambda r: r['id'] not in pinned)
+        share_counts = dict(conn.execute('SELECT note_id, COUNT(*) FROM shares GROUP BY note_id').fetchall())
+        names = {lab['id']: lab['name'] for lab in people_mod.labs()}
         found = []
         for r in rows:
             path = [p for p in _path(conn, r['id'])[:-1] if p['id'] != library]
+            lab = note_lab(r)
             found.append({**summary(r), 'folder': ' › '.join(p['title'] for p in path),
                           'created_by': r['created_by'], 'updated_by': r['updated_by'],
                           'updated_at': r['updated_at'], 'favorite': r['id'] in favourites,
-                          'uses': uses.get(r['id'], 0), 'can_edit': can_edit(person, r)})
+                          'uses': uses.get(r['id'], 0), 'can_edit': can_edit(person, r),
+                          'lab': names.get(lab) if lab else None,
+                          # Seen here because another lab shares it.
+                          'shared': bool(lab and lab != person.lab_id and not person.is_admin),
+                          'shares': share_counts.get(r['id'], 0)})
     return found
 
 
@@ -721,3 +812,95 @@ def protocol_snapshot(person: Person, protocol_id: str) -> Dict[str, Any]:
     return {'type': 'section', 'title': row['title'],
             'source': {'kind': 'protocol', 'id': row['id'], 'version': row['revision'], 'name': row['title']},
             'blocks': blocks}
+
+
+# --- sharing ---------------------------------------------------------------------
+
+def _home_lab(note) -> Optional[str]:
+    """The lab that sees a note without a share: a protocol's own, or its notebook owner's."""
+    if note['space'] == 'library':
+        return note_lab(note)
+    return (people_mod.membership(note['owner']) or {}).get('lab_id')
+
+
+def can_share(person: Person, note) -> bool:
+    """
+    A notebook: its lab's lead, or an admin. A protocol (or a page in the
+    library): whoever may change it, unless it is every lab's already.
+    """
+    if note['type'] == 'notebook':
+        return person.is_admin or (person.is_lab_lead and person.oversees(note['owner']))
+    if note['space'] == 'library' and note['type'] not in ('library', 'folder'):
+        return can_edit(person, note) and note_lab(note) is not None
+    return False
+
+
+def _shareable(conn, person: Person, note_id: str):
+    row = _row(conn, note_id)
+    if not can_view(person, row):
+        raise Forbidden('This notebook is not yours to open')
+    if not can_share(person, row):
+        if row['type'] == 'notebook':
+            raise Forbidden("Only the lab's lead or an administrator can share a notebook")
+        if row['space'] == 'library' and row['type'] not in ('library', 'folder') and note_lab(row) is None:
+            raise ValueError('Every lab can use this protocol already')
+        raise Forbidden('Only whoever may change a protocol can share it; notebooks are shared whole')
+    return row
+
+
+def shares(person: Person, note_id: str) -> dict:
+    """Who a notebook or protocol is shared with, and whom it could be shared with."""
+    with connect() as conn:
+        row = _row(conn, note_id)
+        if not can_view(person, row):
+            raise Forbidden('This notebook is not yours to open')
+        allowed = can_share(person, row)
+        listed = conn.execute('SELECT * FROM shares WHERE note_id = ? ORDER BY created_at, rowid',
+                              (note_id,)).fetchall() if allowed else []
+    labs = people_mod.labs()
+    names = {lab['id']: lab['name'] for lab in labs}
+    out = {'can_share': allowed,
+           'shares': [{'id': s['id'], 'target_type': s['target_type'], 'target': s['target'],
+                       'label': names.get(s['target'], f"Lab {s['target']}") if s['target_type'] == 'lab' else s['target'],
+                       'created_by': s['created_by'], 'created_at': s['created_at']} for s in listed]}
+    if allowed:
+        home = _home_lab(row)
+        out['labs'] = [lab for lab in labs if lab['id'] != home]
+        # Notebooks go to people as well as labs; protocols to labs.
+        out['people'] = [u for u in people_mod.people() if u != row['owner']] if row['type'] == 'notebook' else []
+    return out
+
+
+def share(person: Person, note_id: str, target_type: str, target: str) -> dict:
+    target = str(target or '').strip()
+    with connect() as conn:
+        row = _shareable(conn, person, note_id)
+        if target_type == 'lab':
+            if target not in {lab['id'] for lab in people_mod.labs()}:
+                raise ValueError('Choose a lab of the suite')
+            if target == _home_lab(row):
+                raise ValueError('Its own lab sees it already')
+        elif target_type == 'person' and row['type'] == 'notebook':
+            if target not in people_mod.people():
+                raise ValueError('No one has that username')
+            if target == row['owner']:
+                raise ValueError('It is their own notebook')
+        else:
+            raise ValueError('A protocol is shared with labs; a notebook with labs or people')
+        conn.execute('INSERT OR IGNORE INTO shares (id, note_id, target_type, target, created_by) '
+                     'VALUES (?, ?, ?, ?, ?)',
+                     (content_mod.new_id() + content_mod.new_id(), note_id, target_type, target, person.username))
+    _forget_shares()
+    return shares(person, note_id)
+
+
+def unshare(person: Person, share_id: str) -> dict:
+    """Retract a share: whoever may share the note may retract any of its shares."""
+    with connect() as conn:
+        found = conn.execute('SELECT * FROM shares WHERE id = ?', (share_id,)).fetchone()
+        if found is None:
+            raise NotFound('No such share')
+        _shareable(conn, person, found['note_id'])
+        conn.execute('DELETE FROM shares WHERE id = ?', (share_id,))
+    _forget_shares()
+    return shares(person, found['note_id'])

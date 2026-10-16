@@ -5,6 +5,29 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-16
+
+### Added
+- **Export** to PDF or Word, from any level of the tree: a page, a day, a month, a folder, a protocol,
+  a whole notebook or the library, with everything under it (or the page alone).
+  - PDF: a cover, contents with page numbers, and each page with who wrote it and when.
+    - Photos are where they are in the text.
+    - An attached PDF's pages are put in where it is attached.
+    - Other files are embedded in the PDF; CSV, text and sequence files are printed too.
+    - Tables show their worked-out numbers, ticks who made them and when.
+  - Word (.docx), to edit: photos and an attached PDF's pages as pictures, and other files in a zip
+    beside the document, linked from it.
+  - Exports run in the background with their progress shown, and are kept for an hour.
+- **Sharing notebooks.** A lab lead (or an administrator) can share a notebook of their lab with
+  another lab or a person, who can then read, search and export it, under "Shared with me". It stays
+  shared until the share is retracted.
+- **Sharing protocols** with other labs, by whoever may change the protocol, until retracted.
+
+### Changed
+- **Protocols belong to their author's lab** and are seen by that lab only, unless shared. Protocols
+  written before keep their author's lab. The protocols supplied with the notebook stay every lab's.
+- The image includes Pango and fonts, for the PDFs.
+
 ## [0.5.0] - 2026-10-16
 
 ### Added

@@ -6,10 +6,14 @@ The Gardiner Lab suite's digital lab notebook.
   Pages can hold pages (the ＋ beside each note adds one), and a page can sit in two places at once.
 - **Search.** Titles and everything written in pages and protocols, from the box at the top
   (Ctrl+K). `#label=value` finds labelled pages.
-- **A shared protocol library**, in a Protocols tab of its own, with folders, search and
-  favourites. Your starred protocols are listed in the sidebar. Anyone can add a protocol and use any of them. Whoever wrote a
-  protocol, their lab's lead and administrators can change it. Every version is kept, and a protocol
-  used on a day keeps the version that was used.
+- **A protocol library**, in a Protocols tab of its own, with folders, search and favourites. Your
+  starred protocols are listed in the sidebar.
+  - A protocol belongs to its author's lab: the lab sees and uses it, other labs do not.
+  - Whoever wrote a protocol, their lab's lead and administrators can change it, and share it with other
+    labs (👥 Share). A share lasts until it is retracted. The other lab can use, copy and export it, not
+    change it.
+  - The protocols supplied with the notebook are every lab's.
+  - Every version is kept, and a protocol used on a day keeps the version that was used.
 - **A guide to start from.** "How to write a protocol (start here)", first in the library, shows
   every kind of table by example. Make a copy of it to start your own.
 - **Active tables.** Volumes scale with the number of reactions, cells can hold formulas (`=B*N`,
@@ -22,6 +26,15 @@ The Gardiner Lab suite's digital lab notebook.
   opens the plasmid in the Plasmid Editor.
 - **Who sees what.** Your notebook is yours. Lab leads can read their lab's notebooks, and
   administrators can read all of them. Only the owner changes a notebook.
+  - A lab lead can share a notebook of their lab with another lab or a person (👥 beside it). They can
+    then read, search and export it, under "Shared with me", until the share is retracted.
+- **Export.** ⤓ Export, on any page, day, protocol or folder, on a whole notebook, or on the
+  library, exports it and everything under it.
+  - **PDF**, to keep or send: photos where they are; an attached PDF's pages put in where it is
+    attached; other files embedded in the PDF (opened from its paperclip). CSV, text and sequence
+    files are printed as well. Tables show their worked-out numbers, and ticks who made them.
+  - **Word (.docx)**, to edit: photos and an attached PDF's pages as pictures; other files in a zip
+    beside the document, linked from it.
 - **Photos and files.** Attach them to pages and protocols with 📎 Attach…, or paste or drop them into
   text. Photos show in the page, and the backup includes them.
 - **History.** Every change is kept with who made it, and any version can be restored.

@@ -27,6 +27,7 @@ class Person:
     is_admin: bool = False
     lab: Optional[str] = None
     lab_role: str = 'member'          # 'lab_lead' or 'member'
+    lab_id: Optional[str] = None      # the suite's id for the lab, as text: what shares name
 
     @property
     def role(self) -> str:
@@ -50,7 +51,7 @@ class Person:
         return bool(other and other.get('lab') and other['lab'].casefold() == self.lab.casefold())
 
     def to_dict(self) -> dict:
-        return {'username': self.username, 'role': self.role, 'lab': self.lab,
+        return {'username': self.username, 'role': self.role, 'lab': self.lab, 'lab_id': self.lab_id,
                 'is_admin': self.is_admin}
 
 
@@ -87,14 +88,25 @@ def account(username: str) -> Optional[dict]:
 
 
 def memberships() -> Dict[str, dict]:
-    """username -> {'lab': name, 'role': 'lab_lead' | 'member'}, from the suite."""
-    rows = _read(suite_path(), 'SELECT members.username, labs.name AS lab, members.role FROM members '
-                               'LEFT JOIN labs ON labs.id = members.lab_id')
-    return {r['username']: {'lab': r['lab'], 'role': r['role']} for r in rows}
+    """username -> {'lab': name, 'lab_id': id as text, 'role': 'lab_lead' | 'member'}, from the suite."""
+    rows = _read(suite_path(), 'SELECT members.username, labs.name AS lab, labs.id AS lab_id, members.role '
+                               'FROM members LEFT JOIN labs ON labs.id = members.lab_id')
+    return {r['username']: {'lab': r['lab'], 'role': r['role'],
+                            'lab_id': str(r['lab_id']) if r['lab_id'] is not None else None} for r in rows}
 
 
 def membership(username: str) -> Optional[dict]:
     return memberships().get(username)
+
+
+def labs() -> List[dict]:
+    """The suite's labs: [{'id': id as text, 'name': name}], by name."""
+    return [{'id': str(r['id']), 'name': r['name']}
+            for r in _read(suite_path(), 'SELECT id, name FROM labs ORDER BY name COLLATE NOCASE')]
+
+
+def lab_name(lab_id: Optional[str]) -> Optional[str]:
+    return next((lab['name'] for lab in labs() if lab['id'] == lab_id), None) if lab_id else None
 
 
 def people() -> List[str]:
@@ -112,6 +124,7 @@ def current() -> Optional[Person]:
         entry = account(username)
         member = membership(username) or {}
         person = Person(username=username, is_admin=bool(entry and entry['is_admin']),
-                        lab=member.get('lab'), lab_role=member.get('role') or 'member')
+                        lab=member.get('lab'), lab_role=member.get('role') or 'member',
+                        lab_id=member.get('lab_id'))
     g.person = person
     return person

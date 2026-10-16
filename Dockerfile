@@ -2,6 +2,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Pango lays out exported PDFs (WeasyPrint); the fonts cover text, symbols and emoji.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 \
+        fonts-dejavu-core fonts-noto-color-emoji && \
+    rm -rf /var/lib/apt/lists/*
+
 # The same user id as the other tools, as the suite's volumes expect.
 RUN useradd -m -u 1000 appuser && mkdir -p /notebook && chown -R appuser:appuser /app /notebook
 
