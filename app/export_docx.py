@@ -412,12 +412,14 @@ class _Writer:
     def gel(self, block: dict) -> None:
         doc = self.doc
         att = block.get('attachment') or ''
-        lanes = content.order_lanes(block.get('lanes') or [])
+        lanes = content.numbered(block)
+        first = 'Lane' if block.get('order') != 'clicks' else 'No.'
+        second = 'Sample' if block.get('order') != 'clicks' else 'Label'
         self.mentioned.add(att)
         if block.get('title'):
             doc.add_paragraph().add_run(block['title']).bold = True
         f = self._file(att) if att else None
-        picture = exporting.gel_picture(f['data'], lanes) if f and f['mime'] in exporting.IMAGE_TYPES else None
+        picture = exporting.gel_picture(f['data'], lanes, ordered=True) if f and f['mime'] in exporting.IMAGE_TYPES else None
         # The photo with its numbers, and the lanes beside it.
         layout = doc.add_table(rows=1, cols=2)
         left, right = layout.rows[0].cells
@@ -425,13 +427,13 @@ class _Writer:
         if picture:
             self.picture(left.paragraphs[0], picture, max_w=3.8, max_h=5.5)
         else:
-            self.grey(left.paragraphs[0], '[gel photo not available]')
+            self.grey(left.paragraphs[0], '[photo not available]')
         if not lanes:
-            self.grey(right.paragraphs[0], 'No wells marked.')
+            self.grey(right.paragraphs[0], 'Nothing numbered.')
         else:
             grid = right.add_table(rows=1 + len(lanes), cols=3)
             grid.style = 'Table Grid'
-            for c, name in enumerate(('Lane', 'Sample', 'Notes')):
+            for c, name in enumerate((first, second, 'Notes')):
                 grid.rows[0].cells[c].paragraphs[0].add_run(name).bold = True
             for n, lane in enumerate(lanes, 1):
                 cells = grid.rows[n].cells

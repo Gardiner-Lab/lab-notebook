@@ -324,3 +324,31 @@ def test_a_gel_with_two_rows_of_wells_is_numbered_row_by_row(as_user):
         [['A1', 'A2', 'A3'], ['B1', 'B2', 'B3']]
     # One row of wells is still left to right, however crooked within the gap.
     assert [lane['x'] for lane in gel_rows([{'x': 0.5, 'y': 0.12}, {'x': 0.2, 'y': 0.08}, {'x': 0.8, 'y': 0.1}])[0]] == [0.2, 0.5, 0.8]
+
+
+def test_plants_on_a_photo_are_numbered_in_the_order_clicked(as_user):
+    import docx
+    from pypdf import PdfReader
+    ana = as_user('ana')
+    page = ana.post('/api/notes', json={'parent_id': _me(ana)['notebook'], 'title': 'T1 selection'}).get_json()['note']
+    photo = _attach(ana, page['id'], ('tray.png', _png((40, 90, 40))))[0]
+    clicked = [('Col-0 #1', 0.8, 0.7), ('Col-0 #2', 0.1, 0.2), ('Col-0 #3', 0.5, 0.5)]
+    block = {'type': 'gel', 'order': 'clicks', 'attachment': photo['id'],
+             'lanes': [{'x': x, 'y': y, 'label': name, 'note': 'resistant' if n == 1 else ''} for n, (name, x, y) in enumerate(clicked)]}
+    saved = ana.put(f"/api/notes/{page['id']}", json={'content': [block]}).get_json()['note']['content'][0]
+    assert saved['order'] == 'clicks'
+    assert [lane['label'] for lane in saved['lanes']] == ['Col-0 #1', 'Col-0 #2', 'Col-0 #3'], 'as clicked, not by place'
+    # Anything but 'clicks' is a gel's numbering, by rows.
+    gel = ana.put(f"/api/notes/{page['id']}", json={'content': [{**block, 'order': 'nonsense'}]}).get_json()['note']['content'][0]
+    assert gel['order'] == 'rows' and [lane['label'] for lane in gel['lanes']] == ['Col-0 #2', 'Col-0 #3', 'Col-0 #1']
+
+    ana.put(f"/api/notes/{page['id']}", json={'content': [block]})
+    _, _, pdf = _export(ana, page['id'], children=False)
+    text = '\n'.join(p.extract_text() for p in PdfReader(io.BytesIO(pdf.data)).pages)
+    assert 'No.' in text and 'Label' in text and 'Lane' not in text
+    assert text.index('Col-0 #1') < text.index('Col-0 #2') < text.index('Col-0 #3')
+    _, _, word = _export(ana, page['id'], 'docx', children=False)
+    document = docx.Document(io.BytesIO(word.data))
+    cells = [c.text for outer in document.tables for cell in outer._cells for inner in cell.tables
+             for row in inner.rows for c in row.cells]
+    assert cells[:9] == ['No.', 'Label', 'Notes', '1', 'Col-0 #1', '', '2', 'Col-0 #2', 'resistant']

@@ -5,6 +5,19 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-16
+
+### Added
+- **Number plants (or colonies, seedlings…) on a photo**, with the ① Number tool in the markup
+  window. Click each one: it gets the next number, in the order clicked, and a row in a table beside
+  the photo for a label and a note. Click a number to take it away; the rest renumber.
+  - Saved, the photo becomes a numbered photo where it was in the page: the photo with its numbers,
+    and the table beside it, like a gel's. Its labels can be changed in the page, and more spots
+    numbered (✚ Number spots).
+  - The numbers are not drawn into the photo, so numbering alone makes no marked-up copy; drawing
+    does, as before. Exports draw the numbers on, with the table beside.
+  - On a gel, ✏️ Mark up opens its lanes in the same window, numbered by rows as before.
+
 ## [0.8.0] - 2026-10-16
 
 ### Added

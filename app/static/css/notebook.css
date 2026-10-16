@@ -372,3 +372,7 @@ input.step-text:focus { outline: 1px solid var(--border); border-radius: .3rem; 
 .markup-canvas[data-tool="text"] { cursor: text; }
 .markup-text { position: absolute; z-index: 2; margin: 0; padding: .1rem .2rem; min-width: 8rem; background: rgba(255, 255, 255, .85);
     border: 1px dashed var(--accent); border-radius: .2rem; font-weight: 600; font-family: system-ui, sans-serif; resize: none; overflow: hidden; }
+.markup-body { flex: 1; min-height: 0; display: flex; }
+.markup-side { width: 320px; flex: none; overflow: auto; background: var(--card); border-left: 1px solid var(--border); padding: .6rem; }
+.markup-side-head { font-weight: 700; margin-bottom: .4rem; }
+@media (max-width: 800px) { .markup-body { flex-direction: column; } .markup-side { width: auto; max-height: 40vh; border-left: 0; border-top: 1px solid var(--border); } }

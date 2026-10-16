@@ -445,12 +445,24 @@ const Blocks = {
   /* gels ---------------------------------------------------------------------- */
 
   /**
-   * A gel photo with its wells marked: click each well used, and it gets a
-   * number on the photo and a row in the table beside it, for the sample.
-   * Lanes are numbered left to right, whatever order they were clicked in.
+   * A photo with numbered spots, and a table beside it to say what each is.
+   * A gel (order 'rows'): click each well used, and lanes are numbered row by
+   * row, top to bottom, each row left to right, whatever order they were
+   * clicked in. Plants, colonies and the like (order 'clicks'): numbered in the
+   * order they are clicked.
    */
   gel(block, ctx) {
     block.lanes = block.lanes || [];
+    const gel = block.order !== 'clicks';
+    const words = gel
+      ? { one: 'Lane', label: 'Sample', labelHint: 'e.g. pGFP clone 3', noteHint: 'e.g. 5 µL, ladder', mark: '✚ Mark wells',
+        markTitle: 'Click wells on the photo to add lanes', none: 'No wells marked', clear: 'Take away all the lanes?',
+        title: 'Gel, e.g. Colony PCR, 1% agarose',
+        prompt: '👆 Click each well you loaded, in every row of wells. Lanes are numbered row by row, top to bottom, each row left to right; click a number to take it away.' }
+      : { one: 'No.', label: 'Label', labelHint: 'e.g. Col-0 #1', noteHint: 'e.g. resistant, flowering', mark: '✚ Number spots',
+        markTitle: 'Click on the photo to number more spots', none: 'Nothing numbered', clear: 'Take away all the numbers?',
+        title: 'Photo, e.g. T1 plants on hygromycin',
+        prompt: '👆 Click each one to number it: they are numbered in the order you click. Click a number to take it away.' };
     let marking = !!block._marking && ctx.editable;
     const wrap = el('div', { class: 'gel-block' });
     const marks = new Map();       // lane id -> its number on the photo
@@ -461,17 +473,17 @@ const Blocks = {
     };
 
     const draw = () => {
-      const rowsOfWells = gelRows(block.lanes);
+      const rowsOfWells = gel ? gelRows(block.lanes) : [block.lanes];
       block.lanes = rowsOfWells.flat();
       const rowStarts = new Set(rowsOfWells.slice(1).map((row) => row[0].id));
       marks.clear();
       rows.clear();
-      const img = el('img', { src: attachmentUrl(block.attachment), alt: block.title || 'Gel photo', draggable: 'false' });
+      const img = el('img', { src: attachmentUrl(block.attachment), alt: block.title || 'Photo', draggable: 'false' });
       const photo = el('div', { class: `gel-photo${marking ? ' marking' : ''}` }, img);
       block.lanes.forEach((lane, i) => {
         const mark = el('span', {
           class: 'gel-mark', style: `left:${lane.x * 100}%;top:${lane.y * 100}%`,
-          title: marking ? `Lane ${i + 1}: click to take it away` : `Lane ${i + 1}${lane.label ? `: ${lane.label}` : ''}`,
+          title: marking ? `${words.one} ${i + 1}: click to take it away` : `${words.one} ${i + 1}${lane.label ? `: ${lane.label}` : ''}`,
           onclick: (e) => {
             e.stopPropagation();
             if (marking) {
@@ -491,8 +503,7 @@ const Blocks = {
           const x = (e.clientX - r.left) / r.width;
           const y = (e.clientY - r.top) / r.height;
           if (!(x >= 0 && x <= 1 && y >= 0 && y <= 1)) return;
-          const lane = { id: newId(), x, y, label: '', note: '' };
-          block.lanes.push(lane);
+          block.lanes.push({ id: newId(), x, y, label: '', note: '' });
           draw();
           ctx.changed();
         });
@@ -500,47 +511,47 @@ const Blocks = {
 
       const cell = (lane, key, placeholder) => (ctx.editable
         ? el('input', { type: 'text', class: 'cell', value: lane[key] || '', placeholder,
-          oninput: (e) => { lane[key] = e.target.value; marks.get(lane.id).title = `Lane ${block.lanes.indexOf(lane) + 1}: ${lane.label}`; ctx.changed(); },
+          oninput: (e) => { lane[key] = e.target.value; marks.get(lane.id).title = `${words.one} ${block.lanes.indexOf(lane) + 1}: ${lane.label}`; ctx.changed(); },
           onfocus: () => light(lane.id, true), onblur: () => light(lane.id, false),
           onkeydown: (e) => {
-            // Enter goes to the next lane's sample, as in a spreadsheet.
+            // Enter goes to the next one's label, as in a spreadsheet.
             if (e.key === 'Enter') { e.preventDefault(); rows.get(block.lanes[block.lanes.indexOf(lane) + 1]?.id)?.querySelector('input')?.focus(); }
           } })
         : el('span', { text: lane[key] || '' }));
       const table = block.lanes.length
         ? el('table', { class: 'sheet gel-lanes' },
-          el('thead', {}, el('tr', {}, el('th', {}, 'Lane'), el('th', {}, 'Sample'), el('th', {}, 'Notes'))),
+          el('thead', {}, el('tr', {}, el('th', {}, words.one), el('th', {}, words.label), el('th', {}, 'Notes'))),
           el('tbody', {}, block.lanes.map((lane, i) => {
             const row = el('tr', { class: rowStarts.has(lane.id) ? 'gel-row-start' : null,
               title: rowStarts.has(lane.id) ? 'The next row of wells starts here' : null,
               onmouseenter: () => light(lane.id, true), onmouseleave: () => light(lane.id, false) },
               el('td', { class: 'gel-lane-no' }, String(i + 1)),
-              el('td', {}, cell(lane, 'label', 'e.g. pGFP clone 3')),
-              el('td', {}, cell(lane, 'note', 'e.g. 5 µL, ladder')));
+              el('td', {}, cell(lane, 'label', words.labelHint)),
+              el('td', {}, cell(lane, 'note', words.noteHint)));
             rows.set(lane.id, row);
             return row;
           })))
-        : el('p', { class: 'hint' }, ctx.editable ? 'No wells marked yet.' : 'No wells marked.');
+        : el('p', { class: 'hint' }, `${words.none}${ctx.editable ? ' yet' : ''}.`);
 
       put(wrap,
         el('div', { class: 'table-head' },
           ctx.editable
-            ? el('input', { type: 'text', class: 'block-title', value: block.title || '', placeholder: 'Gel, e.g. Colony PCR, 1% agarose',
+            ? el('input', { type: 'text', class: 'block-title', value: block.title || '', placeholder: words.title,
               oninput: (e) => { block.title = e.target.value; ctx.changed(); } })
             : (block.title ? el('div', { class: 'block-title', text: block.title }) : el('span')),
           ctx.editable ? el('span', { class: 'table-tools' },
             !marking && block.attachment ? el('button', { class: 'btn btn-sm btn-secondary',
-              title: 'Draw and write on the gel photo (the photo is kept as it is)',
-              onclick: () => App.markUp(block.attachment) }, '✏️ Mark up') : null,
+              title: 'Draw, write and number on the photo (the photo is kept as it is)',
+              onclick: () => App.markUp(block.attachment, { block }) }, '✏️ Mark up') : null,
             el('button', { class: `btn btn-sm ${marking ? 'btn-primary' : 'btn-secondary'}`,
-              title: marking ? 'Stop marking wells' : 'Click wells on the photo to add lanes',
-              onclick: () => { marking = !marking; block._marking = marking; draw(); } }, marking ? 'Done marking' : '✚ Mark wells'),
-            marking && block.lanes.length ? el('button', { class: 'btn btn-sm btn-secondary', title: 'Take away every mark',
+              title: marking ? 'Stop numbering' : words.markTitle,
+              onclick: () => { marking = !marking; block._marking = marking; draw(); } }, marking ? 'Done' : words.mark),
+            marking && block.lanes.length ? el('button', { class: 'btn btn-sm btn-secondary', title: 'Take away every number',
               onclick: () => {
-                modal({ title: 'Take away all the lanes?', build: (b) => b.append(el('p', {}, 'Their sample names go too.')),
+                modal({ title: words.clear, build: (b) => b.append(el('p', {}, 'What was written for them goes too.')),
                   buttons: [{ label: 'Cancel', kind: 'secondary' }, { label: 'Take them away', kind: 'danger', onClick: () => { block.lanes = []; draw(); ctx.changed(); } }] });
               } }, 'Clear') : null) : null),
-        marking ? el('p', { class: 'gel-prompt' }, '👆 Click each well you loaded, in every row of wells. Lanes are numbered row by row, top to bottom, each row left to right; click a number to take it away.') : null,
+        marking ? el('p', { class: 'gel-prompt' }, words.prompt) : null,
         el('div', { class: 'gel-layout' }, photo, el('div', { class: 'gel-side' }, table)));
     };
     draw();
@@ -1325,32 +1336,74 @@ const App = {
     setTimeout(() => document.addEventListener('mousedown', away, true), 0);
   },
 
-  /** Mark up a photo of the open note, then show the marked-up picture wherever the photo was. */
-  async markUp(attachmentId) {
+  /**
+   * Mark up a photo of the open note: draw on it, and number spots on it.
+   * From a numbered photo (a gel block), the editor numbers its spots; from a
+   * photo in the text or under Attachments, numbering it makes it a numbered
+   * photo, put where the photo was.
+   */
+  async markUp(attachmentId, { block = null } = {}) {
     await this.flush();
     const note = this.note;
+    const spots = block ? { order: block.order === 'clicks' ? 'clicks' : 'rows', lanes: block.lanes || [] }
+      : { order: 'clicks', lanes: [] };
     Markup.open({
       attachmentId,
-      onSaved: (att) => {
+      spots,
+      onSaved: (att, lanes) => {
         if (this.note !== note) return;
-        const swap = (blocks) => {
-          for (const b of blocks || []) {
-            if (b.type === 'text' && b.html) b.html = b.html.split(`data-attachment="${attachmentId}"`).join(`data-attachment="${att.id}"`);
-            if (b.type === 'gel' && b.attachment === attachmentId) b.attachment = att.id;
-            if (b.type === 'section') swap(b.blocks);
-          }
-        };
-        swap(note.content);
-        // A marked-up picture marked up again leaves the list; the original stays.
-        const old = (note.attachments || []).find((a) => a.id === attachmentId);
-        note.attachments = [...(note.attachments || []).filter((a) => !(old?.source_id && a.id === attachmentId)), att];
+        const shown = att ? att.id : attachmentId;
+        if (att) {
+          const swap = (blocks) => {
+            for (const b of blocks || []) {
+              if (b.type === 'text' && b.html) b.html = b.html.split(`data-attachment="${attachmentId}"`).join(`data-attachment="${att.id}"`);
+              if (b.type === 'gel' && b.attachment === attachmentId) b.attachment = att.id;
+              if (b.type === 'section') swap(b.blocks);
+            }
+          };
+          swap(note.content);
+          // A marked-up picture marked up again leaves the list; the original stays.
+          const old = (note.attachments || []).find((a) => a.id === attachmentId);
+          note.attachments = [...(note.attachments || []).filter((a) => !(old?.source_id && a.id === attachmentId)), att];
+        }
+        if (block) block.lanes = lanes;
+        else if (lanes.length) this.numberedPhoto(note, shown, lanes);
         const { blocks, ctx } = this._blocks;
         Blocks.renderList(note.content, blocks, ctx);
         document.getElementById('attachmentPanel')?.replaceWith(this.attachmentPanel(note));
         this.changed();
-        toast('Marked up. The original photo is kept, under Attachments.', 'success', 5000);
+        if (att) toast('Marked up. The original photo is kept, under Attachments.', 'success', 5000);
       },
     });
+  },
+
+  /** A photo numbered from the text: a numbered photo in its place (just after its text), else at the end. */
+  numberedPhoto(note, attachmentId, lanes) {
+    const photo = { id: newId(), type: 'gel', order: 'clicks', title: '', attachment: attachmentId, lanes };
+    const place = (list) => {
+      for (let i = 0; i < list.length; i++) {
+        const b = list[i];
+        if (b.type === 'section' && place(b.blocks || [])) return true;
+        if (b.type !== 'text' || !(b.html || '').includes(`data-attachment="${attachmentId}"`)) continue;
+        // The text splits where the photo was: what came before it, the numbered photo, what came after.
+        const box = document.createElement('div');
+        box.innerHTML = b.html;
+        const img = box.querySelector(`img[data-attachment="${CSS.escape(attachmentId)}"]`);
+        let top = img;
+        while (top.parentNode !== box) top = top.parentNode;
+        const after = document.createElement('div');
+        while (top.nextSibling) after.append(top.nextSibling);
+        // Its paragraph goes with it when that held only the photo; otherwise the rest of it stays.
+        if (top !== img && top.textContent.trim() === '' && top.querySelectorAll('img').length === 1) top.remove();
+        else img.remove();
+        b.html = box.innerHTML;
+        list.splice(i + 1, 0, photo);
+        if (after.innerHTML.trim()) list.splice(i + 2, 0, { id: newId(), type: 'text', html: after.innerHTML });
+        return true;
+      }
+      return false;
+    };
+    if (!place(note.content)) note.content.push(photo);
   },
 
   /** A gel block: a photo already on the page, or a new one, ready to have its wells clicked. */

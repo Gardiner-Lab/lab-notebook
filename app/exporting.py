@@ -367,8 +367,11 @@ def wait(job_id: str, timeout: float = 300) -> None:
 _FONTS = ('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 'DejaVuSans-Bold.ttf', 'arialbd.ttf')
 
 
-def gel_picture(data: bytes, lanes: List[dict]) -> Optional[bytes]:
-    """A gel photo with each lane's number drawn on its well, as the page shows them; PNG."""
+def gel_picture(data: bytes, lanes: List[dict], ordered: bool = False) -> Optional[bytes]:
+    """
+    A photo with each spot's number drawn on it, as the page shows them; PNG.
+    `lanes` in the order of their numbers when `ordered`, else a gel's, by rows.
+    """
     import io
     from PIL import Image, ImageDraw, ImageFont
     try:
@@ -390,7 +393,7 @@ def gel_picture(data: bytes, lanes: List[dict]) -> Optional[bytes]:
         font = ImageFont.load_default()
     draw = ImageDraw.Draw(image)
     from app.content import order_lanes
-    for n, lane in enumerate(order_lanes(lanes), 1):
+    for n, lane in enumerate(lanes if ordered else order_lanes(lanes), 1):
         x, y = float(lane.get('x', 0)) * w, float(lane.get('y', 0)) * h
         text = str(n)
         tw = draw.textlength(text, font=font)

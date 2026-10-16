@@ -263,20 +263,22 @@ class _Builder:
 
     def gel(self, block: dict) -> str:
         att = block.get('attachment') or ''
-        lanes = content.order_lanes(block.get('lanes') or [])
+        lanes = content.numbered(block)
+        first = 'Lane' if block.get('order') != 'clicks' else 'No.'
+        second = 'Sample' if block.get('order') != 'clicks' else 'Label'
         self.mentioned.add(att)
         f = self._file(att) if att else None
-        picture = exporting.gel_picture(f['data'], lanes) if f and f['mime'] in exporting.IMAGE_TYPES else None
+        picture = exporting.gel_picture(f['data'], lanes, ordered=True) if f and f['mime'] in exporting.IMAGE_TYPES else None
         if picture:
             key = f'gel{len(self.generated) + 1}'
             self.generated[key] = picture
             image = f'<img src="{ATTACHMENT_URL}{key}/gel.png" alt="{esc(block.get("title") or "Gel")}">'
         else:
-            image = '<span class="empty">[gel photo not available]</span>'
+            image = '<span class="empty">[photo not available]</span>'
         rows = ''.join(f'<tr><td class="lane">{n}</td><td>{esc(lane.get("label") or "")}</td>'
                        f'<td>{esc(lane.get("note") or "")}</td></tr>' for n, lane in enumerate(lanes, 1))
-        table = (f'<table class="sheet"><thead><tr><th>Lane</th><th>Sample</th><th>Notes</th></tr></thead>'
-                 f'<tbody>{rows}</tbody></table>' if lanes else '<p class="empty">No wells marked.</p>')
+        table = (f'<table class="sheet"><thead><tr><th>{first}</th><th>{second}</th><th>Notes</th></tr></thead>'
+                 f'<tbody>{rows}</tbody></table>' if lanes else '<p class="empty">Nothing numbered.</p>')
         title = f'<div class="block-title">{esc(block["title"])}</div>' if block.get('title') else ''
         return f'<div class="gel">{title}<table class="gel-layout"><tr><td class="gel-photo">{image}</td><td class="gel-side">{table}</td></tr></table></div>'
 

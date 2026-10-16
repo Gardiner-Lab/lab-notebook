@@ -6,11 +6,13 @@ A note's content: a list of blocks, checked and cleaned on every save.
     steps    {id, type, title, items}               steps to tick off
     section  {id, type, title, source, blocks}      a protocol or MoClo reaction put
                                                     into a page, with where it came from
-    gel      {id, type, title, attachment, lanes}   a gel photo with its lanes marked: each
-                                                    lane {id, x, y, label, note}, where x and y
-                                                    are where its well is, as fractions of the
-                                                    photo's width and height; numbered row by
-                                                    row, top to bottom, each left to right
+    gel      {id, type, title, attachment, order, lanes}
+                                                    a photo with numbered spots: the wells of a
+                                                    gel, or plants, colonies... Each lane {id, x,
+                                                    y, label, note}, x and y as fractions of the
+                                                    photo's width and height. order 'rows' (a
+                                                    gel): numbered row by row, top to bottom, each
+                                                    left to right; 'clicks': in the order clicked
 
 Ticks (a step done, a checkbox cell) record who ticked them and when. Those are
 set here, from the person saving and the time, never taken from the browser:
@@ -71,6 +73,12 @@ def gel_rows(lanes: List[dict]) -> List[List[dict]]:
 def order_lanes(lanes: List[dict]) -> List[dict]:
     """A gel's lanes as they are numbered: the top row left to right, then the next row."""
     return [lane for row in gel_rows(lanes) for lane in row]
+
+
+def numbered(block: dict) -> List[dict]:
+    """A numbered photo's spots in the order of their numbers: by rows for a gel, else as clicked."""
+    lanes = block.get('lanes') or []
+    return list(lanes) if block.get('order') == 'clicks' else order_lanes(lanes)
 
 
 def new_id() -> str:
@@ -184,10 +192,13 @@ class _Cleaner:
                           'x': min(max(_number(lane.get('x'), 0.0), 0.0), 1.0),
                           'y': min(max(_number(lane.get('y'), 0.0), 0.0), 1.0),
                           'label': _text(lane.get('label'), 200), 'note': _text(lane.get('note'), 500)})
-        # Lane 1 is the top row's leftmost well, whatever order they were clicked in.
-        lanes = order_lanes(lanes)
+        order = 'clicks' if block.get('order') == 'clicks' else 'rows'
+        # A gel's lane 1 is the top row's leftmost well, whatever order they were clicked in;
+        # other spots (plants) keep the order they were numbered in.
+        if order == 'rows':
+            lanes = order_lanes(lanes)
         return {'id': bid, 'type': 'gel', 'title': _text(block.get('title')),
-                'attachment': attachment if _ATTACHMENT_ID.match(attachment) else '', 'lanes': lanes}
+                'attachment': attachment if _ATTACHMENT_ID.match(attachment) else '', 'order': order, 'lanes': lanes}
 
     def table(self, block: dict, bid: str) -> dict:
         columns = []

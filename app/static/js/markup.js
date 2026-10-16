@@ -8,7 +8,16 @@
  * marks drawn on (app/attachments.py), so opening it again brings the marks
  * back to change.
  *
- *   Markup.open({ attachmentId, onSaved(attachment) })
+ * Numbering (① Number): click spots on the photo, plants say, and each gets
+ * the next number, with a row in a table beside the photo to say what it is.
+ * The numbers are not drawn into the picture: they belong to the page's
+ * numbered photo (a gel block), which shows them over it, as gel lanes are.
+ *
+ *   Markup.open({ attachmentId, spots: {order, lanes}, onSaved(attachment, lanes) })
+ *
+ * onSaved gets the new marked-up picture, or null when the drawing did not
+ * change, and the numbered spots ({id, x, y, label, note}, x and y as
+ * fractions of the photo), in the order of their numbers.
  */
 
 const Markup = {
@@ -16,24 +25,33 @@ const Markup = {
     ['#ffffff', 'White'], ['#111827', 'Black']],
   TOOLS: [['pen', '✎', 'Draw freehand'], ['highlight', '▰', 'Highlight'], ['arrow', '↗', 'Arrow'],
     ['line', '╱', 'Line'], ['rect', '▭', 'Box'], ['ellipse', '◯', 'Ellipse'], ['text', 'T', 'Write text'],
+    ['number', '①', 'Number spots (plants, colonies…): click each in turn, and say what it is in the table; click a number to take it away'],
     ['erase', '⌫', 'Rub out a mark: click or drag over it']],
   SIZES: [[1, 'Thin'], [2, 'Medium'], [4, 'Thick']],
 
-  async open({ attachmentId, onSaved }) {
+  async open({ attachmentId, spots = null, onSaved }) {
     let info;
     try { info = await api('GET', `/attachments/${attachmentId}/markup`); } catch (err) { toast(err.message, 'error'); return; }
     const image = new Image();
     image.src = attachmentUrl(info.source_id);
     try { await image.decode(); } catch (err) { toast('The photo could not be opened', 'error'); return; }
-    this.show(image, info, attachmentId, onSaved);
+    this.show(image, info, attachmentId, spots, onSaved);
   },
 
-  show(image, info, attachmentId, onSaved) {
+  show(image, info, attachmentId, spotsGiven, onSaved) {
     const W = image.naturalWidth;
     const H = image.naturalHeight;
     // One unit: what a thin line is, in the photo's own pixels, so marks look the same on any photo.
     const unit = Math.max(2, Math.round(Math.max(W, H) / 320));
     let marks = (info.marks || []).map((m) => ({ ...m, p: [...m.p] }));
+    // Numbered spots, in the photo's pixels; a gel numbers them by rows, anything else as clicked.
+    const order = spotsGiven?.order === 'rows' ? 'rows' : 'clicks';
+    let spots = (spotsGiven?.lanes || []).map((l) => ({ id: l.id || newId(), x: l.x * W, y: l.y * H, label: l.label || '', note: l.note || '' }));
+    const numberedSpots = () => (order === 'rows'
+      ? gelRows(spots.map((s) => ({ ...s, x: s.x / W, y: s.y / H, ref: s }))).flat().map((s) => s.ref)
+      : spots);
+    let lit = null;
+    let drawingChanged = false;
     const undo = [];
     const redo = [];
     let tool = store.get('markupTool', 'arrow');
@@ -46,11 +64,21 @@ const Markup = {
     const g = canvas.getContext('2d');
     const stage = el('div', { class: 'markup-stage' }, canvas);
 
-    const remember = () => { undo.push(JSON.stringify(marks)); if (undo.length > 200) undo.shift(); redo.length = 0; changed = true; };
-    const draw = () => {
+    const state = () => JSON.stringify({ marks, spots });
+    const remember = (drawing = true) => {
+      undo.push(state());
+      if (undo.length > 200) undo.shift();
+      redo.length = 0;
+      changed = true;
+      if (drawing) drawingChanged = true;
+    };
+    // How big a number's disc is: 12 pixels on the screen, however big the photo.
+    const disc = () => 12 * W / (canvas.getBoundingClientRect().width || W);
+    const draw = (withNumbers = true) => {
       g.clearRect(0, 0, W, H);
       g.drawImage(image, 0, 0);
       for (const m of current && !current.rubbing ? [...marks, current] : marks) this.paint(g, m);
+      if (withNumbers) numberedSpots().forEach((s, i) => this.number(g, s.x, s.y, i + 1, disc(), s.id === lit));
     };
 
     /* where the pointer is, in the photo's pixels */
@@ -77,6 +105,16 @@ const Markup = {
       const [x, y] = at(e);
       // Text opens its box when the click is over, so the box keeps the focus.
       if (tool === 'text') { pendingText = [x, y]; return; }
+      if (tool === 'number') {
+        const hit = spots.find((s) => Math.hypot(s.x - x, s.y - y) <= disc() * 1.2);
+        remember(false);
+        if (hit) spots.splice(spots.indexOf(hit), 1);
+        else spots.push({ id: newId(), x, y, label: '', note: '' });
+        draw();
+        side();
+        if (!hit) setTimeout(() => panel.querySelector(`tr[data-spot="${spots[spots.length - 1].id}"] input`)?.focus({ preventScroll: true }), 0);
+        return;
+      }
       canvas.setPointerCapture(e.pointerId);
       if (tool === 'erase') { current = null; rubOut(x, y); return; }
       const w = size * unit * (tool === 'highlight' ? 5 : 1);
@@ -118,6 +156,33 @@ const Markup = {
     canvas.addEventListener('pointerup', finish);
     canvas.addEventListener('pointercancel', finish);
 
+    /* the numbered spots: a table beside the photo, to say what each is */
+    const panel = el('div', { class: 'markup-side' });
+    const side = () => {
+      const list = numberedSpots();
+      panel.hidden = !list.length && tool !== 'number';
+      if (panel.hidden) return;
+      const field = (s, key, placeholder) => el('input', { type: 'text', class: 'cell', value: s[key], placeholder,
+        oninput: (e) => { s[key] = e.target.value; changed = true; },
+        onfocus: () => { lit = s.id; draw(); }, onblur: () => { lit = null; draw(); },
+        onkeydown: (e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') { e.preventDefault(); panel.querySelector(`tr[data-spot="${list[list.indexOf(s) + 1]?.id}"] input`)?.focus(); }
+        } });
+      put(panel,
+        el('div', { class: 'markup-side-head' }, order === 'rows' ? 'Lanes' : 'Numbered',
+          el('span', { class: 'hint' }, order === 'rows' ? ' · numbered by rows, left to right' : ' · in the order clicked')),
+        list.length
+          ? el('table', { class: 'sheet gel-lanes' },
+            el('thead', {}, el('tr', {}, el('th', {}, order === 'rows' ? 'Lane' : 'No.'), el('th', {}, order === 'rows' ? 'Sample' : 'Label'), el('th', {}, 'Notes'))),
+            el('tbody', {}, list.map((s, i) => el('tr', { 'data-spot': s.id,
+              onmouseenter: () => { lit = s.id; draw(); }, onmouseleave: () => { lit = null; draw(); } },
+            el('td', { class: 'gel-lane-no' }, String(i + 1)),
+            el('td', {}, field(s, 'label', order === 'rows' ? 'e.g. pGFP clone 3' : 'e.g. Col-0 #1')),
+            el('td', {}, field(s, 'note', 'e.g. resistant'))))))
+          : el('p', { class: 'hint' }, 'Click on the photo to number the first one.'));
+    };
+
     /* text: typed in a box over the photo, where it was clicked */
     const writeAt = (x, y) => {
       stage.querySelector('.markup-text')?.remove();
@@ -146,7 +211,7 @@ const Markup = {
     /* the bar */
     const choose = (group, value, button) => {
       for (const b of bar.querySelectorAll(`[data-group="${group}"]`)) b.classList.toggle('on', b === button);
-      if (group === 'tool') { tool = value; store.set('markupTool', value); canvas.dataset.tool = value; }
+      if (group === 'tool') { tool = value; store.set('markupTool', value); canvas.dataset.tool = value; side(); }
       if (group === 'colour') { colour = value; store.set('markupColour', value); }
       if (group === 'size') { size = value; store.set('markupSize', value); }
     };
@@ -157,10 +222,12 @@ const Markup = {
     };
     const step = (from, to) => {
       if (!from.length) return;
-      to.push(JSON.stringify(marks));
-      marks = JSON.parse(from.pop());
+      to.push(state());
+      ({ marks, spots } = JSON.parse(from.pop()));
       changed = true;
+      drawingChanged = true;
       draw();
+      side();
     };
     const undoBtn = el('button', { class: 'markup-btn', title: 'Undo (Ctrl+Z)', type: 'button', onclick: () => step(undo, redo) }, '↶');
     const redoBtn = el('button', { class: 'markup-btn', title: 'Redo (Ctrl+Y)', type: 'button', onclick: () => step(redo, undo) }, '↷');
@@ -177,7 +244,7 @@ const Markup = {
         return b;
       })),
       el('span', { class: 'markup-group' }, undoBtn, redoBtn,
-        el('button', { class: 'markup-btn', title: 'Take away every mark', type: 'button', onclick: () => {
+        el('button', { class: 'markup-btn', title: 'Take away every drawn mark (the numbers stay)', type: 'button', onclick: () => {
           if (!marks.length) return;
           remember();
           marks = [];
@@ -189,7 +256,8 @@ const Markup = {
       el('button', { class: 'btn btn-primary btn-sm', type: 'button', onclick: (e) => save(e.currentTarget) }, 'Save'));
     canvas.dataset.tool = tool;
 
-    const backdrop = el('div', { class: 'markup-backdrop', role: 'dialog', 'aria-label': 'Mark up the photo' }, bar, stage);
+    const backdrop = el('div', { class: 'markup-backdrop', role: 'dialog', 'aria-label': 'Mark up the photo' }, bar,
+      el('div', { class: 'markup-body' }, stage, panel));
     const keys = (e) => {
       // Typing a label, or a dialog open over the editor (leave without saving?): not for the editor.
       if (e.target.closest?.('.markup-text') || document.querySelector('.modal-backdrop')) return;
@@ -212,7 +280,10 @@ const Markup = {
       btn.disabled = true;
       stage.querySelector('.markup-text')?.blur();
       current = null;
-      draw();
+      const lanes = numberedSpots().map((s) => ({ id: s.id, x: s.x / W, y: s.y / H, label: s.label, note: s.note }));
+      // Only the numbers changed: no new picture, the photo stays as it is.
+      if (!drawingChanged) { close(); onSaved?.(null, lanes); return; }
+      draw(false);         // the picture is the drawing; the numbers stay the page's
       // The marked-up picture as the original was: a JPEG photo stays a JPEG.
       const jpeg = info.mime === 'image/jpeg';
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, jpeg ? 'image/jpeg' : 'image/png', 0.92));
@@ -224,15 +295,39 @@ const Markup = {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `${res.status} ${res.statusText}`);
         close();
-        onSaved?.(data.attachment);
+        onSaved?.(data.attachment, lanes);
       } catch (err) {
+        draw();
         toast(`Not saved: ${err.message}`, 'error', 7000);
         btn.disabled = false;
       }
     };
     document.addEventListener('keydown', keys, true);
     document.body.append(backdrop);
+    side();
     draw();
+    // The discs are sized for the screen: once laid out, draw them again at their size.
+    requestAnimationFrame(() => draw());
+  },
+
+  /** A numbered disc, as the page shows them on gels. */
+  number(g, x, y, n, r, lit) {
+    g.save();
+    const text = String(n);
+    g.font = `700 ${r * 1.15}px system-ui, sans-serif`;
+    const half = Math.max(r, g.measureText(text).width / 2 + r * 0.35);
+    g.beginPath();
+    g.roundRect(x - half, y - r, half * 2, r * 2, r);
+    g.fillStyle = lit ? '#f97316' : '#fde047';
+    g.fill();
+    g.lineWidth = Math.max(1.5, r / 6);
+    g.strokeStyle = '#111827';
+    g.stroke();
+    g.fillStyle = lit ? '#ffffff' : '#111827';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(text, x, y + r * 0.05);
+    g.restore();
   },
 
   /** Draw one mark. */
