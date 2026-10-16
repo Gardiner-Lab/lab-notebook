@@ -347,3 +347,28 @@ input.step-text:focus { outline: 1px solid var(--border); border-radius: .3rem; 
 .gel-choice img { width: 100%; height: 90px; object-fit: cover; border-radius: .25rem; }
 .gel-choice .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gel-lanes tr.gel-row-start td { border-top: 3px solid #9ca3af; }
+
+/* marking up photos */
+.photo-menu { position: absolute; z-index: 40; display: flex; gap: .3rem; padding: .3rem; background: var(--card);
+    border: 1px solid var(--border); border-radius: .5rem; box-shadow: 0 4px 14px rgba(0, 0, 0, .15); }
+.text-block[contenteditable="true"] img[data-attachment] { cursor: pointer; }
+.markup-backdrop { position: fixed; inset: 0; z-index: 45; background: rgba(15, 23, 42, .97); display: flex; flex-direction: column; }
+.markup-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .5rem .75rem; background: var(--card);
+    border-bottom: 1px solid var(--border); }
+.markup-group { display: inline-flex; gap: .15rem; padding-right: .5rem; border-right: 1px solid var(--border); }
+.markup-spacer { flex: 1; }
+.markup-note { white-space: nowrap; }
+.markup-btn { font: inherit; min-width: 2.1rem; height: 2.1rem; padding: 0 .45rem; border: 1px solid var(--border);
+    background: var(--card); border-radius: .4rem; cursor: pointer; color: var(--text); display: inline-flex;
+    align-items: center; justify-content: center; }
+.markup-btn:hover { background: var(--hover); }
+.markup-btn.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); background: var(--accent-soft); }
+.markup-btn.swatch { min-width: 1.7rem; width: 1.7rem; height: 1.7rem; border-radius: 50%; border: 2px solid #cbd5e1; margin: .2rem; }
+.markup-btn.swatch.on { box-shadow: 0 0 0 3px var(--accent); }
+.size-dot { display: inline-block; border-radius: 50%; background: var(--text); }
+.markup-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 1rem; position: relative; overflow: auto; }
+.markup-canvas { max-width: 100%; max-height: 100%; touch-action: none; background: #fff; box-shadow: 0 4px 24px rgba(0, 0, 0, .5); cursor: crosshair; }
+.markup-canvas[data-tool="erase"] { cursor: cell; }
+.markup-canvas[data-tool="text"] { cursor: text; }
+.markup-text { position: absolute; z-index: 2; margin: 0; padding: .1rem .2rem; min-width: 8rem; background: rgba(255, 255, 255, .85);
+    border: 1px dashed var(--accent); border-radius: .2rem; font-weight: 600; font-family: system-ui, sans-serif; resize: none; overflow: hidden; }

@@ -1,6 +1,7 @@
 """The notebook: days, pages, who may see and change what, history and links."""
 
 import io
+import json
 from datetime import date
 
 
@@ -579,3 +580,69 @@ def test_links_to_lab_stocks_are_kept_and_indexed(as_user, world):
     conn = sqlite3.connect(world['paths']['notebook'])
     got = sorted(r[0] for r in conn.execute("SELECT target_id FROM links WHERE note_id = ? AND target_type = 'stock'", (page['id'],)))
     assert got == ['GL-G-0001', 'GL-O-0002']
+
+
+def _png_bytes(colour=(10, 10, 10)):
+    from PIL import Image
+    out = io.BytesIO()
+    Image.new('RGB', (60, 40), colour).save(out, 'PNG')
+    return out.getvalue()
+
+
+def _mark(client, att_id, marks, picture=None):
+    return client.post(f'/api/attachments/{att_id}/markup', content_type='multipart/form-data', data={
+        'picture': (io.BytesIO(picture or _png_bytes((200, 0, 0))), 'marked.png'), 'marks': json.dumps(marks)})
+
+
+def test_a_photo_marked_up_keeps_the_original_and_its_marks(as_user):
+    ana, lead = as_user('ana'), as_user('lead')
+    page = _page(ana, _me(ana)['notebook'], 'Western')
+    photo = _attach(ana, page['id'], ('blot.png', _png_bytes())).get_json()['attachments'][0]
+    arrow = {'t': 'arrow', 'c': '#ef4444', 'w': 4, 'p': [5, 5, 30, 20]}
+    note = {'t': 'text', 'c': '#ffffff', 'w': 14, 'p': [2, 30], 's': 'band of interest'}
+
+    # Nothing marked yet: the editor opens the photo itself, without marks.
+    assert ana.get(f"/api/attachments/{photo['id']}/markup").get_json() == \
+        {'id': photo['id'], 'source_id': photo['id'], 'mime': 'image/png', 'marks': []}
+    r = _mark(ana, photo['id'], [arrow, note, {'t': 'text', 'c': '#000000', 'w': 9, 'p': [0, 0], 's': '  '}])
+    assert r.status_code == 201, r.get_json()
+    first = r.get_json()['attachment']
+    assert first['filename'] == 'blot (marked up).png' and first['source_id'] == photo['id'] and first['image']
+    # The original is kept as it was, beside it.
+    assert ana.get(f"/api/attachments/{photo['id']}").data == _png_bytes()
+    listed = [a['id'] for a in ana.get(f"/api/notes/{page['id']}").get_json()['note']['attachments']]
+    assert listed == [photo['id'], first['id']]
+    # Opened again: the original, with the marks to change (the empty text dropped).
+    again = ana.get(f"/api/attachments/{first['id']}/markup").get_json()
+    assert again['source_id'] == photo['id'] and [m['t'] for m in again['marks']] == ['arrow', 'text']
+
+    # Marked up again: the earlier marked-up picture leaves the list (kept for the history).
+    second = _mark(ana, first['id'], [arrow]).get_json()['attachment']
+    assert second['source_id'] == photo['id']
+    listed = [a['id'] for a in ana.get(f"/api/notes/{page['id']}").get_json()['note']['attachments']]
+    assert listed == [photo['id'], second['id']]
+    assert ana.get(f"/api/attachments/{first['id']}").status_code == 200
+
+    # Only who may change the note marks up its photos; nothing but photos, nothing but pictures.
+    assert lead.get(f"/api/attachments/{photo['id']}/markup").status_code == 200
+    assert _mark(lead, photo['id'], [arrow]).status_code == 403
+    pdf = _attach(ana, page['id'], ('scan.pdf', b'%PDF-1.4 x')).get_json()['attachments'][0]
+    assert _mark(ana, pdf['id'], [arrow]).status_code == 400
+    assert _mark(ana, photo['id'], [arrow], picture=b'<svg onload="x()"/>').status_code == 400
+    assert _mark(ana, photo['id'], [{'t': 'script', 'p': [1, 2]}]).status_code == 400
+    assert _mark(ana, photo['id'], [{'t': 'pen', 'c': 'red;}', 'p': [1, 2, 3]}]).status_code == 400
+    bad_colour = _mark(ana, photo['id'], [{'t': 'pen', 'c': 'url(x)', 'w': 3, 'p': [1, 2, 3, 4]}]).get_json()['attachment']
+    assert ana.get(f"/api/attachments/{bad_colour['id']}/markup").get_json()['marks'][0]['c'] == '#ef4444'
+
+
+def test_a_copy_of_a_page_keeps_its_marked_up_photos_marked_from_its_own_originals(as_user):
+    ana = as_user('ana')
+    page = _page(ana, _me(ana)['notebook'], 'Gel')
+    photo = _attach(ana, page['id'], ('gel.png', _png_bytes())).get_json()['attachments'][0]
+    marked = _mark(ana, photo['id'], [{'t': 'rect', 'c': '#22c55e', 'w': 3, 'p': [1, 1, 20, 20]}]).get_json()['attachment']
+    ana.put(f"/api/notes/{page['id']}", json={'content': [{'type': 'text', 'html': f'<p><img data-attachment="{marked["id"]}"></p>'}]})
+    copy = ana.post(f"/api/notes/{page['id']}/copy").get_json()['note']
+    new_photo, new_marked = copy['attachments']
+    assert new_marked['source_id'] == new_photo['id'] and new_photo['id'] != photo['id']
+    assert f'data-attachment="{new_marked["id"]}"' in copy['content'][0]['html']
+    assert [m['t'] for m in ana.get(f"/api/attachments/{new_marked['id']}/markup").get_json()['marks']] == ['rect']

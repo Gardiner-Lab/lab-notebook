@@ -140,6 +140,15 @@ _ADDED_COLUMNS = [
 ]
 
 
+# Columns added to attachments: a photo marked up in the notebook is a new
+# attachment, made from the original (source_id, never changed), with the marks
+# drawn on it kept (markup, JSON) so they can be changed later.
+_ADDED_ATTACHMENT_COLUMNS = [
+    ('source_id', 'TEXT'),
+    ('markup', 'TEXT'),
+]
+
+
 def set_path(path: str) -> None:
     global _path
     _path = path
@@ -188,7 +197,8 @@ def initialize(db_path: Optional[str] = None) -> None:
         # database made by 0.1.0.
         conn.execute('PRAGMA journal_mode = DELETE')
         conn.executescript(SCHEMA)
-        columns = {r['name'] for r in conn.execute('PRAGMA table_info(notes)')}
-        for name, decl in _ADDED_COLUMNS:
-            if name not in columns:
-                conn.execute(f'ALTER TABLE notes ADD COLUMN {name} {decl}')
+        for table, added in (('notes', _ADDED_COLUMNS), ('attachments', _ADDED_ATTACHMENT_COLUMNS)):
+            columns = {r['name'] for r in conn.execute(f'PRAGMA table_info({table})')}
+            for name, decl in added:
+                if name not in columns:
+                    conn.execute(f'ALTER TABLE {table} ADD COLUMN {name} {decl}')

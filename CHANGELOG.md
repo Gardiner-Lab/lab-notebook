@@ -5,6 +5,19 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-16
+
+### Added
+- **Mark up photos**: draw and write on a photo in the page.
+  - Click a photo in the text (✏️ Mark up), or ✏️ beside it under Attachments, or ✏️ Mark up on a gel.
+  - Tools: freehand pen, highlighter, arrows, lines, boxes, ellipses and text, in six colours and three
+    sizes, a rubber that takes away a whole mark, Undo and Redo (Ctrl+Z, Ctrl+Y). Works with a mouse,
+    a pen or a finger.
+  - **The original photo is never changed.** The marked-up picture is a new attachment that takes its
+    place in the page, and the original stays under Attachments. The marks are kept, so opening the
+    picture again brings them back to change; saving again replaces the marked-up picture, not the
+    original. Earlier versions of the page still show the picture as it was.
+
 ## [0.7.1] - 2026-10-16
 
 ### Fixed

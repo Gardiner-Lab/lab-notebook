@@ -12,9 +12,15 @@ it opens in Word, PowerPoint and so on; SVG, HTML and other types a browser
 could run as a page are sent as plain bytes, so a file cannot run scripts in
 the notebook for whoever opens it. Removing an attachment takes it off the note's
 list, but keeps it for the versions in the note's history that show it.
+
+A photo can be marked up (drawn and written on) in the page. That never changes
+the photo: the marked-up picture is a new attachment, made from the original,
+and the marks are kept with it so they can be changed again later. Marking up
+a marked-up picture again replaces it on the list; the original stays.
 """
 
 import hashlib
+import json
 import mimetypes
 import re
 from typing import Dict, List, Optional
@@ -85,10 +91,13 @@ def _clean_name(filename: str) -> str:
 
 
 def _summary(row) -> dict:
+    keys = row.keys()
     return {'id': row['id'], 'note_id': row['note_id'], 'filename': row['filename'], 'mime': row['mime'],
             'size': row['size'], 'image': row['mime'] in INLINE_TYPES,
             'preview': row['mime'] in PREVIEW_TYPES, 'kind': kind(row['mime']),
-            'created_by': row['created_by'], 'created_at': row['created_at']}
+            'created_by': row['created_by'], 'created_at': row['created_at'],
+            # Marked up from another photo of the note: which.
+            'source_id': row['source_id'] if 'source_id' in keys else None}
 
 
 def _note_any(conn, note_id: str):
@@ -101,7 +110,7 @@ def _note_any(conn, note_id: str):
 
 def listed(conn, note_id: str) -> List[dict]:
     return [_summary(r) for r in conn.execute(
-        'SELECT id, note_id, filename, mime, size, created_by, created_at FROM attachments '
+        'SELECT id, note_id, filename, mime, size, created_by, created_at, source_id FROM attachments '
         'WHERE note_id = ? AND deleted_at IS NULL ORDER BY created_at, rowid', (note_id,))]
 
 
@@ -158,13 +167,119 @@ def remove(person: Person, att_id: str) -> None:
 def copy_all(conn, from_note: str, to_note: str, username: str) -> Dict[str, str]:
     """Give a copied note its own copies of the original's attachments: old id -> new id."""
     mapping: Dict[str, str] = {}
-    for r in conn.execute('SELECT * FROM attachments WHERE note_id = ? AND deleted_at IS NULL', (from_note,)).fetchall():
+    rows = conn.execute('SELECT * FROM attachments WHERE note_id = ? AND deleted_at IS NULL', (from_note,)).fetchall()
+    for r in rows:
         new = content_mod.new_id() + content_mod.new_id()
-        conn.execute('INSERT INTO attachments (id, note_id, filename, mime, size, sha256, data, created_by) '
-                     'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                     (new, to_note, r['filename'], r['mime'], r['size'], r['sha256'], r['data'], username))
+        conn.execute('INSERT INTO attachments (id, note_id, filename, mime, size, sha256, data, created_by, markup) '
+                     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                     (new, to_note, r['filename'], r['mime'], r['size'], r['sha256'], r['data'], username, r['markup']))
         mapping[r['id']] = new
+    # A marked-up copy is made from the copy's own original, when it came along.
+    for r in rows:
+        if r['source_id'] and r['source_id'] in mapping:
+            conn.execute('UPDATE attachments SET source_id = ? WHERE id = ?', (mapping[r['source_id']], mapping[r['id']]))
     return mapping
+
+
+# --- marking up photos -------------------------------------------------------------
+
+MARK_KINDS = ('pen', 'highlight', 'line', 'arrow', 'rect', 'ellipse', 'text')
+MAX_MARKS = 2000
+MAX_POINTS = 50_000
+_COLOUR = re.compile(r'^#[0-9a-fA-F]{6}$')
+
+
+def _marks(raw) -> List[dict]:
+    """The marks drawn on a photo, checked: shapes with a colour, a width and their points."""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            raise ValueError('The marks could not be read')
+    if not isinstance(raw, list) or len(raw) > MAX_MARKS:
+        raise ValueError(f'Marks must be a list of at most {MAX_MARKS}')
+    marks, points = [], 0
+
+    def number(v):
+        try:
+            n = float(v)
+        except (TypeError, ValueError):
+            raise ValueError('A mark has a position that is not a number')
+        if n != n or abs(n) > 1e6:
+            raise ValueError('A mark is off the picture')
+        return round(n, 1)
+    for m in raw:
+        if not isinstance(m, dict) or m.get('t') not in MARK_KINDS:
+            raise ValueError('A mark of an unknown kind')
+        pts = [number(v) for v in (m.get('p') or [])]
+        points += len(pts)
+        if points > MAX_POINTS or len(pts) % 2 or not pts:
+            raise ValueError('A mark has too many points, or none')
+        mark = {'t': m['t'], 'c': m.get('c') if _COLOUR.match(str(m.get('c') or '')) else '#ef4444',
+                'w': min(max(number(m.get('w') or 4), 0.5), 400), 'p': pts}
+        if m['t'] == 'text':
+            mark['s'] = str(m.get('s') or '')[:500]
+            if not mark['s'].strip():
+                continue
+        marks.append(mark)
+    return marks
+
+
+def marked(person: Person, att_id: str) -> Dict:
+    """What a photo is marked up from, and its marks: what the editor opens to change them."""
+    with connect() as conn:
+        row = conn.execute('SELECT * FROM attachments WHERE id = ?', (att_id,)).fetchone()
+        if row is None:
+            raise notes.NotFound('No such file')
+        note = _note_any(conn, row['note_id'])
+    if not notes.can_view(person, note):
+        raise notes.Forbidden('This file is not yours to open')
+    if row['mime'] not in INLINE_TYPES:
+        raise ValueError('Only photos can be marked up')
+    source = row
+    if row['source_id']:
+        with connect() as conn:
+            source = conn.execute('SELECT * FROM attachments WHERE id = ?', (row['source_id'],)).fetchone() or row
+    return {'id': row['id'], 'source_id': source['id'], 'mime': source['mime'],
+            'marks': json.loads(row['markup']) if row['source_id'] and row['markup'] else []}
+
+
+def mark_up(person: Person, att_id: str, picture: bytes, marks) -> Dict:
+    """
+    Keep a photo marked up: `picture` is it with the marks drawn on (the page
+    draws it), a new attachment of the note, made from the original photo.
+    Marked up again, the earlier marked-up picture leaves the note's list.
+    """
+    marks = _marks(marks)
+    with connect() as conn:
+        row = conn.execute('SELECT * FROM attachments WHERE id = ?', (att_id,)).fetchone()
+        if row is None:
+            raise notes.NotFound('No such file')
+        note = notes._row(conn, row['note_id'])
+    if not notes.can_edit(person, note):
+        raise notes.Forbidden('You cannot change the photos of this note')
+    if row['mime'] not in INLINE_TYPES:
+        raise ValueError('Only photos can be marked up')
+    if not picture or len(picture) > MAX_BYTES:
+        raise ValueError(f'The marked-up picture must be under {MAX_BYTES // (1024 * 1024)} MB')
+    mime = _sniff(picture, 'marked.png')
+    if mime not in ('image/png', 'image/jpeg'):
+        raise ValueError('The marked-up picture must be a PNG or JPEG')
+    source = row['source_id'] or row['id']
+    with connect() as conn:
+        original = conn.execute('SELECT filename FROM attachments WHERE id = ?', (source,)).fetchone()
+        stem = (original['filename'] if original else row['filename']).rsplit('.', 1)[0]
+        name = _clean_name(f"{stem} (marked up).{'png' if mime == 'image/png' else 'jpg'}")
+        new_id = content_mod.new_id() + content_mod.new_id()
+        conn.execute('INSERT INTO attachments (id, note_id, filename, mime, size, sha256, data, created_by, '
+                     'source_id, markup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                     (new_id, row['note_id'], name, mime, len(picture), hashlib.sha256(picture).hexdigest(),
+                      picture, person.username, source, json.dumps(marks)))
+        if row['source_id']:
+            # The marked-up picture it replaces: off the list, kept for the history.
+            conn.execute('UPDATE attachments SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ? '
+                         'WHERE id = ? AND deleted_at IS NULL', (person.username, row['id']))
+        return next(a for a in listed(conn, row['note_id']) if a['id'] == new_id)
 
 
 def size_label(n: Optional[int]) -> str:

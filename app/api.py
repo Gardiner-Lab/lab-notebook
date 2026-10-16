@@ -116,6 +116,20 @@ def get_attachment(person, att_id):
     return response
 
 
+@api.get('/attachments/<att_id>/markup')
+@signed_in
+def get_markup(person, att_id):
+    return jsonify(attachments.marked(person, att_id))
+
+
+@api.post('/attachments/<att_id>/markup')
+@signed_in
+def save_markup(person, att_id):
+    picture = request.files.get('picture')
+    data = picture.read(attachments.MAX_BYTES + 1) if picture else b''
+    return jsonify({'attachment': attachments.mark_up(person, att_id, data, request.form.get('marks', '[]'))}), 201
+
+
 @api.delete('/attachments/<att_id>')
 @signed_in
 def remove_attachment(person, att_id):

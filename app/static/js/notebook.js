@@ -529,6 +529,9 @@ const Blocks = {
               oninput: (e) => { block.title = e.target.value; ctx.changed(); } })
             : (block.title ? el('div', { class: 'block-title', text: block.title }) : el('span')),
           ctx.editable ? el('span', { class: 'table-tools' },
+            !marking && block.attachment ? el('button', { class: 'btn btn-sm btn-secondary',
+              title: 'Draw and write on the gel photo (the photo is kept as it is)',
+              onclick: () => App.markUp(block.attachment) }, '✏️ Mark up') : null,
             el('button', { class: `btn btn-sm ${marking ? 'btn-primary' : 'btn-secondary'}`,
               title: marking ? 'Stop marking wells' : 'Click wells on the photo to add lanes',
               onclick: () => { marking = !marking; block._marking = marking; draw(); } }, marking ? 'Done marking' : '✚ Mark wells'),
@@ -555,6 +558,7 @@ const Blocks = {
     this.decorateLinks(area);
     area.addEventListener('click', (e) => {
       const photo = e.target.closest('img[data-attachment]');
+      if (photo && ctx.editable) { App.photoMenu(photo); return; }
       if (photo) { window.open(attachmentUrl(photo.dataset.attachment), '_blank', 'noopener'); return; }
       const link = e.target.closest('a');
       if (!link) return;
@@ -1306,6 +1310,49 @@ const App = {
       } }, '🔗 Plasmid…'));
   },
 
+  /** A photo clicked in text: offer to mark it up, or to open it. */
+  photoMenu(img) {
+    document.getElementById('photoMenu')?.remove();
+    const r = img.getBoundingClientRect();
+    const id = img.dataset.attachment;
+    const menu = el('div', { class: 'photo-menu', id: 'photoMenu',
+      style: `top:${r.top + window.scrollY + 8}px;left:${r.left + window.scrollX + 8}px` },
+    el('button', { class: 'btn btn-primary btn-sm', title: 'Draw and write on it (the photo is kept as it is)',
+      onclick: () => { menu.remove(); this.markUp(id); } }, '✏️ Mark up'),
+    el('button', { class: 'btn btn-secondary btn-sm', onclick: () => { menu.remove(); window.open(attachmentUrl(id), '_blank', 'noopener'); } }, '↗ Open'));
+    document.body.append(menu);
+    const away = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', away, true); } };
+    setTimeout(() => document.addEventListener('mousedown', away, true), 0);
+  },
+
+  /** Mark up a photo of the open note, then show the marked-up picture wherever the photo was. */
+  async markUp(attachmentId) {
+    await this.flush();
+    const note = this.note;
+    Markup.open({
+      attachmentId,
+      onSaved: (att) => {
+        if (this.note !== note) return;
+        const swap = (blocks) => {
+          for (const b of blocks || []) {
+            if (b.type === 'text' && b.html) b.html = b.html.split(`data-attachment="${attachmentId}"`).join(`data-attachment="${att.id}"`);
+            if (b.type === 'gel' && b.attachment === attachmentId) b.attachment = att.id;
+            if (b.type === 'section') swap(b.blocks);
+          }
+        };
+        swap(note.content);
+        // A marked-up picture marked up again leaves the list; the original stays.
+        const old = (note.attachments || []).find((a) => a.id === attachmentId);
+        note.attachments = [...(note.attachments || []).filter((a) => !(old?.source_id && a.id === attachmentId)), att];
+        const { blocks, ctx } = this._blocks;
+        Blocks.renderList(note.content, blocks, ctx);
+        document.getElementById('attachmentPanel')?.replaceWith(this.attachmentPanel(note));
+        this.changed();
+        toast('Marked up. The original photo is kept, under Attachments.', 'success', 5000);
+      },
+    });
+  },
+
   /** A gel block: a photo already on the page, or a new one, ready to have its wells clicked. */
   addGel(note, add) {
     const start = (a) => add({ id: newId(), type: 'gel', title: '', attachment: a.id, lanes: [], _marking: true });
@@ -1395,6 +1442,8 @@ const App = {
           el('div', { class: 'hint' }, `${sizeLabel(a.size)} · ${a.created_by || '—'} · ${localTime(a.created_at)}`)),
         el('span', { class: 'attachment-actions' },
           el('a', { class: 'btn btn-secondary btn-sm', href: attachmentUrl(a.id, true), title: 'Download' }, '⤓'),
+          note.can_edit && a.image ? el('button', { class: 'btn btn-secondary btn-sm', title: 'Draw and write on it (the photo is kept as it is)',
+            onclick: () => this.markUp(a.id) }, '✏️') : null,
           note.can_edit ? el('button', { class: 'btn btn-secondary btn-sm', title: 'Show it at the end of the page',
             onclick: () => insert(a) }, 'Insert') : null,
           note.can_edit ? el('button', { class: 'btn btn-secondary btn-sm', title: 'Remove from this note (earlier versions keep it)',
