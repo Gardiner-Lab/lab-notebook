@@ -17,7 +17,7 @@ import io
 from urllib.parse import quote, unquote
 from typing import Callable, Dict, List, Optional
 
-from app import exporting, richtext, sheet
+from app import content, exporting, richtext, sheet
 from app.exporting import Context, Entry
 
 ATTACHMENT_URL = 'https://attachment.invalid/'
@@ -263,7 +263,7 @@ class _Builder:
 
     def gel(self, block: dict) -> str:
         att = block.get('attachment') or ''
-        lanes = sorted(block.get('lanes') or [], key=lambda lane: lane.get('x', 0))
+        lanes = content.order_lanes(block.get('lanes') or [])
         self.mentioned.add(att)
         f = self._file(att) if att else None
         picture = exporting.gel_picture(f['data'], lanes) if f and f['mime'] in exporting.IMAGE_TYPES else None

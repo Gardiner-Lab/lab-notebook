@@ -16,7 +16,7 @@ import re
 import zipfile
 from typing import Callable, Dict, List, Optional, Tuple
 
-from app import exporting, richtext, sheet
+from app import content, exporting, richtext, sheet
 from app.exporting import Context, Entry
 
 MAX_PDF_PAGES = 30
@@ -412,7 +412,7 @@ class _Writer:
     def gel(self, block: dict) -> None:
         doc = self.doc
         att = block.get('attachment') or ''
-        lanes = sorted(block.get('lanes') or [], key=lambda lane: lane.get('x', 0))
+        lanes = content.order_lanes(block.get('lanes') or [])
         self.mentioned.add(att)
         if block.get('title'):
             doc.add_paragraph().add_run(block['title']).bold = True

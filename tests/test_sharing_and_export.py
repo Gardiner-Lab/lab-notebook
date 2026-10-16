@@ -272,12 +272,12 @@ def test_a_gel_photo_with_its_wells_marked(as_user):
     gel = {'type': 'gel', 'title': '1% agarose', 'attachment': photo['id'], 'lanes': [
         {'x': 0.62, 'y': 0.1, 'label': 'pXK17 clone 2', 'note': '5 µL'},
         {'x': 0.18, 'y': 0.12, 'label': 'ladder'},
-        {'x': 1.7, 'y': -3, 'label': 'clone 3'}]}
+        {'x': 1.7, 'y': 1.4, 'label': 'clone 3'}]}
     saved = ana.put(f"/api/notes/{page['id']}", json={'content': [gel, {'type': 'gel', 'attachment': '../etc/passwd', 'lanes': []}]})
     assert saved.status_code == 200, saved.get_json()
     first, second = saved.get_json()['note']['content']
-    assert [lane['label'] for lane in first['lanes']] == ['ladder', 'pXK17 clone 2', 'clone 3'], 'numbered left to right'
-    assert (first['lanes'][2]['x'], first['lanes'][2]['y']) == (1.0, 0.0)
+    assert [lane['label'] for lane in first['lanes']] == ['ladder', 'pXK17 clone 2', 'clone 3'], 'top row left to right, then the next'
+    assert (first['lanes'][2]['x'], first['lanes'][2]['y']) == (1.0, 1.0)
     assert first['attachment'] == photo['id'] and second['attachment'] == ''
     assert [n['title'] for n in ana.get('/api/search?q=pXK17').get_json()['notes']] == ['Colony PCR']
 
@@ -307,3 +307,20 @@ def test_numbers_are_drawn_on_the_gel_for_exports():
     assert image.size == (120, 80)
     assert image.getpixel((60, 40)) != (0, 0, 0) and image.getpixel((12, 40)) != (0, 0, 0)
     assert exporting.gel_picture(b'not a picture', []) is None
+
+
+def test_a_gel_with_two_rows_of_wells_is_numbered_row_by_row(as_user):
+    from app.content import gel_rows
+    ana = as_user('ana')
+    page = ana.post('/api/notes', json={'parent_id': _me(ana)['notebook'], 'title': 'Two combs'}).get_json()['note']
+    photo = _attach(ana, page['id'], ('gel.png', _png((20, 20, 20))))[0]
+    # Clicked in no order; each row a little crooked, as wells are on a photo.
+    clicks = [('B2', 0.40, 0.56), ('A3', 0.70, 0.11), ('A1', 0.10, 0.10), ('B1', 0.12, 0.53),
+              ('A2', 0.40, 0.13), ('B3', 0.71, 0.55)]
+    saved = ana.put(f"/api/notes/{page['id']}", json={'content': [{'type': 'gel', 'attachment': photo['id'], 'lanes': [
+        {'x': x, 'y': y, 'label': name} for name, x, y in clicks]}]}).get_json()['note']
+    assert [lane['label'] for lane in saved['content'][0]['lanes']] == ['A1', 'A2', 'A3', 'B1', 'B2', 'B3']
+    assert [[lane['label'] for lane in row] for row in gel_rows(saved['content'][0]['lanes'])] == \
+        [['A1', 'A2', 'A3'], ['B1', 'B2', 'B3']]
+    # One row of wells is still left to right, however crooked within the gap.
+    assert [lane['x'] for lane in gel_rows([{'x': 0.5, 'y': 0.12}, {'x': 0.2, 'y': 0.08}, {'x': 0.8, 'y': 0.1}])[0]] == [0.2, 0.5, 0.8]

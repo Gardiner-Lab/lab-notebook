@@ -5,13 +5,21 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-16
+
+### Fixed
+- **Gels with more than one row of wells** (a comb at the top and more further down) were numbered
+  left to right across all of them, mixing the rows. Lanes are now numbered row by row, top to
+  bottom, and each row left to right. The table shows where each new row starts.
+
 ## [0.7.0] - 2026-10-16
 
 ### Added
 - **Gel photos with their wells marked** (▥ Gel photo… in the Add bar). Choose a photo on the page or
   upload one, then click each well that was loaded.
   - Each click puts a number on the photo, and a row in a table beside it for the sample and a note.
-  - Lanes are numbered left to right, whatever order they are clicked in.
+  - Lanes are numbered row by row, top to bottom, each row left to right, whatever order they are
+    clicked in.
   - Click a number to take it away; Mark wells adds more later.
   - Pointing at a lane's row lights up its number on the photo, and the other way round.
   - Exports show the photo with its numbers drawn on, and the lanes beside it. Sample names are

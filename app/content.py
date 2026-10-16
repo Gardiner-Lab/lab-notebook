@@ -9,8 +9,8 @@ A note's content: a list of blocks, checked and cleaned on every save.
     gel      {id, type, title, attachment, lanes}   a gel photo with its lanes marked: each
                                                     lane {id, x, y, label, note}, where x and y
                                                     are where its well is, as fractions of the
-                                                    photo's width and height; numbered left
-                                                    to right
+                                                    photo's width and height; numbered row by
+                                                    row, top to bottom, each left to right
 
 Ticks (a step done, a checkbox cell) record who ticked them and when. Those are
 set here, from the person saving and the time, never taken from the browser:
@@ -46,6 +46,31 @@ _ATTACHMENT_ID = re.compile(r'^[0-9a-f]{12,48}$')
 # Links to other notes, to plasmids, to the seed bank's lines, lots and plants, and to
 # Lab Stocks' glycerol stocks and primers (both by code).
 _LINK = re.compile(r'data-(note|plasmid|seed|stock)="([^"]{1,80})"')
+
+
+# Wells closer in height than this (a fraction of the photo's) are one row of a gel.
+ROW_GAP = 0.06
+
+
+def gel_rows(lanes: List[dict]) -> List[List[dict]]:
+    """
+    A gel's lanes in rows, top to bottom, each row left to right: a gel may have
+    a comb at the top and more further down. A well joins the row above when it
+    is within ROW_GAP of that row's height. The page does the same (notebook.js).
+    """
+    rows: List[List[dict]] = []
+    for lane in sorted(lanes, key=lambda lane: float(lane.get('y') or 0)):
+        y = float(lane.get('y') or 0)
+        if rows and y - sum(float(l.get('y') or 0) for l in rows[-1]) / len(rows[-1]) <= ROW_GAP:
+            rows[-1].append(lane)
+        else:
+            rows.append([lane])
+    return [sorted(row, key=lambda lane: float(lane.get('x') or 0)) for row in rows]
+
+
+def order_lanes(lanes: List[dict]) -> List[dict]:
+    """A gel's lanes as they are numbered: the top row left to right, then the next row."""
+    return [lane for row in gel_rows(lanes) for lane in row]
 
 
 def new_id() -> str:
@@ -159,8 +184,8 @@ class _Cleaner:
                           'x': min(max(_number(lane.get('x'), 0.0), 0.0), 1.0),
                           'y': min(max(_number(lane.get('y'), 0.0), 0.0), 1.0),
                           'label': _text(lane.get('label'), 200), 'note': _text(lane.get('note'), 500)})
-        # Lane 1 is the leftmost well, whatever order they were clicked in.
-        lanes.sort(key=lambda lane: lane['x'])
+        # Lane 1 is the top row's leftmost well, whatever order they were clicked in.
+        lanes = order_lanes(lanes)
         return {'id': bid, 'type': 'gel', 'title': _text(block.get('title')),
                 'attachment': attachment if _ATTACHMENT_ID.match(attachment) else '', 'lanes': lanes}
 

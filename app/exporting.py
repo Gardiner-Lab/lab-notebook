@@ -389,7 +389,8 @@ def gel_picture(data: bytes, lanes: List[dict]) -> Optional[bytes]:
     if font is None:
         font = ImageFont.load_default()
     draw = ImageDraw.Draw(image)
-    for n, lane in enumerate(sorted(lanes, key=lambda lane: lane.get('x', 0)), 1):
+    from app.content import order_lanes
+    for n, lane in enumerate(order_lanes(lanes), 1):
         x, y = float(lane.get('x', 0)) * w, float(lane.get('y', 0)) * h
         text = str(n)
         tw = draw.textlength(text, font=font)

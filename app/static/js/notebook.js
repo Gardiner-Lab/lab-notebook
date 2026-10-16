@@ -377,6 +377,23 @@ const Search = {
 
 /* --- blocks ------------------------------------------------------------------------ */
 
+/**
+ * A gel's lanes in rows of wells, top to bottom, each left to right: a gel may
+ * have a comb at the top and more further down. A well joins the row above when
+ * it is within ROW_GAP of that row's height (a fraction of the photo's), as
+ * the server orders them (app/content.py).
+ */
+const GEL_ROW_GAP = 0.06;
+function gelRows(lanes) {
+  const rows = [];
+  for (const lane of [...lanes].sort((a, b) => a.y - b.y)) {
+    const last = rows[rows.length - 1];
+    if (last && lane.y - last.reduce((s, l) => s + l.y, 0) / last.length <= GEL_ROW_GAP) last.push(lane);
+    else rows.push([lane]);
+  }
+  return rows.map((row) => row.sort((a, b) => a.x - b.x));
+}
+
 const Blocks = {
   /** Draw a list of blocks into `container`; `list` is edited in place. */
   renderList(list, container, ctx) {
@@ -444,7 +461,9 @@ const Blocks = {
     };
 
     const draw = () => {
-      block.lanes.sort((a, b) => a.x - b.x);
+      const rowsOfWells = gelRows(block.lanes);
+      block.lanes = rowsOfWells.flat();
+      const rowStarts = new Set(rowsOfWells.slice(1).map((row) => row[0].id));
       marks.clear();
       rows.clear();
       const img = el('img', { src: attachmentUrl(block.attachment), alt: block.title || 'Gel photo', draggable: 'false' });
@@ -492,7 +511,9 @@ const Blocks = {
         ? el('table', { class: 'sheet gel-lanes' },
           el('thead', {}, el('tr', {}, el('th', {}, 'Lane'), el('th', {}, 'Sample'), el('th', {}, 'Notes'))),
           el('tbody', {}, block.lanes.map((lane, i) => {
-            const row = el('tr', { onmouseenter: () => light(lane.id, true), onmouseleave: () => light(lane.id, false) },
+            const row = el('tr', { class: rowStarts.has(lane.id) ? 'gel-row-start' : null,
+              title: rowStarts.has(lane.id) ? 'The next row of wells starts here' : null,
+              onmouseenter: () => light(lane.id, true), onmouseleave: () => light(lane.id, false) },
               el('td', { class: 'gel-lane-no' }, String(i + 1)),
               el('td', {}, cell(lane, 'label', 'e.g. pGFP clone 3')),
               el('td', {}, cell(lane, 'note', 'e.g. 5 µL, ladder')));
@@ -516,7 +537,7 @@ const Blocks = {
                 modal({ title: 'Take away all the lanes?', build: (b) => b.append(el('p', {}, 'Their sample names go too.')),
                   buttons: [{ label: 'Cancel', kind: 'secondary' }, { label: 'Take them away', kind: 'danger', onClick: () => { block.lanes = []; draw(); ctx.changed(); } }] });
               } }, 'Clear') : null) : null),
-        marking ? el('p', { class: 'gel-prompt' }, '👆 Click each well you loaded. Lanes are numbered left to right; click a number to take it away.') : null,
+        marking ? el('p', { class: 'gel-prompt' }, '👆 Click each well you loaded, in every row of wells. Lanes are numbered row by row, top to bottom, each row left to right; click a number to take it away.') : null,
         el('div', { class: 'gel-layout' }, photo, el('div', { class: 'gel-side' }, table)));
     };
     draw();
