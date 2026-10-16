@@ -360,3 +360,43 @@ def wait(job_id: str, timeout: float = 300) -> None:
     thread = _threads.get(job_id)
     if thread:
         thread.join(timeout)
+
+
+# --- gels -----------------------------------------------------------------------------------
+
+_FONTS = ('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 'DejaVuSans-Bold.ttf', 'arialbd.ttf')
+
+
+def gel_picture(data: bytes, lanes: List[dict]) -> Optional[bytes]:
+    """A gel photo with each lane's number drawn on its well, as the page shows them; PNG."""
+    import io
+    from PIL import Image, ImageDraw, ImageFont
+    try:
+        image = Image.open(io.BytesIO(data))
+        image.load()
+    except Exception:
+        return None
+    image = image.convert('RGB')
+    w, h = image.size
+    radius = max(9, round(w * 0.024))      # as big on the photo as on the page
+    font = None
+    for name in _FONTS:
+        try:
+            font = ImageFont.truetype(name, round(radius * 1.15))
+            break
+        except OSError:
+            continue
+    if font is None:
+        font = ImageFont.load_default()
+    draw = ImageDraw.Draw(image)
+    for n, lane in enumerate(sorted(lanes, key=lambda lane: lane.get('x', 0)), 1):
+        x, y = float(lane.get('x', 0)) * w, float(lane.get('y', 0)) * h
+        text = str(n)
+        tw = draw.textlength(text, font=font)
+        half = max(radius, tw / 2 + radius * 0.35)
+        draw.rounded_rectangle((x - half, y - radius, x + half, y + radius), radius=radius,
+                               fill=(253, 224, 71), outline=(17, 24, 39), width=max(2, radius // 5))
+        draw.text((x, y), text, fill=(17, 24, 39), font=font, anchor='mm')
+    out = io.BytesIO()
+    image.save(out, 'PNG', optimize=True)
+    return out.getvalue()

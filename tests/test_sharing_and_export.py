@@ -260,3 +260,50 @@ def test_who_may_export_what(as_user):
     assert 'MoClo Golden Gate assembly' in text and 'Western blot' not in text
     _, _, ours = _export(ben, library)
     assert 'Western blot' in '\n'.join(p.extract_text() for p in PdfReader(io.BytesIO(ours.data)).pages)
+
+
+def test_a_gel_photo_with_its_wells_marked(as_user):
+    import docx
+    from pypdf import PdfReader
+    ana = as_user('ana')
+    page = ana.post('/api/notes', json={'parent_id': _me(ana)['notebook'], 'title': 'Colony PCR'}).get_json()['note']
+    photo = _attach(ana, page['id'], ('gel.png', _png((20, 20, 20))))[0]
+    # Clicked out of order; one click off the photo, one with a made-up attachment.
+    gel = {'type': 'gel', 'title': '1% agarose', 'attachment': photo['id'], 'lanes': [
+        {'x': 0.62, 'y': 0.1, 'label': 'pXK17 clone 2', 'note': '5 µL'},
+        {'x': 0.18, 'y': 0.12, 'label': 'ladder'},
+        {'x': 1.7, 'y': -3, 'label': 'clone 3'}]}
+    saved = ana.put(f"/api/notes/{page['id']}", json={'content': [gel, {'type': 'gel', 'attachment': '../etc/passwd', 'lanes': []}]})
+    assert saved.status_code == 200, saved.get_json()
+    first, second = saved.get_json()['note']['content']
+    assert [lane['label'] for lane in first['lanes']] == ['ladder', 'pXK17 clone 2', 'clone 3'], 'numbered left to right'
+    assert (first['lanes'][2]['x'], first['lanes'][2]['y']) == (1.0, 0.0)
+    assert first['attachment'] == photo['id'] and second['attachment'] == ''
+    assert [n['title'] for n in ana.get('/api/search?q=pXK17').get_json()['notes']] == ['Colony PCR']
+
+    # A copy has its own copy of the photo.
+    copy = ana.post(f"/api/notes/{page['id']}/copy").get_json()['note']
+    assert copy['content'][0]['attachment'] not in ('', photo['id'])
+    assert copy['content'][0]['attachment'] == copy['attachments'][0]['id']
+
+    # Exports show the photo once, with its numbers, and the lanes beside it.
+    _, _, pdf = _export(ana, page['id'], children=False)
+    text = '\n'.join(p.extract_text() for p in PdfReader(io.BytesIO(pdf.data)).pages)
+    assert 'ladder' in text and 'clone 2' in text and '5 µL' in text and 'Lane' in text
+    assert 'Files' not in text, 'the photo is the gel\'s, not listed again'
+    _, _, word = _export(ana, page['id'], 'docx', children=False)
+    document = docx.Document(io.BytesIO(word.data))
+    lanes = [c.text for outer in document.tables for cell in outer._cells for inner in cell.tables
+             for row in inner.rows for c in row.cells]
+    assert lanes[:6] == ['Lane', 'Sample', 'Notes', '1', 'ladder', ''] and 'pXK17 clone 2' in lanes
+    assert len(document.inline_shapes) == 1
+
+
+def test_numbers_are_drawn_on_the_gel_for_exports():
+    from PIL import Image
+    from app import exporting
+    picture = exporting.gel_picture(_png((0, 0, 0)), [{'x': 0.5, 'y': 0.5}, {'x': 0.1, 'y': 0.5}])
+    image = Image.open(io.BytesIO(picture)).convert('RGB')
+    assert image.size == (120, 80)
+    assert image.getpixel((60, 40)) != (0, 0, 0) and image.getpixel((12, 40)) != (0, 0, 0)
+    assert exporting.gel_picture(b'not a picture', []) is None

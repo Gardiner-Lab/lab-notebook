@@ -35,6 +35,8 @@ The Gardiner Lab suite's digital lab notebook.
     files are printed as well. Tables show their worked-out numbers, and ticks who made them.
   - **Word (.docx)**, to edit: photos and an attached PDF's pages as pictures; other files in a zip
     beside the document, linked from it.
+- **Gel photos.** ▥ Gel photo… puts in a gel photo: click the wells you loaded, and each gets a
+  number on the photo (left to right) and a row beside it to name its sample.
 - **Photos and files.** Attach them to pages and protocols with 📎 Attach…, or paste or drop them into
   text. Photos show in the page, and the backup includes them.
 - **History.** Every change is kept with who made it, and any version can be restored.

@@ -6,6 +6,11 @@ A note's content: a list of blocks, checked and cleaned on every save.
     steps    {id, type, title, items}               steps to tick off
     section  {id, type, title, source, blocks}      a protocol or MoClo reaction put
                                                     into a page, with where it came from
+    gel      {id, type, title, attachment, lanes}   a gel photo with its lanes marked: each
+                                                    lane {id, x, y, label, note}, where x and y
+                                                    are where its well is, as fractions of the
+                                                    photo's width and height; numbered left
+                                                    to right
 
 Ticks (a step done, a checkbox cell) record who ticked them and when. Those are
 set here, from the person saving and the time, never taken from the browser:
@@ -35,6 +40,8 @@ MAX_COLUMNS = 40
 MAX_ROWS = 500
 MAX_ITEMS = 300
 MAX_BLOCKS = 400
+MAX_LANES = 96
+_ATTACHMENT_ID = re.compile(r'^[0-9a-f]{12,48}$')
 
 # Links to other notes, to plasmids, to the seed bank's lines, lots and plants, and to
 # Lab Stocks' glycerol stocks and primers (both by code).
@@ -129,6 +136,8 @@ class _Cleaner:
             return {'id': bid, 'type': 'steps', 'title': _text(block.get('title')), 'items': items}
         if kind == 'table':
             return self.table(block, bid)
+        if kind == 'gel':
+            return self.gel(block, bid)
         if kind == 'section' and not nested:
             source = block.get('source') if isinstance(block.get('source'), dict) else {}
             inner = [b for b in (self.block(x, nested=True) for x in (block.get('blocks') or [])[:MAX_BLOCKS])
@@ -139,6 +148,21 @@ class _Cleaner:
                                'name': _text(source.get('name'))},
                     'blocks': inner}
         return None
+
+    def gel(self, block: dict, bid: str) -> dict:
+        attachment = _text(block.get('attachment'), 48)
+        lanes = []
+        for lane in (block.get('lanes') or [])[:MAX_LANES]:
+            if not isinstance(lane, dict):
+                continue
+            lanes.append({'id': _text(lane.get('id'), 40) or new_id(),
+                          'x': min(max(_number(lane.get('x'), 0.0), 0.0), 1.0),
+                          'y': min(max(_number(lane.get('y'), 0.0), 0.0), 1.0),
+                          'label': _text(lane.get('label'), 200), 'note': _text(lane.get('note'), 500)})
+        # Lane 1 is the leftmost well, whatever order they were clicked in.
+        lanes.sort(key=lambda lane: lane['x'])
+        return {'id': bid, 'type': 'gel', 'title': _text(block.get('title')),
+                'attachment': attachment if _ATTACHMENT_ID.match(attachment) else '', 'lanes': lanes}
 
     def table(self, block: dict, bid: str) -> dict:
         columns = []
@@ -197,6 +221,9 @@ def plain_text(blocks: List[dict]) -> str:
                     words.extend(c for c in row.get('cells') or [] if isinstance(c, str) and not c.startswith('='))
             elif kind == 'section':
                 walk(block.get('blocks'))
+            elif kind == 'gel':
+                for lane in block.get('lanes') or []:
+                    words.extend((str(lane.get('label') or ''), str(lane.get('note') or '')))
     walk(blocks)
     return re.sub(r'\s+', ' ', ' '.join(words)).strip()
 

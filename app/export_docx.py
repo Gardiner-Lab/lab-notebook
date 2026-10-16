@@ -409,6 +409,37 @@ class _Writer:
                     run.font.color.rgb = self.RGBColor(0xB9, 0x1C, 0x1C)
         doc.add_paragraph()
 
+    def gel(self, block: dict) -> None:
+        doc = self.doc
+        att = block.get('attachment') or ''
+        lanes = sorted(block.get('lanes') or [], key=lambda lane: lane.get('x', 0))
+        self.mentioned.add(att)
+        if block.get('title'):
+            doc.add_paragraph().add_run(block['title']).bold = True
+        f = self._file(att) if att else None
+        picture = exporting.gel_picture(f['data'], lanes) if f and f['mime'] in exporting.IMAGE_TYPES else None
+        # The photo with its numbers, and the lanes beside it.
+        layout = doc.add_table(rows=1, cols=2)
+        left, right = layout.rows[0].cells
+        left.width, right.width = self.Inches(3.9), self.Inches(2.4)
+        if picture:
+            self.picture(left.paragraphs[0], picture, max_w=3.8, max_h=5.5)
+        else:
+            self.grey(left.paragraphs[0], '[gel photo not available]')
+        if not lanes:
+            self.grey(right.paragraphs[0], 'No wells marked.')
+        else:
+            grid = right.add_table(rows=1 + len(lanes), cols=3)
+            grid.style = 'Table Grid'
+            for c, name in enumerate(('Lane', 'Sample', 'Notes')):
+                grid.rows[0].cells[c].paragraphs[0].add_run(name).bold = True
+            for n, lane in enumerate(lanes, 1):
+                cells = grid.rows[n].cells
+                cells[0].paragraphs[0].add_run(str(n)).bold = True
+                cells[1].paragraphs[0].add_run(lane.get('label') or '')
+                cells[2].paragraphs[0].add_run(lane.get('note') or '')
+        doc.add_paragraph()
+
     def section(self, block: dict) -> None:
         src = block.get('source') or {}
         p = self.doc.add_paragraph()
@@ -439,6 +470,8 @@ class _Writer:
             self.table(block)
         elif kind == 'section':
             self.section(block)
+        elif kind == 'gel':
+            self.gel(block)
 
     # --- the document --------------------------------------------------------------------------
 

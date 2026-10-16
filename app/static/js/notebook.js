@@ -420,8 +420,107 @@ const Blocks = {
       case 'table': return this.table(block, ctx);
       case 'steps': return this.steps(block, ctx);
       case 'section': return this.section(block, ctx);
+      case 'gel': return this.gel(block, ctx);
       default: return el('div', { class: 'hint' }, `(${block.type})`);
     }
+  },
+
+  /* gels ---------------------------------------------------------------------- */
+
+  /**
+   * A gel photo with its wells marked: click each well used, and it gets a
+   * number on the photo and a row in the table beside it, for the sample.
+   * Lanes are numbered left to right, whatever order they were clicked in.
+   */
+  gel(block, ctx) {
+    block.lanes = block.lanes || [];
+    let marking = !!block._marking && ctx.editable;
+    const wrap = el('div', { class: 'gel-block' });
+    const marks = new Map();       // lane id -> its number on the photo
+    const rows = new Map();        // lane id -> its row in the table
+    const light = (id, on) => {
+      marks.get(id)?.classList.toggle('lit', on);
+      rows.get(id)?.classList.toggle('lit', on);
+    };
+
+    const draw = () => {
+      block.lanes.sort((a, b) => a.x - b.x);
+      marks.clear();
+      rows.clear();
+      const img = el('img', { src: attachmentUrl(block.attachment), alt: block.title || 'Gel photo', draggable: 'false' });
+      const photo = el('div', { class: `gel-photo${marking ? ' marking' : ''}` }, img);
+      block.lanes.forEach((lane, i) => {
+        const mark = el('span', {
+          class: 'gel-mark', style: `left:${lane.x * 100}%;top:${lane.y * 100}%`,
+          title: marking ? `Lane ${i + 1}: click to take it away` : `Lane ${i + 1}${lane.label ? `: ${lane.label}` : ''}`,
+          onclick: (e) => {
+            e.stopPropagation();
+            if (marking) {
+              block.lanes.splice(block.lanes.indexOf(lane), 1);
+              draw();
+              ctx.changed();
+            } else rows.get(lane.id)?.querySelector('input')?.focus();
+          },
+          onmouseenter: () => light(lane.id, true), onmouseleave: () => light(lane.id, false),
+        }, String(i + 1));
+        marks.set(lane.id, mark);
+        photo.append(mark);
+      });
+      if (marking) {
+        photo.addEventListener('click', (e) => {
+          const r = img.getBoundingClientRect();
+          const x = (e.clientX - r.left) / r.width;
+          const y = (e.clientY - r.top) / r.height;
+          if (!(x >= 0 && x <= 1 && y >= 0 && y <= 1)) return;
+          const lane = { id: newId(), x, y, label: '', note: '' };
+          block.lanes.push(lane);
+          draw();
+          ctx.changed();
+        });
+      }
+
+      const cell = (lane, key, placeholder) => (ctx.editable
+        ? el('input', { type: 'text', class: 'cell', value: lane[key] || '', placeholder,
+          oninput: (e) => { lane[key] = e.target.value; marks.get(lane.id).title = `Lane ${block.lanes.indexOf(lane) + 1}: ${lane.label}`; ctx.changed(); },
+          onfocus: () => light(lane.id, true), onblur: () => light(lane.id, false),
+          onkeydown: (e) => {
+            // Enter goes to the next lane's sample, as in a spreadsheet.
+            if (e.key === 'Enter') { e.preventDefault(); rows.get(block.lanes[block.lanes.indexOf(lane) + 1]?.id)?.querySelector('input')?.focus(); }
+          } })
+        : el('span', { text: lane[key] || '' }));
+      const table = block.lanes.length
+        ? el('table', { class: 'sheet gel-lanes' },
+          el('thead', {}, el('tr', {}, el('th', {}, 'Lane'), el('th', {}, 'Sample'), el('th', {}, 'Notes'))),
+          el('tbody', {}, block.lanes.map((lane, i) => {
+            const row = el('tr', { onmouseenter: () => light(lane.id, true), onmouseleave: () => light(lane.id, false) },
+              el('td', { class: 'gel-lane-no' }, String(i + 1)),
+              el('td', {}, cell(lane, 'label', 'e.g. pGFP clone 3')),
+              el('td', {}, cell(lane, 'note', 'e.g. 5 µL, ladder')));
+            rows.set(lane.id, row);
+            return row;
+          })))
+        : el('p', { class: 'hint' }, ctx.editable ? 'No wells marked yet.' : 'No wells marked.');
+
+      put(wrap,
+        el('div', { class: 'table-head' },
+          ctx.editable
+            ? el('input', { type: 'text', class: 'block-title', value: block.title || '', placeholder: 'Gel, e.g. Colony PCR, 1% agarose',
+              oninput: (e) => { block.title = e.target.value; ctx.changed(); } })
+            : (block.title ? el('div', { class: 'block-title', text: block.title }) : el('span')),
+          ctx.editable ? el('span', { class: 'table-tools' },
+            el('button', { class: `btn btn-sm ${marking ? 'btn-primary' : 'btn-secondary'}`,
+              title: marking ? 'Stop marking wells' : 'Click wells on the photo to add lanes',
+              onclick: () => { marking = !marking; block._marking = marking; draw(); } }, marking ? 'Done marking' : '✚ Mark wells'),
+            marking && block.lanes.length ? el('button', { class: 'btn btn-sm btn-secondary', title: 'Take away every mark',
+              onclick: () => {
+                modal({ title: 'Take away all the lanes?', build: (b) => b.append(el('p', {}, 'Their sample names go too.')),
+                  buttons: [{ label: 'Cancel', kind: 'secondary' }, { label: 'Take them away', kind: 'danger', onClick: () => { block.lanes = []; draw(); ctx.changed(); } }] });
+              } }, 'Clear') : null) : null),
+        marking ? el('p', { class: 'gel-prompt' }, '👆 Click each well you loaded. Lanes are numbered left to right; click a number to take it away.') : null,
+        el('div', { class: 'gel-layout' }, photo, el('div', { class: 'gel-side' }, table)));
+    };
+    draw();
+    return wrap;
   },
 
   /* text --------------------------------------------------------------------- */
@@ -1121,6 +1220,8 @@ const App = {
         rows: [0, 1, 2].map(() => ({ id: newId(), cells: ['', '', '', null] })),
       }) }, '▦ Table'),
       el('button', { class: 'btn btn-secondary btn-sm', onclick: () => add({ id: newId(), type: 'steps', title: '', items: [{ id: newId(), text: '' }] }) }, '☑ Steps'),
+      el('button', { class: 'btn btn-secondary btn-sm', title: 'A gel photo: click the wells you used, and name the sample in each',
+        onclick: () => this.addGel(note, add) }, '▥ Gel photo…'),
       note.space === 'notebook' ? el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
         const protocol = await pickProtocol();
         if (!protocol) return;
@@ -1182,6 +1283,34 @@ const App = {
           this.changed();
         } else add({ id: newId(), type: 'text', html: `<p>${link}</p>` });
       } }, '🔗 Plasmid…'));
+  },
+
+  /** A gel block: a photo already on the page, or a new one, ready to have its wells clicked. */
+  addGel(note, add) {
+    const start = (a) => add({ id: newId(), type: 'gel', title: '', attachment: a.id, lanes: [], _marking: true });
+    const upload = () => {
+      const input = el('input', { type: 'file', accept: 'image/*', hidden: true, onchange: async () => {
+        const files = [...input.files];
+        input.remove();
+        const added = await this.upload(note, files);
+        if (!added.length) return;
+        if (!added[0].image) { toast('That is not a photo the notebook can show (PNG, JPEG, GIF, WebP or BMP)', 'error', 6000); return; }
+        start(added[0]);
+      } });
+      document.body.append(input);
+      input.click();
+    };
+    const photos = (note.attachments || []).filter((a) => a.image);
+    if (!photos.length) { upload(); return; }
+    modal({
+      title: 'Which gel photo?',
+      build: (body, close) => body.append(
+        el('div', { class: 'gel-choices' }, photos.map((a) => el('button', { class: 'gel-choice', title: a.filename,
+          onclick: () => { close(); start(a); } },
+          el('img', { src: attachmentUrl(a.id), alt: '', loading: 'lazy' }), el('span', { class: 'hint', text: a.filename })))),
+        el('button', { class: 'btn btn-primary', onclick: () => { close(); upload(); } }, '📷 Upload a new photo')),
+      buttons: [{ label: 'Cancel', kind: 'secondary' }],
+    });
   },
 
   /** Send files to be attached to a note; resolves with what was attached. */

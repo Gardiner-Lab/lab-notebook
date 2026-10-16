@@ -323,3 +323,26 @@ input.step-text:focus { outline: 1px solid var(--border); border-radius: .3rem; 
 .share-table td { padding: .3rem .4rem; }
 .share-select { font: inherit; flex: 1; min-width: 0; padding: .25rem; border: 1px solid var(--border); border-radius: .4rem; }
 .tree-act ~ .tree-act { margin-left: 0; }
+
+/* gels: a photo with numbered wells, and its lanes beside it */
+.gel-layout { display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.gel-photo { position: relative; flex: 0 1 60%; min-width: 260px; line-height: 0; user-select: none; }
+.gel-photo img { width: 100%; height: auto; border-radius: .3rem; display: block; }
+.gel-photo.marking { cursor: crosshair; outline: 2px dashed var(--accent); outline-offset: 3px; border-radius: .3rem; }
+.gel-mark { position: absolute; transform: translate(-50%, -50%); min-width: 1.5rem; height: 1.5rem; padding: 0 .25rem;
+    border-radius: .75rem; background: #fde047; color: #111827; border: 2px solid #111827; font: 700 .8rem/1.2rem sans-serif;
+    text-align: center; box-sizing: border-box; cursor: pointer; box-shadow: 0 0 0 1px #fde047; }
+.gel-mark.lit, .gel-mark:hover { background: #f97316; color: #fff; }
+.gel-photo.marking .gel-mark:hover { background: var(--danger); }
+.gel-side { flex: 1 1 240px; min-width: 220px; }
+.gel-lanes td { padding: 0; }
+.gel-lanes td span { display: block; padding: .25rem .4rem; }
+.gel-lanes .gel-lane-no { text-align: center; font-weight: 700; width: 3rem; padding: .25rem; }
+.gel-lanes tr.lit td { background: #ffedd5; }
+.gel-prompt { margin: .3rem 0 .5rem; color: #92400e; background: var(--accent-soft); padding: .35rem .6rem; border-radius: .4rem; font-size: .9rem; }
+.gel-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: .5rem; margin-bottom: .8rem; }
+.gel-choice { display: flex; flex-direction: column; gap: .2rem; background: var(--card); border: 1px solid var(--border);
+    border-radius: .4rem; padding: .3rem; cursor: pointer; text-align: left; font: inherit; }
+.gel-choice:hover { border-color: var(--accent); }
+.gel-choice img { width: 100%; height: 90px; object-fit: cover; border-radius: .25rem; }
+.gel-choice .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

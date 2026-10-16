@@ -98,6 +98,12 @@ figcaption { font-size: 7.5pt; color: #6b7280; }
 .pdf-caption { font-size: 8pt; color: #6b7280; border-bottom: 0.6pt solid #e5e7eb; padding-bottom: 1mm; bookmark-level: none; }
 table.csv { border-collapse: collapse; font-size: 7.5pt; margin: 1mm 0; }
 table.csv td { border: 0.5pt solid #e5e7eb; padding: 0.6mm 1.2mm; }
+.gel { break-inside: avoid; margin: 3mm 0; }
+table.gel-layout { width: 100%; border-collapse: collapse; }
+td.gel-photo { width: 60%; vertical-align: top; padding-right: 4mm; }
+td.gel-photo img { width: 100%; }
+td.gel-side { vertical-align: top; }
+td.lane { text-align: center; font-weight: bold; width: 10mm; }
 """
 
 
@@ -107,7 +113,9 @@ class _Builder:
         self.files: Dict[str, dict] = {}            # attachment id -> what WeasyPrint fetches
         self.placements: List[tuple] = []           # (anchor id, attachment id, page index in it)
         self.readers: Dict[str, object] = {}
+        self.generated: Dict[str, bytes] = {}       # pictures made here (gels with their numbers)
         self.counter = 0
+        self.mentioned = set()
 
     # --- attachments -------------------------------------------------------------
 
@@ -253,6 +261,25 @@ class _Builder:
                       f'{esc(sheet.show(sheet._number(scale.get("value"), 0)))}</div>' if scale else '')
         return f'{title}{scale_line}<table class="sheet"><thead><tr>{head}</tr></thead><tbody>{"".join(body)}</tbody></table>'
 
+    def gel(self, block: dict) -> str:
+        att = block.get('attachment') or ''
+        lanes = sorted(block.get('lanes') or [], key=lambda lane: lane.get('x', 0))
+        self.mentioned.add(att)
+        f = self._file(att) if att else None
+        picture = exporting.gel_picture(f['data'], lanes) if f and f['mime'] in exporting.IMAGE_TYPES else None
+        if picture:
+            key = f'gel{len(self.generated) + 1}'
+            self.generated[key] = picture
+            image = f'<img src="{ATTACHMENT_URL}{key}/gel.png" alt="{esc(block.get("title") or "Gel")}">'
+        else:
+            image = '<span class="empty">[gel photo not available]</span>'
+        rows = ''.join(f'<tr><td class="lane">{n}</td><td>{esc(lane.get("label") or "")}</td>'
+                       f'<td>{esc(lane.get("note") or "")}</td></tr>' for n, lane in enumerate(lanes, 1))
+        table = (f'<table class="sheet"><thead><tr><th>Lane</th><th>Sample</th><th>Notes</th></tr></thead>'
+                 f'<tbody>{rows}</tbody></table>' if lanes else '<p class="empty">No wells marked.</p>')
+        title = f'<div class="block-title">{esc(block["title"])}</div>' if block.get('title') else ''
+        return f'<div class="gel">{title}<table class="gel-layout"><tr><td class="gel-photo">{image}</td><td class="gel-side">{table}</td></tr></table></div>'
+
     def section(self, block: dict) -> str:
         src = block.get('source') or {}
         origin = (f'Protocol{f" · version {src["version"]}" if src.get("version") else ""}'
@@ -275,6 +302,8 @@ class _Builder:
             return self.table(block)
         if kind == 'section':
             return self.section(block)
+        if kind == 'gel':
+            return self.gel(block)
         return ''
 
     # --- notes ------------------------------------------------------------------------
@@ -364,7 +393,10 @@ def render(ctx: Context, step: Callable) -> bytes:
 
     def fetch(url: str, *args, **kwargs):
         if url.startswith(ATTACHMENT_URL):
-            f = builder._file(unquote(url[len(ATTACHMENT_URL):].split('/')[0]))
+            key = unquote(url[len(ATTACHMENT_URL):].split('/')[0])
+            if key in builder.generated:
+                return {'string': builder.generated[key], 'mime_type': 'image/png', 'filename': 'gel.png'}
+            f = builder._file(key)
             if f:
                 return {'string': f['data'], 'mime_type': f['mime'], 'filename': f['filename']}
         raise ValueError(f'Not fetched: {url}')        # only the notebook's own files
