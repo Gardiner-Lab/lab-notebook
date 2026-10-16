@@ -11,7 +11,7 @@ import os
 
 from flask import Flask, redirect, render_template, request
 
-APP_VERSION = '0.4.1'
+APP_VERSION = '0.5.0'
 
 
 class PrefixMiddleware:
@@ -47,6 +47,7 @@ def create_app() -> Flask:
             'editor': os.environ.get('EDITOR_URL', '/editor').rstrip('/'),
             'moclo': os.environ.get('MOCLO_URL', '/').rstrip('/'),
             'seeds': os.environ.get('SEEDS_URL', '/seeds').rstrip('/'),
+            'stocks': os.environ.get('STOCKS_URL', '/stocks').rstrip('/'),
             'logout': os.environ.get('SUITE_LOGOUT_URL', '/account/logout'),
         }
 

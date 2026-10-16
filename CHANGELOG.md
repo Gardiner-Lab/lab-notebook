@@ -5,6 +5,12 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-16
+
+### Added
+- **Links to Lab Stocks.** `@` in a page (or 🧫 Stock… in the Add bar) links a glycerol stock or
+  primer. The link opens it in Lab Stocks, which lists the notebook pages that mention each stock.
+
 ## [0.4.1] - 2026-10-15
 
 ### Fixed

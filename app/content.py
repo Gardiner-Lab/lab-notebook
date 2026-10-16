@@ -25,7 +25,7 @@ TEXT_TAGS = {'p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'sub', 'sup', 'h1', 
              'ul', 'ol', 'li', 'a', 'code', 'pre', 'blockquote', 'span', 'mark', 'hr', 'img'}
 # A picture or file is named by its attachment, never by an address: the page
 # works out where to fetch it from, so text cannot point images elsewhere.
-TEXT_ATTRIBUTES = {'a': {'href', 'data-plasmid', 'data-note', 'data-seed', 'data-attachment', 'class', 'title'},
+TEXT_ATTRIBUTES = {'a': {'href', 'data-plasmid', 'data-note', 'data-seed', 'data-stock', 'data-attachment', 'class', 'title'},
                    'img': {'data-attachment', 'alt', 'title'},
                    'span': {'class'}, 'mark': {'class'}}
 COLUMN_KINDS = ('text', 'number', 'scaled', 'fill', 'check', 'formula')
@@ -36,8 +36,9 @@ MAX_ROWS = 500
 MAX_ITEMS = 300
 MAX_BLOCKS = 400
 
-# Links to other notes, to plasmids, and to the seed bank's lines, lots and plants (by code).
-_LINK = re.compile(r'data-(note|plasmid|seed)="([^"]{1,80})"')
+# Links to other notes, to plasmids, to the seed bank's lines, lots and plants, and to
+# Lab Stocks' glycerol stocks and primers (both by code).
+_LINK = re.compile(r'data-(note|plasmid|seed|stock)="([^"]{1,80})"')
 
 
 def new_id() -> str:
