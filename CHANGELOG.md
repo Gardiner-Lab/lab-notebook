@@ -5,6 +5,8 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-19
+
 ### Added
 - Links to Lab Stocks' chemicals (`GL-C-0003`), from `@` and the 🧫 Stock… button, as to its
   glycerol stocks and primers; they open the chemical's page, with its safety data sheet.
