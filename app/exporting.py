@@ -117,7 +117,7 @@ class Context:
 
     def stock_link(self, code: str) -> str:
         parts = code.split('-')
-        kind = 'primer' if len(parts) > 1 and parts[-2] == 'O' else 'glycerol'
+        kind = {'O': 'primer', 'C': 'chemical'}.get(parts[-2], 'glycerol') if len(parts) > 1 else 'glycerol'
         return self.absolute(f"{os.environ.get('STOCKS_URL', '/stocks').rstrip('/')}/#{kind}={code}")
 
 

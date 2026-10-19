@@ -576,11 +576,18 @@ def test_links_to_lab_stocks_are_kept_and_indexed(as_user, world):
     ana = as_user('ana')
     page = _page(ana, _me(ana)['notebook'], 'Miniprep')
     saved = ana.put(f"/api/notes/{page['id']}", json={'content': [{'type': 'text', 'html':
-        '<p>From <a data-stock="GL-G-0001">GL-G-0001 pGFP</a>, primer <a data-stock="GL-O-0002">GL-O-0002</a></p>'}]}).get_json()['note']
+        '<p>From <a data-stock="GL-G-0001">GL-G-0001 pGFP</a>, primer <a data-stock="GL-O-0002">GL-O-0002</a>, '
+        '<a data-stock="GL-C-0003">GL-C-0003 Ethanol</a></p>'}]}).get_json()['note']
     assert 'data-stock="GL-G-0001"' in saved['content'][0]['html']
     conn = sqlite3.connect(world['paths']['notebook'])
     got = sorted(r[0] for r in conn.execute("SELECT target_id FROM links WHERE note_id = ? AND target_type = 'stock'", (page['id'],)))
-    assert got == ['GL-G-0001', 'GL-O-0002']
+    assert got == ['GL-C-0003', 'GL-G-0001', 'GL-O-0002']
+    # Exports link each to its page in Lab Stocks.
+    from types import SimpleNamespace
+    from app.exporting import Context
+    ctx = SimpleNamespace(absolute=lambda path: path)
+    assert [Context.stock_link(ctx, c).split('#')[1] for c in got] == [
+        'chemical=GL-C-0003', 'glycerol=GL-G-0001', 'primer=GL-O-0002']
 
 
 def _png_bytes(colour=(10, 10, 10)):
