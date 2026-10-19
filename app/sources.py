@@ -42,6 +42,12 @@ def _read(path: str, sql: str, args=()) -> List[sqlite3.Row]:
         return []
 
 
+def _public_column(path: str) -> str:
+    """The editor's "Public" flag, or none (0) in an editor database from before it."""
+    names = {r['name'] for r in _read(path, 'PRAGMA table_info(sequences)')}
+    return 's.public' if 'public' in names else '0 AS public'
+
+
 def editor_path() -> str:
     return os.environ.get('EDITOR_DATABASE_PATH', '/editor/plasmid_editor.db')
 
@@ -51,8 +57,9 @@ def editor_path() -> str:
 def plasmids(person: Person, query: str = '', limit: int = 25) -> List[dict]:
     """Plasmids in the editor's library this person may open, best matches first."""
     q = (query or '').strip()
-    rows = _read(editor_path(),
-                 'SELECT s.id, s.name, length(s.sequence) AS length, s.circular, s.shared, '
+    path = editor_path()
+    rows = _read(path,
+                 f'SELECT s.id, s.name, length(s.sequence) AS length, s.circular, {_public_column(path)}, '
                  '  s.confirmed_at, s.glycerol_stock, u.username AS owner '
                  'FROM sequences s LEFT JOIN users u ON u.id = s.owner_id '
                  'WHERE (? = \'\' OR s.name LIKE ?) ORDER BY '
@@ -60,8 +67,8 @@ def plasmids(person: Person, query: str = '', limit: int = 25) -> List[dict]:
                  (q, f'%{q}%', f'{q}%'))
     found = []
     for r in rows:
-        # As the editor has it: shared within the owner's labs; private, the owner and their labs' leads.
-        if person.oversees(r['owner']) or (r['shared'] and person.shares_lab(r['owner'])):
+        # As the editor has it: always its owner's labs'; every lab's once public.
+        if person.oversees(r['owner']) or person.shares_lab(r['owner']) or r['public']:
             found.append({'id': r['id'], 'name': r['name'], 'length': r['length'],
                           'circular': bool(r['circular']), 'owner': r['owner'],
                           'confirmed': bool(r['confirmed_at']), 'glycerol_stock': r['glycerol_stock']})

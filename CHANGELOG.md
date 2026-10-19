@@ -9,7 +9,7 @@ and the project uses [semantic versioning](https://semver.org/).
 - People can be in several labs: they see the protocols of all their labs and what is shared with
   any of them, and lead the labs they lead (reading their members' notebooks, changing their
   protocols). A new protocol belongs to its author's first lab.
-- Plasmids to link follow the Plasmid Editor: shared within the owner's labs.
+- Plasmids to link follow the Plasmid Editor: always the owner's labs', every lab's once public.
 
 ## [0.9.0] - 2026-10-16
 
