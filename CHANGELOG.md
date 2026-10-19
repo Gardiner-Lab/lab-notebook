@@ -5,6 +5,8 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-19
+
 ### Changed
 - People can be in several labs: they see the protocols of all their labs and what is shared with
   any of them, and lead the labs they lead (reading their members' notebooks, changing their
