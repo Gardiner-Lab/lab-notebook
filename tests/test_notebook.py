@@ -199,7 +199,8 @@ def test_plasmids_to_link_follow_the_editors_rules(as_user):
     assert [p['id'] for p in found] == ['p1'] and found[0]['length'] == 400
     assert [p['id'] for p in as_user('ben').get('/api/plasmids').get_json()['plasmids']] == ['p1']
     assert {p['id'] for p in as_user('boss').get('/api/plasmids').get_json()['plasmids']} == {'p1', 'p2'}
-    assert {p['id'] for p in as_user('zoe').get('/api/plasmids').get_json()['plasmids']} == {'p1', 'p2'}
+    # Shared means shared within the owner's labs: Zoe, in another lab, sees only her own.
+    assert {p['id'] for p in as_user('zoe').get('/api/plasmids').get_json()['plasmids']} == {'p2'}
 
 
 def test_a_note_can_sit_in_two_places_and_move(as_user):

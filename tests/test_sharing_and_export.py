@@ -352,3 +352,29 @@ def test_plants_on_a_photo_are_numbered_in_the_order_clicked(as_user):
     cells = [c.text for outer in document.tables for cell in outer._cells for inner in cell.tables
              for row in inner.rows for c in row.cells]
     assert cells[:9] == ['No.', 'Label', 'Notes', '1', 'Col-0 #1', '', '2', 'Col-0 #2', 'resistant']
+
+
+def test_someone_in_two_labs_sees_and_leads_in_each_as_their_role_there(as_user, world):
+    import sqlite3
+    # Zoe joins Gardiner Lab as well, and leads it; she stays a member of Other Lab.
+    conn = sqlite3.connect(world['paths']['suite'])
+    conn.executescript("""
+        CREATE TABLE lab_members (username TEXT, lab_id INTEGER, role TEXT, lab_admin INTEGER DEFAULT 0,
+                                  joined_at TEXT, PRIMARY KEY (username, lab_id));
+        INSERT INTO lab_members (username, lab_id, role, joined_at) VALUES
+            ('ana', 1, 'member', '1'), ('ben', 1, 'member', '2'), ('lead', 1, 'lab_lead', '3'),
+            ('zoe', 2, 'member', '4'), ('olead', 2, 'lab_lead', '5'), ('zoe', 1, 'lab_lead', '6');
+    """)
+    conn.commit()
+    ana, zoe, olead = as_user('ana'), as_user('zoe'), as_user('olead')
+    proto = _protocol(ana, _me(ana)['library'], 'Gardiner miniprep')
+    # Gardiner Lab's protocol: Zoe sees it, and, leading Gardiner Lab, may change it.
+    seen = zoe.get(f"/api/notes/{proto['id']}")
+    assert seen.status_code == 200 and seen.get_json()['note']['can_edit'] is True
+    assert olead.get(f"/api/notes/{proto['id']}").status_code == 403
+    # Leading Gardiner Lab, she reads its members' notebooks; Other Lab's lead does not.
+    day = ana.post('/api/days', json={'date': '2026-10-17'}).get_json()['note']
+    assert zoe.get(f"/api/notes/{day['id']}").status_code == 200
+    assert olead.get(f"/api/notes/{day['id']}").status_code == 403
+    # Shares with either of her labs reach her.
+    assert [m['lab'] for m in zoe.get('/api/me').get_json()['person']['labs']] == ['Other Lab', 'Gardiner Lab']

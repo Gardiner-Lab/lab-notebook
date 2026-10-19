@@ -60,7 +60,8 @@ def plasmids(person: Person, query: str = '', limit: int = 25) -> List[dict]:
                  (q, f'%{q}%', f'{q}%'))
     found = []
     for r in rows:
-        if r['shared'] or person.oversees(r['owner']):
+        # As the editor has it: shared within the owner's labs; private, the owner and their labs' leads.
+        if person.oversees(r['owner']) or (r['shared'] and person.shares_lab(r['owner'])):
             found.append({'id': r['id'], 'name': r['name'], 'length': r['length'],
                           'circular': bool(r['circular']), 'owner': r['owner'],
                           'confirmed': bool(r['confirmed_at']), 'glycerol_stock': r['glycerol_stock']})

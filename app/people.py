@@ -13,7 +13,7 @@ the header themselves.
 
 import os
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from flask import g, request
@@ -28,30 +28,57 @@ class Person:
     lab: Optional[str] = None
     lab_role: str = 'member'          # 'lab_lead' or 'member'
     lab_id: Optional[str] = None      # the suite's id for the lab, as text: what shares name
+    # All their labs, first joined first: {'lab', 'lab_id', 'role'}; lab, lab_role and lab_id are the first's.
+    labs: List[dict] = field(default_factory=list)
+
+    @property
+    def lab_ids(self) -> set:
+        return {m['lab_id'] for m in self.labs if m.get('lab_id')} or ({self.lab_id} if self.lab_id else set())
+
+    @property
+    def led_lab_ids(self) -> set:
+        return {m['lab_id'] for m in self.labs if m.get('lab_id') and m['role'] == 'lab_lead'}
 
     @property
     def role(self) -> str:
         if self.is_admin:
             return 'admin'
-        return 'lab_lead' if self.lab_role == 'lab_lead' else 'member'
+        return 'lab_lead' if self.lab_role == 'lab_lead' or any(m['role'] == 'lab_lead' for m in self.labs) \
+            else 'member'
 
     @property
     def is_lab_lead(self) -> bool:
+        """Leads at least one of their labs."""
         return self.role == 'lab_lead'
 
+    def lab_names(self, led_only: bool = False) -> set:
+        """Their labs (casefolded names); led_only, the ones they lead."""
+        labs = self.labs or ([{'lab': self.lab, 'role': self.lab_role}] if self.lab else [])
+        return {m['lab'].casefold() for m in labs if m.get('lab') and (not led_only or m['role'] == 'lab_lead')}
+
+    def leads(self, lab: Optional[str]) -> bool:
+        return bool(lab) and lab.casefold() in self.lab_names(led_only=True)
+
+    def shares_lab(self, username: Optional[str]) -> bool:
+        """In a lab together with this person."""
+        if not username:
+            return False
+        if username == self.username:
+            return True
+        return bool(self.lab_names() & _names(membership(username)))
+
     def oversees(self, username: Optional[str]) -> bool:
-        """May open this person's notebook: themselves, an admin, or their lab's lead."""
+        """May act for this person: themselves, an admin, or a lead of a lab they are in."""
         if not username:
             return False
         if username == self.username or self.is_admin:
             return True
-        if not self.is_lab_lead or not self.lab:
-            return False
-        other = membership(username)
-        return bool(other and other.get('lab') and other['lab'].casefold() == self.lab.casefold())
+        led = self.lab_names(led_only=True)
+        return bool(led and led & _names(membership(username)))
 
     def to_dict(self) -> dict:
         return {'username': self.username, 'role': self.role, 'lab': self.lab, 'lab_id': self.lab_id,
+                'labs': [{'lab': m['lab'], 'lab_id': m['lab_id'], 'role': m['role']} for m in self.labs],
                 'is_admin': self.is_admin}
 
 
@@ -88,11 +115,27 @@ def account(username: str) -> Optional[dict]:
 
 
 def memberships() -> Dict[str, dict]:
-    """username -> {'lab': name, 'lab_id': id as text, 'role': 'lab_lead' | 'member'}, from the suite."""
-    rows = _read(suite_path(), 'SELECT members.username, labs.name AS lab, labs.id AS lab_id, members.role '
-                               'FROM members LEFT JOIN labs ON labs.id = members.lab_id')
-    return {r['username']: {'lab': r['lab'], 'role': r['role'],
-                            'lab_id': str(r['lab_id']) if r['lab_id'] is not None else None} for r in rows}
+    """
+    username -> {'lab', 'lab_id', 'role'} of their first lab, and 'labs': all
+    of them, first joined first, each with their role there ('lab_lead' or
+    'member'; a lab admin is a lab lead). From the suite: lab_members, or the
+    members table of a suite from before people could be in several labs.
+    """
+    rows = _read(suite_path(), 'SELECT m.username, labs.name AS lab, labs.id AS lab_id, m.role '
+                               'FROM lab_members m JOIN labs ON labs.id = m.lab_id ORDER BY m.joined_at, m.rowid')
+    if not rows:
+        rows = _read(suite_path(), 'SELECT members.username, labs.name AS lab, labs.id AS lab_id, members.role '
+                                   'FROM members JOIN labs ON labs.id = members.lab_id')
+    found: Dict[str, dict] = {}
+    for r in rows:
+        lab = {'lab': r['lab'], 'lab_id': str(r['lab_id']) if r['lab_id'] is not None else None,
+               'role': r['role'] or 'member'}
+        found.setdefault(r['username'], {**lab, 'labs': []})['labs'].append(lab)
+    return found
+
+
+def _names(member: Optional[dict]) -> set:
+    return {m['lab'].casefold() for m in (member or {}).get('labs', []) if m.get('lab')}
 
 
 def membership(username: str) -> Optional[dict]:
@@ -125,6 +168,6 @@ def current() -> Optional[Person]:
         member = membership(username) or {}
         person = Person(username=username, is_admin=bool(entry and entry['is_admin']),
                         lab=member.get('lab'), lab_role=member.get('role') or 'member',
-                        lab_id=member.get('lab_id'))
+                        lab_id=member.get('lab_id'), labs=member.get('labs') or [])
     g.person = person
     return person

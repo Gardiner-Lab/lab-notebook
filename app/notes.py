@@ -74,11 +74,13 @@ def _shared_with(person: Person) -> Dict[str, Set[str]]:
     key = f'shared_{person.username}'
     if has_app_context() and key in g:
         return g.get(key)
+    labs = sorted(person.lab_ids) or ['']
     with connect() as conn:
         rows = conn.execute(
             'SELECT s.note_id, n.type, n.owner FROM shares s JOIN notes n ON n.id = s.note_id '
             "WHERE n.deleted_at IS NULL AND ((s.target_type = 'person' AND s.target = ?) "
-            "OR (s.target_type = 'lab' AND s.target = ?))", (person.username, person.lab_id or '')).fetchall()
+            f"OR (s.target_type = 'lab' AND s.target IN ({','.join('?' * len(labs))})))",
+            (person.username, *labs)).fetchall()
     found = {'notes': {r['note_id'] for r in rows},
              'owners': {r['owner'] for r in rows if r['type'] == 'notebook' and r['owner']}}
     if has_app_context():
@@ -97,7 +99,7 @@ def can_view(person: Person, note) -> bool:
         if note['type'] == 'library' or person.is_admin:
             return True
         lab = note_lab(note)
-        if lab is None or lab == person.lab_id:
+        if lab is None or lab in person.lab_ids:
             return True
         shared = _shared_with(person)['notes']
         if note['type'] == 'folder':
@@ -117,7 +119,8 @@ def can_edit(person: Person, note) -> bool:
         if person.is_admin or (author and author == person.username):
             return True
         lab = note_lab(note)
-        return bool(person.is_lab_lead and author and lab and lab == person.lab_id)
+        # The lead of the lab it belongs to.
+        return bool(author and lab and lab in person.led_lab_ids)
     return note['owner'] == person.username and note['type'] != 'notebook'
 
 
@@ -128,7 +131,7 @@ def can_add_under(person: Person, parent) -> bool:
             return True
         if parent['type'] == 'folder':
             # Into the lab's own folders (or every lab's), not into one another lab shares from.
-            return person.is_admin or note_lab(parent) in (None, person.lab_id)
+            return person.is_admin or note_lab(parent) is None or note_lab(parent) in person.lab_ids
         return can_edit(person, parent)
     return parent['owner'] == person.username
 
@@ -764,7 +767,7 @@ def protocols(person: Person, query: str = '') -> List[dict]:
                           'uses': uses.get(r['id'], 0), 'can_edit': can_edit(person, r),
                           'lab': names.get(lab) if lab else None,
                           # Seen here because another lab shares it.
-                          'shared': bool(lab and lab != person.lab_id and not person.is_admin),
+                          'shared': bool(lab and lab not in person.lab_ids and not person.is_admin),
                           'shares': share_counts.get(r['id'], 0)})
     return found
 
