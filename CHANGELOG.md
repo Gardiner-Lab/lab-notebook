@@ -5,6 +5,8 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-10-20
+
 ### Added
 - Links to Lab Stocks' plant material (GL-M-0001), found with the other stocks.
 
