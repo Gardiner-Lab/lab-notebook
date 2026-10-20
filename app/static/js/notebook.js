@@ -123,8 +123,9 @@ const ICONS = { notebook: '📓', library: '📚', year: '🗓️', month: '📆
 const editorLink = (id) => `${NB.editor}/editor?open=${encodeURIComponent(id)}`;
 const SEED_KINDS = { L: 'line', S: 'lot', P: 'plant' };
 // GL-S-0042 (or S-0042 from before lab codes): the letter before the number says what it is.
-// GL-G-0042 a glycerol stock, GL-O-0007 a primer, GL-C-0003 a chemical, GL-A-0005 an antibody, in Lab Stocks.
-const STOCK_KINDS = { G: 'glycerol', O: 'primer', C: 'chemical', A: 'antibody' };
+// GL-G-0042 a glycerol stock, GL-O-0007 a primer, GL-C-0003 a chemical, GL-A-0005 an antibody, GL-M-0001 plant
+// material, in Lab Stocks.
+const STOCK_KINDS = { G: 'glycerol', O: 'primer', C: 'chemical', A: 'antibody', M: 'material' };
 const stockLink = (code) => `${NB.stocks}/#${STOCK_KINDS[code.split('-').slice(-2, -1)[0]] || 'glycerol'}=${encodeURIComponent(code)}`;
 const seedLink = (code) => `${NB.seeds}/#${SEED_KINDS[code.split('-').slice(-2, -1)[0]] || 'line'}=${encodeURIComponent(code)}`;
 
@@ -203,16 +204,16 @@ const pickSeed = () => picker({
     el('span', { class: 'hint' }, ` · ${r.kind === 'lot' ? 'seed lot' : r.kind}`)],
 });
 
-/** Choose a glycerol stock, primer, chemical or antibody from Lab Stocks (the lab's own). */
+/** Choose a glycerol stock, primer, chemical, antibody or plant material from Lab Stocks (the lab's own). */
 const pickStock = () => picker({
-  title: 'Link a stock, primer, chemical or antibody', placeholder: 'Search Lab Stocks by code, plasmid, primer, chemical or antibody',
+  title: 'Link a stock, primer, chemical, antibody or plant material', placeholder: 'Search Lab Stocks by code, plasmid, primer, chemical, antibody or tube',
   search: async (q) => {
     const res = await fetch(`${NB.stocks}/api/search?q=${encodeURIComponent(q)}`, { credentials: 'same-origin' });
     if (!res.ok) throw new Error(res.status === 404 ? 'Lab Stocks is not part of this suite' : `Lab Stocks: ${res.status}`);
     return (await res.json()).results;
   },
-  describe: (r) => [{ glycerol: '🧫 ', primer: '🧬 ', chemical: '⚗️ ', antibody: '🔬 ' }[r.kind] || '🧫 ', el('b', { text: r.code }), ` ${r.label.slice(r.code.length)}`,
-    el('span', { class: 'hint' }, ` · ${r.kind === 'glycerol' ? 'glycerol stock' : r.kind}`)],
+  describe: (r) => [{ glycerol: '🧫 ', primer: '🧬 ', chemical: '⚗️ ', antibody: '🔬 ', material: '🌿 ' }[r.kind] || '🧫 ', el('b', { text: r.code }), ` ${r.label.slice(r.code.length)}`,
+    el('span', { class: 'hint' }, ` · ${{ glycerol: 'glycerol stock', material: 'plant material' }[r.kind] || r.kind}`)],
 });
 
 async function pickMocloReaction() {
@@ -678,7 +679,7 @@ const Blocks = {
         build: (body, close) => body.append(el('div', { class: 'choice-row' },
           el('button', { class: 'btn btn-primary', onclick: () => { choice = 'plasmid'; close(); } }, '🧬 A plasmid'),
           el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'seed'; close(); } }, '🌱 A seed lot, plant or line'),
-          el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'stock'; close(); } }, '🧫 A stock, primer, chemical or antibody'),
+          el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'stock'; close(); } }, '🧫 A stock, primer, chemical, antibody or plant material'),
           el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'note'; close(); } }, '📄 A page or protocol'))),
         buttons: [{ label: 'Just type @', kind: 'secondary' }],
       });
@@ -1297,7 +1298,7 @@ const App = {
           this.changed();
         } else add({ id: newId(), type: 'text', html: `<p>${html}</p>` });
       } }, '🌱 Seed…'),
-      el('button', { class: 'btn btn-secondary btn-sm', title: 'Add a link to a glycerol stock, primer, chemical or antibody in Lab Stocks', onclick: async () => {
+      el('button', { class: 'btn btn-secondary btn-sm', title: 'Add a link to a glycerol stock, primer, chemical, antibody or plant material in Lab Stocks', onclick: async () => {
         let s;
         try { s = await pickStock(); } catch (err) { toast(err.message, 'error'); return; }
         if (!s) return;

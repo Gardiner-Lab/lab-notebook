@@ -46,7 +46,7 @@ MAX_LANES = 96
 _ATTACHMENT_ID = re.compile(r'^[0-9a-f]{12,48}$')
 
 # Links to other notes, to plasmids, to the seed bank's lines, lots and plants, and to
-# Lab Stocks' glycerol stocks, primers, chemicals and antibodies (by code).
+# Lab Stocks' glycerol stocks, primers, chemicals, antibodies and plant material (by code).
 _LINK = re.compile(r'data-(note|plasmid|seed|stock)="([^"]{1,80})"')
 
 
