@@ -4,12 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>About · Lab Notebook</title>
+    <link rel="stylesheet" href="{{ request.script_root }}/static/trellis/trellis.css?v={{ version }}">
     <link rel="stylesheet" href="{{ request.script_root }}/static/css/notebook.css?v={{ version }}">
 </head>
-<body>
-<header class="topbar">
-    <a class="topbar-back" href="{{ request.script_root }}/">← Notebook</a>
-    <span class="topbar-title">📓 Lab Notebook</span>
+<body class="tt">
+<header class="tt-bar">
+    <a class="tt-home" href="{{ request.script_root }}/" title="All of Trellis Tools"><img src="{{ request.script_root }}/static/trellis/trellis.svg" alt=""><span>Trellis Tools</span></a>
+    <a class="tt-module" href="{{ request.script_root }}/"><img src="{{ request.script_root }}/static/trellis/notebook.svg" alt="">Lab Notebook</a>
 </header>
 <main class="about">
     <h1>Lab Notebook {{ version }}</h1>

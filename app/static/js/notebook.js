@@ -110,29 +110,32 @@ const newId = () => Math.random().toString(16).slice(2, 14);
 const attachmentUrl = (id, download = false) => url(`/api/attachments/${encodeURIComponent(id)}${download ? '?download' : ''}`);
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (ch) => `&#${ch.charCodeAt(0)};`);
 const sizeLabel = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} kB`);
-const FILE_ICONS = { pdf: '📕', word: '📝', powerpoint: '📽️', excel: '📊', archive: '🗜️', sequence: '🧬', text: '📄', image: '🖼️', file: '📎' };
-/** An attachment as it sits in text: a photo shown, any other file a link with its icon. */
+/** One of Trellis Tools' small icons (static/trellis/glyphs/), in place of an emoji. */
+const glyph = (name) => el('img', { class: 'tt-glyph', src: url(`/static/trellis/glyphs/${name}.svg`), alt: '' });
+const FILE_ICONS = { pdf: 'pdf', word: 'doc', powerpoint: 'slides', excel: 'sheet', archive: 'archive', sequence: 'line', text: 'text', image: 'image', file: 'attach' };
+/** An attachment as it sits in text: a photo shown, any other file a link (its icon is the stylesheet's, a[data-attachment]). */
 const attachmentHtml = (a) => (a.image
   ? `<p><img data-attachment="${a.id}" alt="${escapeHtml(a.filename)}"></p>`
-  : `<p><a data-attachment="${a.id}">${FILE_ICONS[a.kind] || '📎'} ${escapeHtml(a.filename)}</a></p>`);
+  : `<p><a data-attachment="${a.id}">${escapeHtml(a.filename)}</a></p>`);
 const store = {
   get(key, fallback) { try { return JSON.parse(localStorage.getItem(`nb:${key}`)) ?? fallback; } catch (e) { return fallback; } },
   set(key, value) { try { localStorage.setItem(`nb:${key}`, JSON.stringify(value)); } catch (e) { /* private window */ } },
 };
-// Sections other tools put into a day, by their source's kind: an icon, and where they come from
+// Sections other tools put into a day, by their source's kind: its glyph, and where they come from
 // (as content.IMPORTED_LABELS says on the server).
 const IMPORTED = {
-  'virtual-digest': ['✂️', 'A virtual digest from the Plasmid Editor'],
-  'plasmid-map': ['🧬', 'A plasmid map from the Plasmid Editor'],
-  'cloning-product': ['🔗', 'A cloning product from the Plasmid Editor'],
-  pcr: ['🧪', 'A PCR from the Plasmid Editor'],
-  primers: ['🧷', 'Primers designed in the Plasmid Editor'],
-  'sequencing-read': ['📈', 'A sequencing read from the Plasmid Editor'],
-  'moclo-plasmid': ['🧬', 'A plasmid from the MoClo Library Tool'],
-  'moclo-cassette': ['🧩', 'A cassette from the MoClo Library Tool'],
-  'moclo-part': ['🧱', 'A part from the MoClo Library Tool'],
+  'virtual-digest': ['cut', 'A virtual digest from the Plasmid Editor'],
+  'plasmid-map': ['plasmid', 'A plasmid map from the Plasmid Editor'],
+  'cloning-product': ['plasmid', 'A cloning product from the Plasmid Editor'],
+  pcr: ['stocks', 'A PCR from the Plasmid Editor'],
+  primers: ['primer', 'Primers designed in the Plasmid Editor'],
+  'sequencing-read': ['trace', 'A sequencing read from the Plasmid Editor'],
+  'moclo-plasmid': ['plasmid', 'A plasmid from the MoClo Library Tool'],
+  'moclo-cassette': ['cassette', 'A cassette from the MoClo Library Tool'],
+  'moclo-part': ['part', 'A part from the MoClo Library Tool'],
 };
-const ICONS = { notebook: '📓', library: '📚', year: '🗓️', month: '📆', day: '📅', page: '📄', folder: '📁', protocol: '🧪' };
+const ICONS = { notebook: 'notebook', library: 'library', year: 'calendar', month: 'calendar', day: 'calendar', page: 'text', folder: 'folder', protocol: 'protocol' };   // glyphs
+const noteGlyph = (type) => glyph(ICONS[type] || 'text');
 const editorLink = (id) => `${NB.editor}/editor?open=${encodeURIComponent(id)}`;
 const SEED_KINDS = { L: 'line', S: 'lot', P: 'plant' };
 // GL-S-0042 (or S-0042 from before lab codes): the letter before the number says what it is.
@@ -190,7 +193,7 @@ const pickPlasmid = () => picker({
 const pickNote = (types, title = 'Choose a note') => picker({
   title, placeholder: 'Search by title',
   search: async (q) => (await api('GET', `/search?q=${encodeURIComponent(q)}&types=${(types || []).join(',')}`)).notes,
-  describe: (n) => [`${ICONS[n.type] || '📄'} `, el('b', { text: n.title }),
+  describe: (n) => [noteGlyph(n.type), ' ', el('b', { text: n.title }),
     n.owner && n.owner !== NB.person.username ? el('span', { class: 'hint' }, ` · ${n.owner}`) : null],
 });
 
@@ -201,7 +204,7 @@ const pickProtocol = () => picker({
     const all = (await api('GET', `/protocols?q=${encodeURIComponent(q)}`)).protocols;
     return [...all.filter((p) => p.favorite), ...all.filter((p) => !p.favorite)];
   },
-  describe: (p) => [p.favorite ? '★ ' : '🧪 ', el('b', { text: p.title }),
+  describe: (p) => [p.favorite ? '★ ' : [glyph('protocol'), ' '], el('b', { text: p.title }),
     el('span', { class: 'hint' }, `${p.folder ? ` · ${p.folder}` : ''} · by ${p.created_by || 'MoClo'}`)],
 });
 
@@ -213,7 +216,7 @@ const pickSeed = () => picker({
     if (!res.ok) throw new Error(res.status === 404 ? 'The seed bank is not part of this suite' : `Seed bank: ${res.status}`);
     return (await res.json()).results;
   },
-  describe: (r) => [{ line: '🧬 ', lot: '🫘 ', plant: '🌱 ' }[r.kind], el('b', { text: r.code }), ` ${r.label.slice(r.code.length)}`,
+  describe: (r) => [glyph({ line: 'line', lot: 'seedlot', plant: 'plant' }[r.kind] || 'plant'), ' ', el('b', { text: r.code }), ` ${r.label.slice(r.code.length)}`,
     el('span', { class: 'hint' }, ` · ${r.kind === 'lot' ? 'seed lot' : r.kind}`)],
 });
 
@@ -225,7 +228,7 @@ const pickStock = () => picker({
     if (!res.ok) throw new Error(res.status === 404 ? 'Lab Stocks is not part of this suite' : `Lab Stocks: ${res.status}`);
     return (await res.json()).results;
   },
-  describe: (r) => [{ glycerol: '🧫 ', primer: '🧬 ', chemical: '⚗️ ', antibody: '🔬 ', material: '🌿 ' }[r.kind] || '🧫 ', el('b', { text: r.code }), ` ${r.label.slice(r.code.length)}`,
+  describe: (r) => [glyph({ glycerol: 'stocks', primer: 'primer', chemical: 'protocol', antibody: 'antibody', material: 'leaf' }[r.kind] || 'stocks'), ' ', el('b', { text: r.code }), ` ${r.label.slice(r.code.length)}`,
     el('span', { class: 'hint' }, ` · ${{ glycerol: 'glycerol stock', material: 'plant material' }[r.kind] || r.kind}`)],
 });
 
@@ -282,9 +285,9 @@ const Tree = {
       class: `tree-row ${App.note?.id === item.id ? 'active' : ''}`,
       draggable: !isRoot && !['year', 'month', 'day'].includes(item.type) ? 'true' : null,
       title: item.cloned ? 'This note is in more than one place' : null,
-    }, toggle, el('span', { class: 'tree-icon' }, ICONS[item.type] || '📄'),
+    }, toggle, el('span', { class: 'tree-icon' }, noteGlyph(item.type)),
     el('span', { class: 'tree-title', text: item.title }), item.cloned ? el('span', { class: 'tree-clone' }, '⧉') : null,
-    item.shared ? el('span', { class: 'tree-shared', title: 'Shared to work on together' }, '👥') : null,
+    item.shared ? el('span', { class: 'tree-shared', title: 'Shared to work on together' }, glyph('people')) : null,
     // A page under this one, from right here, as in Trilium.
     editable ? el('button', {
       class: 'tree-add', title: `New page under “${item.title}”`,
@@ -383,7 +386,7 @@ const Search = {
       notes.length ? el('ul', { class: 'search-list' }, notes.map((n) => el('li', {
         class: 'search-hit', tabindex: '0', onclick: () => App.open(n.id),
         onkeydown: (e) => { if (e.key === 'Enter') App.open(n.id); },
-      }, el('div', { class: 'search-title' }, `${ICONS[n.type] || '📄'} `, mark(n.title)),
+      }, el('div', { class: 'search-title' }, noteGlyph(n.type), ' ', mark(n.title)),
       el('div', { class: 'hint' }, [n.space === 'library' ? 'Protocol library' : (n.owner !== NB.person.username ? `${n.owner}'s notebook` : ''),
         n.where].filter(Boolean).join(' › ')),
       n.snippet ? el('div', { class: 'search-snippet' }, mark(n.snippet)) : null)))
@@ -471,14 +474,14 @@ const Blocks = {
     block.lanes = block.lanes || [];
     const gel = block.order !== 'clicks';
     const words = gel
-      ? { one: 'Lane', label: 'Sample', labelHint: 'e.g. pGFP clone 3', noteHint: 'e.g. 5 µL, ladder', mark: '✚ Mark wells',
+      ? { one: 'Lane', label: 'Sample', labelHint: 'e.g. pGFP clone 3', noteHint: 'e.g. 5 µL, ladder', mark: '＋ Mark wells',
         markTitle: 'Click wells on the photo to add lanes', none: 'No wells marked', clear: 'Take away all the lanes?',
         title: 'Gel, e.g. Colony PCR, 1% agarose',
-        prompt: '👆 Click each well you loaded, in every row of wells. Lanes are numbered row by row, top to bottom, each row left to right; click a number to take it away.' }
-      : { one: 'No.', label: 'Label', labelHint: 'e.g. Col-0 #1', noteHint: 'e.g. resistant, flowering', mark: '✚ Number spots',
+        prompt: 'Click each well you loaded, in every row of wells. Lanes are numbered row by row, top to bottom, each row left to right; click a number to take it away.' }
+      : { one: 'No.', label: 'Label', labelHint: 'e.g. Col-0 #1', noteHint: 'e.g. resistant, flowering', mark: '＋ Number spots',
         markTitle: 'Click on the photo to number more spots', none: 'Nothing numbered', clear: 'Take away all the numbers?',
         title: 'Photo, e.g. T1 plants on hygromycin',
-        prompt: '👆 Click each one to number it: they are numbered in the order you click. Click a number to take it away.' };
+        prompt: 'Click each one to number it: they are numbered in the order you click. Click a number to take it away.' };
     let marking = !!block._marking && ctx.editable;
     const wrap = el('div', { class: 'gel-block' });
     const marks = new Map();       // lane id -> its number on the photo
@@ -558,7 +561,7 @@ const Blocks = {
           ctx.editable ? el('span', { class: 'table-tools' },
             !marking && block.attachment ? el('button', { class: 'btn btn-sm btn-secondary',
               title: 'Draw, write and number on the photo (the photo is kept as it is)',
-              onclick: () => App.markUp(block.attachment, { block }) }, '✏️ Mark up') : null,
+              onclick: () => App.markUp(block.attachment, { block }) }, glyph('pencil'), ' Mark up') : null,
             el('button', { class: `btn btn-sm ${marking ? 'btn-primary' : 'btn-secondary'}`,
               title: marking ? 'Stop numbering' : words.markTitle,
               onclick: () => { marking = !marking; block._marking = marking; draw(); } }, marking ? 'Done' : words.mark),
@@ -691,10 +694,10 @@ const Blocks = {
         title: 'Link to…',
         onClose: () => resolve(choice),
         build: (body, close) => body.append(el('div', { class: 'choice-row' },
-          el('button', { class: 'btn btn-primary', onclick: () => { choice = 'plasmid'; close(); } }, '🧬 A plasmid'),
-          el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'seed'; close(); } }, '🌱 A seed lot, plant or line'),
-          el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'stock'; close(); } }, '🧫 A stock, primer, chemical, antibody or plant material'),
-          el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'note'; close(); } }, '📄 A page or protocol'))),
+          el('button', { class: 'btn btn-primary', onclick: () => { choice = 'plasmid'; close(); } }, glyph('plasmid'), ' A plasmid'),
+          el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'seed'; close(); } }, glyph('plant'), ' A seed lot, plant or line'),
+          el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'stock'; close(); } }, glyph('stocks'), ' A stock, primer, chemical, antibody or plant material'),
+          el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'note'; close(); } }, glyph('text'), ' A page or protocol'))),
         buttons: [{ label: 'Just type @', kind: 'secondary' }],
       });
     });
@@ -775,7 +778,7 @@ const Blocks = {
     this.renderList(block.blocks, inner, ctx);
     return el('div', { class: 'section-box' },
       el('div', { class: 'section-head' },
-        el('span', { class: 'section-icon' }, src.kind === 'moclo-reaction' ? '🧬' : IMPORTED[src.kind]?.[0] || '🧪'),
+        el('span', { class: 'section-icon' }, glyph(src.kind === 'moclo-reaction' ? 'cassette' : IMPORTED[src.kind]?.[0] || 'protocol')),
         ctx.editable
           ? el('input', { type: 'text', class: 'section-title', value: block.title || '',
             oninput: (e) => { block.title = e.target.value; ctx.changed(); } })
@@ -876,7 +879,7 @@ const Blocks = {
         } }, block.scale ? 'No scaling' : 'Scale by reactions') : null,
         el('button', { class: `btn btn-sm ${design ? 'btn-primary' : 'btn-secondary'}`,
           title: 'Change the columns: their names, kinds, units and formulas',
-          onclick: () => { design = !design; block._design = design; draw(); } }, design ? 'Done' : '⚙ Columns'),
+          onclick: () => { design = !design; block._design = design; draw(); } }, design ? 'Done' : [glyph('gear'), ' Columns']),
       ) : null;
 
       put(wrap, 
@@ -992,7 +995,7 @@ const Shares = {
         const list = el('div');
         const draw = () => put(list, data.shares.length
           ? el('table', { class: 'library-table share-table' }, el('tbody', {}, data.shares.map((s) => el('tr', {},
-            el('td', {}, s.target_type === 'lab' ? '🏛 ' : '👤 ', el('b', { text: s.label })),
+            el('td', {}, glyph(s.target_type === 'lab' ? 'lab' : 'person'), ' ', el('b', { text: s.label })),
             el('td', { class: 'hint' }, `by ${s.created_by || '—'} · ${localTime(s.created_at)}`),
             el('td', { class: 'nowrap' }, el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
               try { data = await api('DELETE', `/shares/${s.id}`); draw(); onChange?.(); toast(`No longer shared with ${s.label}`, 'success'); } catch (err) { toast(err.message, 'error'); }
@@ -1000,8 +1003,8 @@ const Shares = {
           : el('p', { class: 'hint' }, notebook ? 'Not shared: only its owner, the lab\'s lead and administrators see it.'
             : page ? 'Not shared: only you (and your lab\'s lead) see it.' : 'Not shared: only its own lab sees it.'));
         const options = [
-          ...(data.labs || []).map((lab) => ({ value: `lab:${lab.id}`, label: `🏛 ${lab.name} (the whole lab)` })),
-          ...(data.people || []).map((u) => ({ value: `person:${u}`, label: `👤 ${u}` })),
+          ...(data.labs || []).map((lab) => ({ value: `lab:${lab.id}`, label: `${lab.name} (the whole lab)` })),
+          ...(data.people || []).map((u) => ({ value: `person:${u}`, label: u })),
         ];
         const select = el('select', { class: 'share-select' }, el('option', { value: '' }, notebook || page ? 'Choose a lab or a person…' : 'Choose a lab…'),
           options.map((o) => el('option', { value: o.value }, o.label)));
@@ -1107,7 +1110,7 @@ const App = {
     this.favorites = new Set(favs.map((f) => f.id));
     put(document.getElementById('favList'), favs.length
       ? favs.map((f) => el('li', { class: `fav-item ${this.note?.id === f.id ? 'active' : ''}`, 'data-id': f.id,
-        onclick: () => this.open(f.id) }, el('span', { class: 'tree-icon' }, '🧪'), el('span', { class: 'tree-title', text: f.title })))
+        onclick: () => this.open(f.id) }, el('span', { class: 'tree-icon' }, glyph('protocol')), el('span', { class: 'tree-title', text: f.title })))
       : el('li', { class: 'hint fav-empty' }, 'Star a protocol (☆) to keep it here.'));
   },
 
@@ -1132,7 +1135,7 @@ const App = {
       nb.can_share ? el('button', { class: 'tree-act', title: `Share ${nb.owner}'s notebook with a lab or a person`, onclick: (e) => {
         e.stopPropagation();
         Shares.open({ id: nb.id, title: `${nb.owner}'s notebook`, kind: 'notebook' });
-      } }, '👥') : null,
+      } }, glyph('people')) : null,
     ].filter(Boolean);
     const groups = [['othersSection', 'treeOthers', (this.me.others || []).filter((nb) => !nb.shared)],
       ['sharedSection', 'treeShared', (this.me.others || []).filter((nb) => nb.shared)]];
@@ -1264,15 +1267,15 @@ const App = {
 
     const owner = note.space === 'notebook' && note.owner !== NB.person.username;
     const meta = el('div', { class: 'note-meta' },
-      el('span', { class: `badge badge-${note.type}` }, `${ICONS[note.type] || ''} ${note.type}`),
+      el('span', { class: `badge badge-${note.type}` }, noteGlyph(note.type), ` ${note.type}`),
       owner ? el('span', { class: 'badge badge-owner' }, `${note.owner}'s notebook`) : null,
       !editable ? el('span', { class: 'badge badge-readonly' }, 'read only') : null,
       ...(note.shared_in || []).map((r) => el('span', {
         class: 'badge badge-shared',
         title: r.id === note.id ? 'Shared to work on together' : `Part of “${r.title}”, shared to work on together`,
       }, note.owner === NB.person.username
-        ? `👥 shared with ${r.with.join(', ')}${r.id === note.id ? '' : ` (in ${r.title})`}`
-        : `👥 shared by ${note.owner}${r.id === note.id ? '' : ` (in ${r.title})`}`)),
+        ? [glyph('people'), ` shared with ${r.with.join(', ')}${r.id === note.id ? '' : ` (in ${r.title})`}`]
+        : [glyph('people'), ` shared by ${note.owner}${r.id === note.id ? '' : ` (in ${r.title})`}`])),
       el('span', { class: 'hint' }, note.updated_by || note.created_by
         ? `Last saved by ${note.updated_by || note.created_by} · ${localTime(note.updated_at)}`
         : `Supplied with the Lab Notebook · ${localTime(note.updated_at)}`),
@@ -1297,12 +1300,12 @@ const App = {
           title: note.space === 'library' ? 'Share this protocol with other labs'
             : 'Share this page and the pages under it with people of your chair group, to work on together',
           onclick: () => Shares.open({ id: note.id, title: note.title, kind: note.type, onChange: () => this.refresh() }),
-        }, '👥 Share') : null,
+        }, glyph('people'), ' Share') : null,
         el('button', {
           class: 'btn btn-secondary btn-sm', title: note.has_children ? 'Export this page and everything under it, as a PDF or a Word document' : 'Export as a PDF or a Word document',
           onclick: async () => { await this.flush(); Exports.open({ id: note.id, title: note.title, hasChildren: note.has_children, kind: note.type }); },
         }, '⤓ Export'),
-        el('button', { class: 'btn btn-secondary btn-sm', onclick: () => this.history() }, '🕘 History'),
+        el('button', { class: 'btn btn-secondary btn-sm', onclick: () => this.history() }, glyph('history'), ' History'),
         el('button', { class: 'btn btn-secondary btn-sm', title: 'Copy, move, place elsewhere, delete', onclick: () => this.moreMenu() }, '⋯')));
 
     const blocks = el('div', { class: 'blocks' });
@@ -1330,19 +1333,19 @@ const App = {
           { name: 'Total', kind: 'formula', unit: 'µL', formula: '=B*N' }, { name: 'Added', kind: 'check' }],
         rows: [0, 1, 2].map(() => ({ id: newId(), cells: ['', '', '', null] })),
       }) }, '▦ Table'),
-      el('button', { class: 'btn btn-secondary btn-sm', onclick: () => add({ id: newId(), type: 'steps', title: '', items: [{ id: newId(), text: '' }] }) }, '☑ Steps'),
+      el('button', { class: 'btn btn-secondary btn-sm', onclick: () => add({ id: newId(), type: 'steps', title: '', items: [{ id: newId(), text: '' }] }) }, glyph('steps'), ' Steps'),
       el('button', { class: 'btn btn-secondary btn-sm', title: 'A gel photo: click the wells you used, and name the sample in each',
         onclick: () => this.addGel(note, add) }, '▥ Gel photo…'),
       note.space === 'notebook' ? el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
         const protocol = await pickProtocol();
         if (!protocol) return;
         try { add((await api('GET', `/protocols/${protocol.id}/snapshot`)).section); } catch (err) { toast(err.message, 'error'); }
-      } }, '🧪 Protocol…') : null,
+      } }, glyph('protocol'), ' Protocol…') : null,
       el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
         try { const section = await pickMocloReaction(); if (section) add(section); } catch (err) { toast(err.message, 'error'); }
-      } }, '🧬 MoClo reaction…'),
+      } }, glyph('cassette'), ' MoClo reaction…'),
       el('label', { class: 'btn btn-secondary btn-sm', title: 'Attach photos or files: they are shown or linked here, and listed under Attachments. You can also paste or drop them into text.' },
-        '📎 Attach…', el('input', { type: 'file', multiple: true, hidden: true, onchange: async (e) => {
+        glyph('attach'), ' Attach…', el('input', { type: 'file', multiple: true, hidden: true, onchange: async (e) => {
           const files = [...e.target.files];
           e.target.value = '';
           const added = await this.upload(note, files);
@@ -1370,7 +1373,7 @@ const App = {
           Blocks.renderList(note.content, blocks, ctx);
           this.changed();
         } else add({ id: newId(), type: 'text', html: `<p>${html}</p>` });
-      } }, '🌱 Seed…'),
+      } }, glyph('plant'), ' Seed…'),
       el('button', { class: 'btn btn-secondary btn-sm', title: 'Add a link to a glycerol stock, primer, chemical, antibody or plant material in Lab Stocks', onclick: async () => {
         let s;
         try { s = await pickStock(); } catch (err) { toast(err.message, 'error'); return; }
@@ -1382,7 +1385,7 @@ const App = {
           Blocks.renderList(note.content, blocks, ctx);
           this.changed();
         } else add({ id: newId(), type: 'text', html: `<p>${html}</p>` });
-      } }, '🧫 Stock…'),
+      } }, glyph('stocks'), ' Stock…'),
       el('button', { class: 'btn btn-secondary btn-sm', title: 'Add a link to a plasmid, which opens it in the Plasmid Editor', onclick: async () => {
         const p = await pickPlasmid();
         if (!p) return;
@@ -1393,7 +1396,7 @@ const App = {
           Blocks.renderList(note.content, blocks, ctx);
           this.changed();
         } else add({ id: newId(), type: 'text', html: `<p>${link}</p>` });
-      } }, '🔗 Plasmid…'));
+      } }, glyph('plasmid'), ' Plasmid…'));
   },
 
   /** A photo clicked in text: offer to mark it up, or to open it. */
@@ -1404,7 +1407,7 @@ const App = {
     const menu = el('div', { class: 'photo-menu', id: 'photoMenu',
       style: `top:${r.top + window.scrollY + 8}px;left:${r.left + window.scrollX + 8}px` },
     el('button', { class: 'btn btn-primary btn-sm', title: 'Draw and write on it (the photo is kept as it is)',
-      onclick: () => { menu.remove(); this.markUp(id); } }, '✏️ Mark up'),
+      onclick: () => { menu.remove(); this.markUp(id); } }, glyph('pencil'), ' Mark up'),
     el('button', { class: 'btn btn-secondary btn-sm', onclick: () => { menu.remove(); window.open(attachmentUrl(id), '_blank', 'noopener'); } }, '↗ Open'));
     document.body.append(menu);
     const away = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', away, true); } };
@@ -1504,7 +1507,7 @@ const App = {
         el('div', { class: 'gel-choices' }, photos.map((a) => el('button', { class: 'gel-choice', title: a.filename,
           onclick: () => { close(); start(a); } },
           el('img', { src: attachmentUrl(a.id), alt: '', loading: 'lazy' }), el('span', { class: 'hint', text: a.filename })))),
-        el('button', { class: 'btn btn-primary', onclick: () => { close(); upload(); } }, '📷 Upload a new photo')),
+        el('button', { class: 'btn btn-primary', onclick: () => { close(); upload(); } }, glyph('camera'), ' Upload a new photo')),
       buttons: [{ label: 'Cancel', kind: 'secondary' }],
     });
   },
@@ -1558,12 +1561,12 @@ const App = {
       this.changed();
     };
     return el('section', { class: 'attachments-panel', id: 'attachmentPanel' },
-      el('div', { class: 'tree-head' }, `📎 Attachments (${list.length})`),
+      el('div', { class: 'tree-head' }, glyph('attach'), ` Attachments (${list.length})`),
       el('ul', { class: 'attachment-list' }, list.map((a) => el('li', { class: 'attachment' },
         a.image
           ? el('img', { class: 'attachment-thumb', src: attachmentUrl(a.id), alt: '', loading: 'lazy',
             onclick: () => window.open(attachmentUrl(a.id), '_blank', 'noopener') })
-          : el('span', { class: 'attachment-icon', title: a.kind }, FILE_ICONS[a.kind] || '📎'),
+          : el('span', { class: 'attachment-icon', title: a.kind }, glyph(FILE_ICONS[a.kind] || 'attach')),
         el('div', { class: 'attachment-info' },
           el('a', { href: attachmentUrl(a.id), target: '_blank', rel: 'noopener', text: a.filename,
             title: a.image || a.preview ? 'Open it in a new tab' : 'Download, to open in its program' }),
@@ -1571,7 +1574,7 @@ const App = {
         el('span', { class: 'attachment-actions' },
           el('a', { class: 'btn btn-secondary btn-sm', href: attachmentUrl(a.id, true), title: 'Download' }, '⤓'),
           note.can_edit && a.image ? el('button', { class: 'btn btn-secondary btn-sm', title: 'Draw and write on it (the photo is kept as it is)',
-            onclick: () => this.markUp(a.id) }, '✏️') : null,
+            onclick: () => this.markUp(a.id) }, glyph('pencil')) : null,
           note.can_edit ? el('button', { class: 'btn btn-secondary btn-sm', title: 'Show it at the end of the page',
             onclick: () => insert(a) }, 'Insert') : null,
           note.can_edit ? el('button', { class: 'btn btn-secondary btn-sm', title: 'Remove from this note (earlier versions keep it)',
@@ -1678,7 +1681,7 @@ const App = {
     };
     const panel = el('details', { class: 'bookings-panel', open: !store.get('hideBookings', false),
       ontoggle: (e) => store.set('hideBookings', !e.target.open) },
-    el('summary', {}, `📅 Bookings${data.items.length ? ` (${data.items.length})` : ''}`,
+    el('summary', {}, glyph('calendar'), ` Bookings${data.items.length ? ` (${data.items.length})` : ''}`,
       data.items.length && !data.live ? el('span', { class: 'hint' }, ' · as booked; kept with the day') : null),
     data.items.length ? el('ul', { class: 'booking-list' }, data.items.map(row)) : el('p', { class: 'hint' }, 'Nothing booked today.'),
     data.upcoming.length ? el('div', { class: 'booking-upcoming' }, el('span', { class: 'hint' }, 'Coming up: '),
@@ -1748,7 +1751,7 @@ const App = {
           close();
           modal({
             title: `Delete “${note.title}”?`,
-            build: (b) => b.append(el('p', {}, 'It and the pages under it go to 🗑 Deleted, at the bottom of the left-hand side, ',
+            build: (b) => b.append(el('p', {}, 'It and the pages under it go to Deleted, at the bottom of the left-hand side, ',
               'where you (or an administrator) can bring them back.')),
             buttons: [{ label: 'Cancel', kind: 'secondary' }, {
               label: 'Delete', kind: 'danger',
@@ -1759,11 +1762,11 @@ const App = {
                 await this.reloadTrees();
                 if (parent && !['notebook', 'library'].includes(parent.type)) this.open(parent.id);
                 else this.showEmpty();
-                toast('Deleted: it can be brought back from 🗑 Deleted', 'success', 5000);
+                toast('Deleted: it can be brought back from Deleted', 'success', 5000);
               },
             }],
           });
-        } }, '🗑 Delete') : null)),
+        } }, glyph('trash'), ' Delete') : null)),
     });
   },
 
@@ -1779,7 +1782,7 @@ const App = {
           .filter((n) => n.space === note.space && n.id !== note.id && (note.space === 'library' || n.owner === note.owner));
         return q || (note.space === 'notebook' && note.owner !== NB.person.username) ? found : [top, ...found];
       },
-      describe: (n) => [`${ICONS[n.type] || '📄'} `, el('b', { text: n.title }), n.where ? el('span', { class: 'hint' }, ` · ${n.where}`) : null],
+      describe: (n) => [noteGlyph(n.type), ' ', el('b', { text: n.title }), n.where ? el('span', { class: 'hint' }, ` · ${n.where}`) : null],
     });
     if (!target) return;
     try {
@@ -1834,7 +1837,7 @@ const App = {
       }
       const folders = [...groups.keys()].sort((a, b) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)));
       put(list, protocols.length ? folders.map((folder) => el('div', { class: 'library-group' },
-        folder ? el('h3', { class: 'library-folder' }, `📁 ${folder}`) : null,
+        folder ? el('h3', { class: 'library-folder' }, glyph('folder'), ` ${folder}`) : null,
         el('table', { class: 'library-table' }, el('tbody', {}, groups.get(folder).map((p) => el('tr', {},
           el('td', { class: 'star-cell' }, el('button', {
             class: `star-btn ${p.favorite ? 'on' : ''}`, title: p.favorite ? 'Remove from favourites' : 'Add to favourites',
@@ -1862,14 +1865,14 @@ const App = {
     onlyFav.addEventListener('change', draw);
     put(box,
       el('div', { class: 'library-head' },
-        el('h1', {}, '🧪 Protocol library'),
+        el('h1', {}, glyph('protocol'), ' Protocol library'),
         el('span', { class: 'note-actions' },
           el('button', { class: 'btn btn-primary btn-sm', onclick: () => this.newNote('library', this.me.library, 'protocol') }, '＋ New protocol'),
           el('button', { class: 'btn btn-secondary btn-sm', onclick: () => this.newNote('library', this.me.library, 'folder') }, '＋ New folder'),
           el('button', { class: 'btn btn-secondary btn-sm', title: 'Every protocol you can see, as a PDF or a Word document',
             onclick: () => Exports.open({ id: this.me.library, title: 'Protocol library', kind: 'notebook' }) }, '⤓ Export'))),
       el('p', { class: 'hint' }, 'Your lab\'s protocols, the ones other labs share with it, and those supplied with the notebook. ',
-        'Anyone can add a protocol; its author, their lab lead and administrators can change it, and share it with other labs (👥 Share, on the protocol). ',
+        'Anyone can add a protocol; its author, their lab lead and administrators can change it, and share it with other labs (Share, on the protocol). ',
         'Star the ones you use most: they are listed on the left, and offered first when you add a protocol to a page.'),
       el('div', { class: 'library-filters' }, query, el('label', { class: 'checkbox' }, onlyFav, ' Favourites only')),
       list);
@@ -1888,12 +1891,12 @@ const App = {
     const draw = async () => {
       const { deleted } = await api('GET', '/deleted');
       put(box,
-        el('div', { class: 'library-head' }, el('h1', {}, '🗑 Deleted')),
+        el('div', { class: 'library-head' }, el('h1', {}, glyph('trash'), ' Deleted')),
         el('p', { class: 'hint' }, NB.person.role === 'admin'
           ? 'Everything deleted from any notebook or the protocol library. Restoring brings back what was deleted with it, to where it was.'
           : 'What you deleted from your notebook, and protocols you may change. Restoring brings back what was deleted with it, to where it was.'),
         deleted.length ? el('table', { class: 'library-table deleted-table' }, el('tbody', {}, deleted.map((d) => el('tr', {},
-          el('td', {}, el('div', { class: 'library-title' }, `${ICONS[d.type] || '📄'} ${d.title}`),
+          el('td', {}, el('div', { class: 'library-title' }, noteGlyph(d.type), ` ${d.title}`),
             el('div', { class: 'hint' },
               d.space === 'library' ? 'Protocol library' : (d.owner !== NB.person.username ? `${d.owner}'s notebook` : 'My notebook'),
               d.was_under ? ` › ${d.was_under}${d.parent_deleted ? ' (deleted too)' : ''}` : '',

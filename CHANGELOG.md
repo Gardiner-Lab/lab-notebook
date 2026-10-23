@@ -5,6 +5,15 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **Trellis Tools' look**: the header every module shares (Trellis Tools, then this module's icon and name,
+  its tabs, the person and Log out), and the suite's palette - green for what you do, brown for structure,
+  on warm paper-white - from static/trellis/trellis.css, copied in from the suite (design/sync.sh). Links to plasmids,
+  stocks and seeds take the colour of the module they open; the Bookings box Booking's plum.
+- Trellis Tools' small icons instead of emoji: page types, what other tools put into a day, links to plasmids,
+  stocks and seeds, attachments, sharing and the tools of a page. Exports say "Attachment:" where they had 📎;
+  what people wrote in their pages is left as it is.
+
 ## [0.15.1] - 2026-10-23
 
 ### Changed

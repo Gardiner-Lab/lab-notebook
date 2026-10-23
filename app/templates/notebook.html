@@ -4,24 +4,25 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Lab Notebook</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📓</text></svg>">
+    <link rel="icon" type="image/svg+xml" href="{{ request.script_root }}/static/trellis/notebook.svg">
+    <link rel="stylesheet" href="{{ request.script_root }}/static/trellis/trellis.css?v={{ version }}">
     <link rel="stylesheet" href="{{ request.script_root }}/static/css/notebook.css?v={{ version }}">
 </head>
-<body>
-<header class="topbar">
-    <a class="topbar-back" href="{{ links.suite_home }}">← Lab tools</a>
-    <span class="topbar-title">📓 Lab Notebook</span>
-    <nav class="view-tabs" aria-label="Views">
-        <a class="view-tab" id="tabNotebook" href="#">📓 Notebook</a>
-        <a class="view-tab" id="tabProtocols" href="#protocols">🧪 Protocols</a>
+<body class="tt">
+<header class="tt-bar">
+    <a class="tt-home" href="{{ links.suite_home }}" title="All of Trellis Tools"><img src="{{ request.script_root }}/static/trellis/trellis.svg" alt=""><span>Trellis Tools</span></a>
+    <a class="tt-module" href="{{ request.script_root }}/"><img src="{{ request.script_root }}/static/trellis/notebook.svg" alt="">Lab Notebook</a>
+    <nav class="tt-tabs view-tabs" aria-label="Views">
+        <a class="tt-tab view-tab" id="tabNotebook" href="#">Notebook</a>
+        <a class="tt-tab view-tab" id="tabProtocols" href="#protocols">Protocols</a>
     </nav>
-    <nav class="topbar-nav">
+    <nav class="tt-links">
         <a href="{{ links.editor }}/editor" target="_blank" rel="noopener">Plasmid Editor ↗</a>
         <a href="{{ links.moclo }}/parts" target="_blank" rel="noopener">MoClo ↗</a>
         <a href="{{ request.script_root }}/about">About</a>
     </nav>
-    <span class="topbar-user">{{ person.username }}{% if person.role != 'member' %} · {{ 'admin' if person.role == 'admin' else 'lab lead' }}{% endif %}</span>
-    <a class="topbar-logout" href="{{ links.logout }}">Log out</a>
+    <span class="tt-user">{{ person.username }}{% if person.role != 'member' %} · {{ 'admin' if person.role == 'admin' else 'lab lead' }}{% endif %}</span>
+    <a class="tt-logout" href="{{ links.logout }}">Log out</a>
 </header>
 
 <div class="shell">
@@ -36,13 +37,13 @@
             <div class="tree-head">
                 <span>My notebook</span>
                 <span class="tree-head-tools">
-                    <button class="icon-btn" id="btnShareMine" title="Share my notebook with a lab or a person" hidden>👥</button>
+                    <button class="icon-btn" id="btnShareMine" title="Share my notebook with a lab or a person" hidden><img class="tt-glyph" src="{{ request.script_root }}/static/trellis/glyphs/people.svg" alt=""></button>
                     <button class="icon-btn" id="btnExportMine" title="Export my whole notebook as a PDF or a Word document">⤓</button>
                     <button class="icon-btn" id="btnNewPage" title="New page in my notebook">＋</button>
                 </span>
             </div>
             <div class="day-bar">
-                <button class="btn btn-primary" id="btnToday" title="Open today's page, starting it if needed">📅 Start today</button>
+                <button class="btn btn-primary" id="btnToday" title="Open today's page, starting it if needed"><img class="tt-glyph" src="{{ request.script_root }}/static/trellis/glyphs/calendar.svg" alt=""> Start today</button>
                 <input type="date" id="dayPicker" title="Open or start another day">
             </div>
             <div class="tree" id="treeMine"></div>
@@ -62,7 +63,7 @@
             <div class="tree-head"><span title="Pages shared with you to work on together, and notebooks a lab lead has shared with you or your lab">Shared with me</span></div>
             <div class="tree" id="treeShared"></div>
         </section>
-        <a class="deleted-link" href="#deleted" title="Pages and protocols that were deleted, to bring back">🗑 Deleted</a>
+        <a class="deleted-link" href="#deleted" title="Pages and protocols that were deleted, to bring back"><img class="tt-glyph" src="{{ request.script_root }}/static/trellis/glyphs/trash.svg" alt=""> Deleted</a>
         </div>
     </aside>
 

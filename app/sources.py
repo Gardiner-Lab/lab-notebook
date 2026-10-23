@@ -242,25 +242,25 @@ def howto_protocol() -> List[dict]:
              'change the numbers to see what happens, then use <b>⋯ › Make a copy</b> to start your own '
              'protocol from this one, and delete what you do not need.</p>'
              '<h3>1. Make a protocol</h3>'
-             '<ul><li>Open the <b>🧪 Protocols</b> tab and click <b>＋ New protocol</b>, or <b>＋ New folder</b> '
+             '<ul><li>Open the <b>Protocols</b> tab and click <b>＋ New protocol</b>, or <b>＋ New folder</b> '
              'to group protocols.</li>'
              '<li>Give it a clear title: it is what people search for.</li>'
              '<li>Add blocks with the <b>Add:</b> bar at the bottom: <b>¶ Text</b>, <b>▦ Table</b> and '
-             '<b>☑ Steps</b>. Hover over a block for ↑ ↓ to move it and ✕ to remove it.</li>'
+             '<b>Steps</b>. Hover over a block for ↑ ↓ to move it and ✕ to remove it.</li>'
              '<li>Text has a small bar for <b>bold</b>, <i>italic</i>, headings and lists. Type <b>@</b> to '
              'link a plasmid, which opens in the Plasmid Editor, or another protocol or page.</li>'
-             '<li>Everything saves as you go. <b>🕘 History</b> keeps every version, and can roll back to any of them.</li>'
+             '<li>Everything saves as you go. <b>History</b> keeps every version, and can roll back to any of them.</li>'
              '</ul>'
              '<h3>2. Who can change it</h3>'
              '<p>Everyone can use every protocol. A protocol can be changed by whoever wrote it, their lab lead '
              'and administrators. Star it (<b>☆ Favourite</b>) to keep it in your sidebar.</p>'
              '<h3>3. Using it on a day</h3>'
-             '<p><b>＋ Use today</b> puts the protocol into today\'s page, or use <b>🧪 Protocol…</b> on any '
+             '<p><b>＋ Use today</b> puts the protocol into today\'s page, or use <b>Protocol…</b> on any '
              'page. The page keeps a copy of the version used: change the volumes, fill in the yellow cells and '
              'tick things off there, and the protocol itself stays as it is. The protocol lists the days it '
              'was used on.</p>'
              '<h3>4. Active tables</h3>'
-             '<p>Tables work things out. Each column has a <b>kind</b>, set with <b>⚙ Columns</b> under the '
+             '<p>Tables work things out. Each column has a <b>kind</b>, set with <b>Columns</b> under the '
              'table:</p>'
              '<ul><li><b>Text</b>: words, as typed.</li>'
              '<li><b>Number</b>: a number, as typed.</li>'
@@ -327,13 +327,13 @@ def howto_protocol() -> List[dict]:
                 ['Plate on selective medium', '100 µL', '', '', None]]),
 
         text('<h3>Example 5: steps to tick off</h3>'
-             '<p>A <b>☑ Steps</b> block is a numbered list to tick off as you go. Like ticks in tables, '
+             '<p>A <b>Steps</b> block is a numbered list to tick off as you go. Like ticks in tables, '
              'each records who ticked it and when.</p>'),
         {'type': 'steps', 'title': 'Writing your first protocol', 'items': [
             {'text': 'Open this protocol and choose ⋯ › Make a copy'},
             {'text': 'Rename the copy, and move it into a folder with ⋯ › Move to…'},
             {'text': 'Delete the examples you do not need (hover, then ✕)'},
-            {'text': 'Change the tables: ⚙ Columns for names, kinds, units and formulas; ＋ Row for rows'},
+            {'text': 'Change the tables: Columns for names, kinds, units and formulas; ＋ Row for rows'},
             {'text': 'Star it, and try it out with ＋ Use today'},
         ]},
 

@@ -137,7 +137,7 @@ class _Builder:
 
     def embedded(self, f: dict) -> str:
         return (f'<a rel="attachment" href="{esc(self.url(f))}" title="Open it from the PDF">'
-                f'📎 {esc(f["filename"])}</a>')
+                f'Attachment: {esc(f["filename"])}</a>')
 
     def shown(self, att_id: str) -> str:
         """A file as it goes into the document below its mention: its pages, its text, or a note it is embedded."""
@@ -205,7 +205,7 @@ class _Builder:
                     f = self._file(attrs['data-attachment'])
                     node.attrs = {'href': f'#att-{attrs["data-attachment"]}'} if f else {}
                     if f:
-                        node.children = [f'📎 {f["filename"]}']
+                        node.children = [f'Attachment: {f["filename"]}']
                         after.append(attrs['data-attachment'])
                     continue
                 href = (self.ctx.note_link(attrs['data-note']) if attrs.get('data-note') else

@@ -159,7 +159,7 @@ class _Writer:
             return
         path = self._beside(f)
         p = doc.add_paragraph()
-        p.add_run('📎 ')
+        p.add_run('Attachment: ')
         self.link(p, f['filename'], url=path)
         if f['mime'] == 'application/pdf':
             reader = exporting.pdf_reader(f['data'])
@@ -324,7 +324,7 @@ class _Writer:
                 f = self._file(attrs['data-attachment'])
                 if f:
                     after.append(attrs['data-attachment'])
-                    self.link(p, f'📎 {f["filename"]}', anchor=f'a{attrs["data-attachment"][:30]}')
+                    self.link(p, f'Attachment: {f["filename"]}', anchor=f'a{attrs["data-attachment"][:30]}')
                 return
             if attrs.get('data-note'):
                 target = attrs['data-note']
