@@ -123,6 +123,23 @@ CREATE TABLE IF NOT EXISTS shares (
     UNIQUE (note_id, target_type, target)
 );
 CREATE INDEX IF NOT EXISTS idx_shares_target ON shares(target_type, target);
+
+-- A day's bookings from the Booking tool, kept as they stood once the day was
+-- over (app/bookings.py), and what was written about each.
+CREATE TABLE IF NOT EXISTS day_bookings (
+    note_id TEXT PRIMARY KEY,
+    day TEXT NOT NULL,
+    bookings TEXT NOT NULL,
+    frozen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS booking_notes (
+    note_id TEXT NOT NULL,
+    booking_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    updated_by TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (note_id, booking_id)
+);
 """
 
 

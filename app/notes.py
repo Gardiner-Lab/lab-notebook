@@ -35,6 +35,7 @@ from typing import Any, Dict, List, Optional, Set
 from flask import g, has_app_context
 
 from app import attachments
+from app import bookings as bookings_mod
 from app import content as content_mod
 from app import people as people_mod
 from app.db import connect
@@ -272,8 +273,40 @@ def get(person: Person, note_id: str) -> dict:
                                           (person.username, note_id)).fetchone()),
             'attachments': attachments.listed(conn, note_id),
         }
+        # A day: its bookings in the Booking tool, of whoever the notebook belongs to.
+        iso = day_of(note)
+        if iso and row['owner']:
+            note['bookings'] = bookings_mod.on_day(conn, note_id, row['owner'], date.fromisoformat(iso))
     note['backlinks'] = [summary(b) for b in backlinks if can_view(person, b)]
     return note
+
+
+def day_of(note) -> Optional[str]:
+    """A day's date (YYYY-MM-DD), from its dateNote label; None for any other note."""
+    if note['type'] != 'day':
+        return None
+    return next((a['value'] for a in note['attributes'] if a['name'] == 'dateNote' and a['value']), None)
+
+
+def pages_for_bookings(person: Person) -> List[str]:
+    """
+    A page for every day they have a booking on (app/bookings.py), so a booking
+    made or tagged in shows up in their notebook as that day's entry. Pages are
+    only ever added here: a day stays if its booking is cancelled, as anything
+    written on it is theirs.
+    """
+    return [day(person, d) for d in bookings_mod.booked_days(person.username)]
+
+
+def write_booking_note(person: Person, note_id: str, booking_id: str, text: str) -> None:
+    """What someone writes about one of a day's bookings: what they did with the time."""
+    note = get(person, note_id)
+    if not note['can_edit']:
+        raise Forbidden('Only whoever can change this day writes on it')
+    if booking_id not in {b['id'] for b in (note.get('bookings') or {}).get('items', [])}:
+        raise NotFound('That booking is not on this day')
+    with connect() as conn:
+        bookings_mod.write_note(conn, note_id, booking_id, text, person.username)
 
 
 def children(person: Person, parent_id: str) -> List[dict]:
