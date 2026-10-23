@@ -271,6 +271,7 @@ const Tree = {
       title: item.cloned ? 'This note is in more than one place' : null,
     }, toggle, el('span', { class: 'tree-icon' }, ICONS[item.type] || '📄'),
     el('span', { class: 'tree-title', text: item.title }), item.cloned ? el('span', { class: 'tree-clone' }, '⧉') : null,
+    item.shared ? el('span', { class: 'tree-shared', title: 'Shared to work on together' }, '👥') : null,
     // A page under this one, from right here, as in Trilium.
     editable ? el('button', {
       class: 'tree-add', title: `New page under “${item.title}”`,
@@ -965,11 +966,12 @@ const Exports = {
 };
 
 const Shares = {
-  /** Who a notebook or protocol is shared with; share it with more, or retract a share. */
-  async open({ id, title, kind }) {
+  /** Who a notebook, protocol or page is shared with; share it with more, or retract a share. */
+  async open({ id, title, kind, onChange = null }) {
     let data;
     try { data = await api('GET', `/notes/${id}/shares`); } catch (err) { toast(err.message, 'error'); return; }
     const notebook = kind === 'notebook';
+    const page = kind === 'page' || kind === 'day';
     modal({
       title: `Share “${title}”`,
       build: (body) => {
@@ -979,20 +981,24 @@ const Shares = {
             el('td', {}, s.target_type === 'lab' ? '🏛 ' : '👤 ', el('b', { text: s.label })),
             el('td', { class: 'hint' }, `by ${s.created_by || '—'} · ${localTime(s.created_at)}`),
             el('td', { class: 'nowrap' }, el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
-              try { data = await api('DELETE', `/shares/${s.id}`); draw(); toast(`No longer shared with ${s.label}`, 'success'); } catch (err) { toast(err.message, 'error'); }
+              try { data = await api('DELETE', `/shares/${s.id}`); draw(); onChange?.(); toast(`No longer shared with ${s.label}`, 'success'); } catch (err) { toast(err.message, 'error'); }
             } }, 'Retract'))))))
           : el('p', { class: 'hint' }, notebook ? 'Not shared: only its owner, the lab\'s lead and administrators see it.'
-            : 'Not shared: only its own lab sees it.'));
+            : page ? 'Not shared: only you (and your lab\'s lead) see it.' : 'Not shared: only its own lab sees it.'));
         const options = [
           ...(data.labs || []).map((lab) => ({ value: `lab:${lab.id}`, label: `🏛 ${lab.name} (the whole lab)` })),
           ...(data.people || []).map((u) => ({ value: `person:${u}`, label: `👤 ${u}` })),
         ];
-        const select = el('select', { class: 'share-select' }, el('option', { value: '' }, notebook ? 'Choose a lab or a person…' : 'Choose a lab…'),
+        const select = el('select', { class: 'share-select' }, el('option', { value: '' }, notebook || page ? 'Choose a lab or a person…' : 'Choose a lab…'),
           options.map((o) => el('option', { value: o.value }, o.label)));
         body.append(
-          el('p', { class: 'hint' }, notebook
-            ? 'Whoever it is shared with can open, search and export this notebook. Only its owner changes it. '
-            : 'The lab it is shared with can open, use, copy and export this protocol. Only its author, their lead and administrators change it. ',
+          el('p', { class: 'hint' }, page
+            ? ['To work on together, with people and labs of your chair group: they open this page and the pages under it, ',
+              'change them, add pages under them, and can show it under a page of their own as well. It stays in your notebook, ',
+              'every change by anyone shows for everyone, and the history keeps who changed what. ']
+            : notebook
+              ? 'Whoever it is shared with can open, search and export this notebook. Only its owner changes it. '
+              : 'The lab it is shared with can open, use, copy and export this protocol. Only its author, their lead and administrators change it. ',
           'A share stays until it is retracted here.'),
           list,
           el('div', { class: 'form-row' }, select, el('button', { class: 'btn btn-primary btn-sm', onclick: async () => {
@@ -1002,6 +1008,7 @@ const Shares = {
               data = await api('POST', `/notes/${id}/shares`, { target_type, target: rest.join(':') });
               select.value = '';
               draw();
+              onChange?.();
             } catch (err) { toast(err.message, 'error'); }
           } }, 'Share')));
         draw();
@@ -1044,6 +1051,7 @@ const App = {
     window.addEventListener('hashchange', () => this.route());
     window.addEventListener('beforeunload', () => { if (this.dirty) this.save({ keepalive: true }); });
     Search.init();
+    this.watch();
     await Promise.all([this.reloadTrees(), this.loadFavorites()]);
     if (location.hash.startsWith('#protocols') || location.hash.startsWith('#deleted')) this.route();
     else {
@@ -1098,6 +1106,8 @@ const App = {
   hashNote() { return (location.hash.match(/note=([\w-]+)/) || [])[1] || null; },
 
   async reloadTrees() {
+    // What others share may have changed since the page was opened.
+    try { this.me = await api('GET', '/me'); } catch { /* keep what we had */ }
     await Tree.mount(document.getElementById('treeMine'), this.me.notebook, { editable: true });
     // A notebook's own buttons: export it whole, and share it (its lab's lead, or an admin).
     const actions = (nb) => [
@@ -1112,9 +1122,10 @@ const App = {
     ].filter(Boolean);
     const groups = [['othersSection', 'treeOthers', (this.me.others || []).filter((nb) => !nb.shared)],
       ['sharedSection', 'treeShared', (this.me.others || []).filter((nb) => nb.shared)]];
+    const pages = this.me.shared_pages || [];
     for (const [sectionId, boxId, list] of groups) {
       const section = document.getElementById(sectionId);
-      section.hidden = !list.length;
+      section.hidden = !list.length && !(boxId === 'treeShared' && pages.length);
       const box = document.getElementById(boxId);
       put(box);
       for (const nb of list) {
@@ -1122,6 +1133,14 @@ const App = {
         box.append(holder);
         await Tree.mount(holder, nb.id, { label: nb.owner, actions: actions(nb) });
       }
+    }
+    // Pages shared to work on together: opened, changed and added to right here.
+    if (pages.length) {
+      document.getElementById('treeShared').append(el('ul', { class: 'tree-list' }, pages.map((p) => {
+        const node = Tree.node(p, false, true);
+        node.querySelector('.tree-title').after(el('span', { class: 'tree-owner hint' }, ` · ${p.owner}`));
+        return node;
+      })));
     }
     document.getElementById('othersTitle').textContent = NB.person.role === 'admin' ? 'All notebooks' : 'My lab\'s notebooks';
     if (this.note) Tree.markActive(this.note.id);
@@ -1155,6 +1174,38 @@ const App = {
       title?.focus();
       title?.select?.();
     } catch (err) { toast(err.message, 'error'); }
+  },
+
+  /** The open note again, as saved, where the reader was; and the trees, for what changed in them. */
+  async refresh() {
+    if (!this.note) return;
+    await this.flush();
+    const { note } = await api('GET', `/notes/${this.note.id}`);
+    const scroll = window.scrollY;
+    this.show(note);
+    window.scrollTo(0, scroll);
+    await this.reloadTrees();
+  },
+
+  /**
+   * A page others work on too (one shared, or a lab's) is checked now and then,
+   * and shown again when someone else saved it: never while it is being
+   * changed here, or a field in it is being typed in.
+   */
+  watch() {
+    setInterval(async () => {
+      const note = this.note;
+      const typing = document.activeElement?.closest?.('#note') && document.activeElement.matches('input, textarea, [contenteditable="true"]');
+      if (!note || this.dirty || this.saving || document.hidden || typing || document.querySelector('.modal-backdrop')) return;
+      try {
+        const { note: now } = await api('GET', `/notes/${note.id}`);
+        if (this.note !== note || this.dirty || now.version === note.version) return;
+        const scroll = window.scrollY;
+        this.show(now);
+        window.scrollTo(0, scroll);
+        if (now.updated_by && now.updated_by !== NB.person.username) toast(`Updated by ${now.updated_by}`, 'info', 2500);
+      } catch { /* gone, or offline for a moment: the next look will tell */ }
+    }, 20000);
   },
 
   async open(id, { quiet = false } = {}) {
@@ -1202,6 +1253,12 @@ const App = {
       el('span', { class: `badge badge-${note.type}` }, `${ICONS[note.type] || ''} ${note.type}`),
       owner ? el('span', { class: 'badge badge-owner' }, `${note.owner}'s notebook`) : null,
       !editable ? el('span', { class: 'badge badge-readonly' }, 'read only') : null,
+      ...(note.shared_in || []).map((r) => el('span', {
+        class: 'badge badge-shared',
+        title: r.id === note.id ? 'Shared to work on together' : `Part of “${r.title}”, shared to work on together`,
+      }, note.owner === NB.person.username
+        ? `👥 shared with ${r.with.join(', ')}${r.id === note.id ? '' : ` (in ${r.title})`}`
+        : `👥 shared by ${note.owner}${r.id === note.id ? '' : ` (in ${r.title})`}`)),
       el('span', { class: 'hint' }, note.updated_by || note.created_by
         ? `Last saved by ${note.updated_by || note.created_by} · ${localTime(note.updated_at)}`
         : `Supplied with the Lab Notebook · ${localTime(note.updated_at)}`),
@@ -1222,8 +1279,10 @@ const App = {
           onclick: () => this.useToday(note.id),
         }, '＋ Use today'),
         note.can_share ? el('button', {
-          class: 'btn btn-secondary btn-sm', title: 'Share this protocol with other labs',
-          onclick: () => Shares.open({ id: note.id, title: note.title, kind: note.type }),
+          class: 'btn btn-secondary btn-sm',
+          title: note.space === 'library' ? 'Share this protocol with other labs'
+            : 'Share this page and the pages under it with people of your chair group, to work on together',
+          onclick: () => Shares.open({ id: note.id, title: note.title, kind: note.type, onChange: () => this.refresh() }),
         }, '👥 Share') : null,
         el('button', {
           class: 'btn btn-secondary btn-sm', title: note.has_children ? 'Export this page and everything under it, as a PDF or a Word document' : 'Export as a PDF or a Word document',
@@ -1569,9 +1628,12 @@ const App = {
 
   linksPanel(note) {
     const parts = [];
-    if (note.placements.length > 1) {
+    if (note.placements.length + (note.other_places || 0) > 1) {
       parts.push(el('div', {}, el('b', {}, 'In: '), note.placements.map((p, i) => [i ? ', ' : '',
-        el('a', { href: `#note=${p.parent_id}`, onclick: (e) => { e.preventDefault(); this.open(p.parent_id); } }, p.parent_title)])));
+        el('a', { href: `#note=${p.parent_id}`, onclick: (e) => { e.preventDefault(); this.open(p.parent_id); } },
+          p.parent_owner && p.parent_owner !== note.owner ? `${p.parent_title} (${p.parent_owner}'s notebook)` : p.parent_title)]),
+      note.other_places ? el('span', { class: 'hint' },
+        `${note.placements.length ? ', and ' : ''}${note.other_places} place${note.other_places > 1 ? 's' : ''} in someone else's notebook`) : null));
     }
     if (note.backlinks.length) {
       parts.push(el('div', {}, el('b', {}, note.type === 'protocol' ? 'Used on: ' : 'Linked from: '),
@@ -1597,7 +1659,9 @@ const App = {
             this.show(updated);
             toast(`Now also under ${where.title}`, 'success');
           } catch (err) { toast(err.message, 'error'); }
-        } }, '⧉ Show also under another page…', el('div', { class: 'hint' }, 'One note in two places, as in Trilium: a change shows in both.')) : null,
+        } }, '⧉ Show also under another page…', el('div', { class: 'hint' }, note.owner && note.owner !== NB.person.username
+          ? 'Under a page of your own too, as in Trilium: one page, two places, and a change shows in both.'
+          : 'One note in two places, as in Trilium: a change shows in both.')) : null,
         !['month', 'year'].includes(note.type) ? el('button', { class: 'menu-item', onclick: async () => {
           close();
           try {
@@ -1619,7 +1683,7 @@ const App = {
           close();
           this.newNote(note.space === 'library' ? 'library' : 'mine', note.id, note.space === 'library' ? 'protocol' : 'page');
         } }, note.space === 'library' ? '＋ New protocol in this folder' : '＋ New page under this one') : null,
-        note.can_edit && !['day', 'month', 'year'].includes(note.type) ? el('button', { class: 'menu-item danger', onclick: () => {
+        note.can_delete && !['day', 'month', 'year'].includes(note.type) ? el('button', { class: 'menu-item danger', onclick: () => {
           close();
           modal({
             title: `Delete “${note.title}”?`,
@@ -1651,8 +1715,8 @@ const App = {
       search: async (q) => {
         const types = note.space === 'library' ? ['folder'] : ['page', 'folder', 'day', 'month', 'year'];
         const found = (await api('GET', `/search?q=${encodeURIComponent(q)}&types=${types.join(',')}`)).notes
-          .filter((n) => n.space === note.space && n.id !== note.id && (note.space === 'library' || n.owner === NB.person.username));
-        return q ? found : [top, ...found];
+          .filter((n) => n.space === note.space && n.id !== note.id && (note.space === 'library' || n.owner === note.owner));
+        return q || (note.space === 'notebook' && note.owner !== NB.person.username) ? found : [top, ...found];
       },
       describe: (n) => [`${ICONS[n.type] || '📄'} `, el('b', { text: n.title }), n.where ? el('span', { class: 'hint' }, ` · ${n.where}`) : null],
     });

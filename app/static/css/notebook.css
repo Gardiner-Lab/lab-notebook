@@ -87,6 +87,8 @@ a { color: var(--primary); }
 .tree-toggle.leaf { visibility: hidden; }
 .tree-title { overflow: hidden; text-overflow: ellipsis; }
 .tree-clone { color: var(--muted); font-size: .75rem; }
+.tree-shared { font-size: .72rem; margin-left: .15rem; }
+.tree-owner { font-size: .75rem; white-space: nowrap; }
 .tree-empty { padding: .1rem 1.4rem; }
 
 /* the note */

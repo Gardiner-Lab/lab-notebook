@@ -45,7 +45,9 @@ def me(person):
                     # A lab lead shares their notebook; anyone exports it.
                     'can_share_notebook': person.is_admin or person.is_lab_lead,
                     'library': notes.library_root(),
-                    'others': notes.notebooks(person)})
+                    'others': notes.notebooks(person),
+                    # Pages others share with them to work on together.
+                    'shared_pages': notes.shared_pages(person)})
 
 
 @api.get('/notes/<note_id>')
