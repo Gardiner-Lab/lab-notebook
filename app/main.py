@@ -11,7 +11,7 @@ import os
 
 from flask import Flask, redirect, render_template, request
 
-APP_VERSION = '0.15.0'
+APP_VERSION = '0.15.1'
 
 
 class PrefixMiddleware:
