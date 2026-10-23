@@ -427,3 +427,34 @@ def test_a_virtual_digest_goes_into_the_day(as_user):
     assert ana.post('/api/days/import', data={'section': json.dumps(bad)},
                     content_type='multipart/form-data').status_code == 400
     assert ana.post('/api/days/import', data={'section': 'nonsense'}, content_type='multipart/form-data').status_code == 400
+
+
+def test_figures_from_the_tools_go_into_the_day(as_user):
+    """A plasmid map, a cassette...: a section with its pictures shown in its text, and what they show."""
+    import json
+    ana = as_user('ana')
+    section = {
+        'type': 'section', 'title': 'Plasmid map: pGFP-35S',
+        'source': {'kind': 'plasmid-map', 'id': 'p1', 'name': 'pGFP-35S'},
+        'blocks': [
+            {'type': 'text', 'html': '<p><a data-plasmid="p1">pGFP-35S</a>, 400 bp, circular.</p>'
+                                     '<p><img data-attachment="picture" alt="map"></p>'
+                                     '<p><img data-attachment="picture-2" alt="linear map"></p>'},
+            {'type': 'table', 'title': 'Features', 'columns': [{'name': 'Name', 'kind': 'text'}],
+             'rows': [{'cells': ['GFP']}]}]}
+    r = ana.post('/api/days/import', data={'section': json.dumps(section),
+                                            'picture': [(io.BytesIO(_png()), 'map.png'),
+                                                        (io.BytesIO(_png((0, 90, 200))), 'linear.png')]},
+                 content_type='multipart/form-data')
+    assert r.status_code == 201, r.get_json()
+    day = r.get_json()['note']
+    html = day['content'][-1]['blocks'][0]['html']
+    ids = [a['id'] for a in day['attachments']]
+    assert len(ids) == 2 and all(f'data-attachment="{i}"' in html for i in ids)
+    assert 'data-attachment="picture' not in html
+    for kind in ('moclo-cassette', 'moclo-plasmid', 'moclo-part', 'cloning-product', 'pcr', 'primers', 'sequencing-read'):
+        s = dict(section, source={'kind': kind}, blocks=[{'type': 'text', 'html': '<p>x</p>'}])
+        assert ana.post('/api/days/import', data={'section': json.dumps(s)},
+                        content_type='multipart/form-data').status_code == 201, kind
+    assert ana.post('/api/days/import', data={'section': json.dumps(dict(section, source={'kind': 'whatever'}))},
+                    content_type='multipart/form-data').status_code == 400

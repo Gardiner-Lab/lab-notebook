@@ -234,9 +234,10 @@ def start_day(person):
 @signed_in
 def import_to_day(person):
     """
-    A section from another tool (a virtual digest from the Plasmid Editor) put
-    at the end of a day's page: form fields `section` (JSON) and `date`
-    (YYYY-MM-DD, today when left out), and a `picture` file a gel in it shows.
+    A section from another tool - a figure and what it shows, such as a virtual
+    digest or a plasmid map - put at the end of a day's page: form fields
+    `section` (JSON) and `date` (YYYY-MM-DD, today when left out), and the
+    `picture` files it shows, named in it 'picture', 'picture-2', ... in order.
     """
     try:
         section = json.loads(request.form.get('section') or '')
@@ -247,9 +248,9 @@ def import_to_day(person):
         when = date.fromisoformat(raw) if raw else None
     except ValueError:
         raise ValueError('date must be YYYY-MM-DD')
-    file = request.files.get('picture')
-    picture = (file.filename or 'gel.png', file.read(attachments.MAX_BYTES + 1)) if file else None
-    day_id = notes.import_to_day(person, section, picture, when)
+    pictures = [(f.filename or 'picture.png', f.read(attachments.MAX_BYTES + 1))
+                for f in request.files.getlist('picture')]
+    day_id = notes.import_to_day(person, section, pictures, when)
     return jsonify({'note': notes.get(person, day_id)}), 201
 
 
