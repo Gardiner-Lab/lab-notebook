@@ -5,6 +5,8 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-23
+
 ### Added
 - **Pages shared to work on together.** A lab member can share a page (or a day) - and everything
   under it - with people or labs of their chair group (👥 Share, on the page). Those it is shared with
