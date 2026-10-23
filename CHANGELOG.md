@@ -5,6 +5,17 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Bookings on the day.** A day's page shows the bookings in the Booking tool of whoever the notebook
+  belongs to - those they made and those they are tagged in - with the time, the room or equipment,
+  what for and who else. Live while the day is today or ahead (a booking moved or cancelled there moves
+  or goes here); kept as they stood once the day is over. Under each, what was done with the time,
+  written on the day. Today's page also lists the bookings coming up. Printed at the top of the day in
+  PDF and Word exports. Needs the Booking tool's database (BOOKING_DATABASE_PATH, read-only).
+- **A booking gives its day a page.** On opening the notebook, every day someone has a booking on (made
+  or tagged in, from a month back to three months ahead) gets its page, if it had none. A page made this
+  way stays if the booking is cancelled.
+
 ## [0.13.0] - 2026-10-23
 
 ### Added

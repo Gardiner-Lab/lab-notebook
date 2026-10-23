@@ -13,6 +13,7 @@ as a job: started, followed, then fetched. Jobs are kept in this process (the
 notebook runs as one worker) and their files for an hour.
 """
 
+import html
 import json
 import logging
 import os
@@ -23,12 +24,13 @@ import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone as dt_timezone
+from datetime import date, datetime, timezone as dt_timezone
 from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import current_app
 
+from app import bookings as bookings_mod
 from app import notes
 from app.db import connect
 from app.people import Person
@@ -144,6 +146,31 @@ def load(person: Person, att_id: str) -> Optional[dict]:
             'data': bytes(row['data'])}
 
 
+def _bookings_block(conn, row) -> Optional[dict]:
+    """A day's bookings (app/bookings.py), as a text block to print at the top of the day."""
+    if row['type'] != 'day' or not row['owner']:
+        return None
+    found = conn.execute("SELECT value FROM attributes WHERE note_id = ? AND name = 'dateNote'", (row['id'],)).fetchone()
+    if not found:
+        return None
+    day = bookings_mod.on_day(conn, row['id'], row['owner'], date.fromisoformat(found['value']))
+    if not day['items']:
+        return None
+    esc = html.escape
+    lines = []
+    for b in day['items']:
+        r = b['resource']
+        others = [p for p in [b['booked_by'], *b['people']] if p != row['owner']]
+        line = (f"<b>{esc(bookings_mod.local_span(b))}</b> · {esc(r['name'])}"
+                + (f" ({esc(r['location'])})" if r['location'] else '')
+                + (f" · {esc(b['title'])}" if b['title'] else '')
+                + (f" · with {esc(', '.join(others))}" if others else ''))
+        if b.get('notes'):
+            line += f"<br>{esc(b['notes'])}"
+        lines.append(f'<li>{line}</li>')
+    return {'id': 'bookings', 'type': 'text', 'html': f"<h3>Bookings</h3><ul>{''.join(lines)}</ul>"}
+
+
 def collect(person: Person, root_id: str, children: bool = True, progress=None) -> Context:
     with connect() as conn:
         root = notes._row(conn, root_id)
@@ -165,12 +192,13 @@ def collect(person: Person, root_id: str, children: bool = True, progress=None) 
                 (row['id'],))
                 if a['name'] not in ('dateNote', 'monthNote', 'yearNote', 'notebookRoot', 'protocolLibrary', 'seed')]
             files = _attachments_of(conn, row['id'])
+            day_bookings = _bookings_block(conn, full) if full['id'] not in printed else None
         entries.append(Entry(
             id=full['id'], title=full['title'], type=full['type'], space=full['space'], owner=full['owner'],
             depth=depth, where=' › '.join(p['title'] for p in path[:-1]),
             created_by=full['created_by'], created_at=full['created_at'], updated_by=full['updated_by'],
             updated_at=full['updated_at'], revision=full['revision'], labels=labels,
-            content=json.loads(full['content'] or '[]') if full['id'] not in printed else [],
+            content=([day_bookings] if day_bookings else []) + (json.loads(full['content'] or '[]') if full['id'] not in printed else []),
             attachments=files if full['id'] not in printed else [],
             repeat_of=printed.get(full['id']), has_children=bool(kids)))
         if progress:

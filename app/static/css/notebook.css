@@ -378,3 +378,15 @@ input.step-text:focus { outline: 1px solid var(--border); border-radius: .3rem; 
 .markup-side { width: 320px; flex: none; overflow: auto; background: var(--card); border-left: 1px solid var(--border); padding: .6rem; }
 .markup-side-head { font-weight: 700; margin-bottom: .4rem; }
 @media (max-width: 800px) { .markup-body { flex-direction: column; } .markup-side { width: auto; max-height: 40vh; border-left: 0; border-top: 1px solid var(--border); } }
+
+/* A day's bookings, from the Booking tool. */
+.bookings-panel { margin: .6rem 0 1rem; border: 1px solid var(--border); border-radius: .6rem; padding: .5rem .8rem; background: #faf5ff; }
+.bookings-panel summary { cursor: pointer; font-weight: 600; color: #5b21b6; }
+.booking-list { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .5rem; }
+.booking { display: flex; gap: .6rem; align-items: flex-start; }
+.booking-dot { width: .7rem; height: .7rem; border-radius: 50%; margin-top: .35rem; flex: none; }
+.booking-body { flex: 1; min-width: 0; }
+.booking-notes { width: 100%; margin-top: .3rem; font: inherit; font-size: .9rem; padding: .3rem .45rem; border: 1px solid var(--border);
+    border-radius: .4rem; resize: vertical; background: #fff; }
+.booking-notes-text { margin-top: .25rem; font-size: .9rem; white-space: pre-wrap; }
+.booking-upcoming { margin-top: .5rem; font-size: .88rem; }

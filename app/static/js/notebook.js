@@ -1309,7 +1309,7 @@ const App = {
     Blocks.renderList(note.content, blocks, ctx);
 
     this._blocks = { blocks, ctx };
-    put(box, crumbs, el('div', { class: 'note-head' }, title), meta, this.attributeBar(note),
+    put(box, crumbs, el('div', { class: 'note-head' }, title), meta, this.attributeBar(note), this.bookingsPanel(note),
       blocks, editable ? this.insertBar(note, blocks, ctx) : null, this.attachmentPanel(note), this.linksPanel(note));
   },
 
@@ -1638,6 +1638,53 @@ const App = {
         },
       }],
     });
+  },
+
+  /**
+   * A day's bookings in the Booking tool: whoever the notebook belongs to booked them, or is in them.
+   * Live while the day is today or ahead; kept as they stood once it is over. Under each, what was
+   * done with the time, written here and kept with the day.
+   */
+  bookingsPanel(note) {
+    const data = note.bookings;
+    if (!data || (!data.items.length && !data.upcoming.length)) return null;
+    const time = (s) => new Date(s).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    const dayOf = (s) => new Date(s).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    const ymd = (s) => { const d = new Date(s); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    const span = (b) => {
+      const sameDay = ymd(b.start) === ymd(b.end) || (time(b.end) === '00:00' && new Date(b.end) - new Date(b.start) <= 864e5);
+      return sameDay ? `${time(b.start)}–${time(b.end) === '00:00' ? '24:00' : time(b.end)}`
+        : `${dayOf(b.start)} ${time(b.start)} – ${dayOf(b.end)} ${time(b.end)}`;
+    };
+    const open = (b) => `${data.link}/#calendar=${encodeURIComponent(b.resource.id)}&d=${ymd(b.start)}`;
+    const others = (b) => [b.booked_by, ...b.people].filter((p) => p !== note.owner);
+    const row = (b) => {
+      const notes = note.can_edit ? el('textarea', {
+        class: 'booking-notes', rows: 1, placeholder: 'What was done: e.g. imaged 12 seedlings, 488 nm at 4%',
+        onchange: async (e) => {
+          try { await api('PUT', `/notes/${note.id}/bookings/${b.id}`, { text: e.target.value }); b.notes = e.target.value; toast('Saved', 'success', 1500); }
+          catch (err) { toast(err.message, 'error'); }
+        },
+      }, b.notes || '') : (b.notes ? el('div', { class: 'booking-notes-text' }, b.notes) : null);
+      return el('li', { class: 'booking' },
+        el('span', { class: 'booking-dot', style: `background:${b.resource.colour}` }),
+        el('div', { class: 'booking-body' },
+          el('div', {}, el('b', {}, span(b)), ' · ', el('a', { href: open(b), target: '_blank', rel: 'noopener' }, b.resource.name),
+            b.resource.location ? el('span', { class: 'hint' }, ` (${b.resource.location})`) : null,
+            b.title ? ` · ${b.title}` : null),
+          others(b).length ? el('div', { class: 'hint' }, b.role === 'tagged' ? `Booked by ${b.booked_by}${b.people.length > 1 ? `, with ${others(b).filter((p) => p !== b.booked_by).join(', ')}` : ''}`
+            : `With ${others(b).join(', ')}`) : null,
+          notes));
+    };
+    const panel = el('details', { class: 'bookings-panel', open: !store.get('hideBookings', false),
+      ontoggle: (e) => store.set('hideBookings', !e.target.open) },
+    el('summary', {}, `📅 Bookings${data.items.length ? ` (${data.items.length})` : ''}`,
+      data.items.length && !data.live ? el('span', { class: 'hint' }, ' · as booked; kept with the day') : null),
+    data.items.length ? el('ul', { class: 'booking-list' }, data.items.map(row)) : el('p', { class: 'hint' }, 'Nothing booked today.'),
+    data.upcoming.length ? el('div', { class: 'booking-upcoming' }, el('span', { class: 'hint' }, 'Coming up: '),
+      data.upcoming.map((b, i) => [i ? ' · ' : '', el('a', { href: open(b), target: '_blank', rel: 'noopener' },
+        `${dayOf(b.start)} ${time(b.start)} ${b.resource.name}`)])) : null);
+    return panel;
   },
 
   linksPanel(note) {

@@ -41,6 +41,8 @@ def _body() -> dict:
 @signed_in
 def me(person):
     notebook = notes.notebook_root(person.username)
+    # Each day they have a booking on gets its page, before the notebook is shown.
+    notes.pages_for_bookings(person)
     return jsonify({'person': person.to_dict(),
                     'notebook': notebook,
                     # A lab lead shares their notebook; anyone exports it.
@@ -55,6 +57,14 @@ def me(person):
 @signed_in
 def get_note(person, note_id):
     return jsonify({'note': notes.get(person, note_id)})
+
+
+@api.put('/notes/<note_id>/bookings/<booking_id>')
+@signed_in
+def booking_note(person, note_id, booking_id):
+    """What was done with a booking on this day."""
+    notes.write_booking_note(person, note_id, booking_id, str(_body().get('text') or ''))
+    return jsonify({'ok': True})
 
 
 @api.get('/notes/<note_id>/children')
