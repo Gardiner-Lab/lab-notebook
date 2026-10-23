@@ -160,12 +160,22 @@ def chair_group_labs(lab_ids) -> set:
     return lab_ids | {str(r['id']) for r in rows if r['chair_group_id'] and str(r['chair_group_id']) in groups}
 
 
+def archived() -> Dict[str, str]:
+    """
+    People who have left: archived by their lab admin or an administrator on the
+    suite's dashboard (suite.db: archived), username -> when (UTC). Their work
+    stays for their labs; they are left out of lists of people to choose from.
+    """
+    return {r['username']: r['archived_at'] for r in _read(suite_path(), 'SELECT username, archived_at FROM archived')}
+
+
 def colleagues(username: str) -> List[str]:
-    """Everyone in a lab of this person's chair group(s) (their own labs included), but them, by name."""
+    """Everyone in a lab of this person's chair group(s) (their own labs included), but them and those who left, by name."""
     member = membership(username) or {}
     labs = chair_group_labs(m['lab_id'] for m in member.get('labs', []))
+    gone = archived()
     return sorted(u for u, m in memberships().items()
-                  if u != username and labs & {x['lab_id'] for x in m.get('labs', []) if x.get('lab_id')})
+                  if u != username and u not in gone and labs & {x['lab_id'] for x in m.get('labs', []) if x.get('lab_id')})
 
 
 def lab_name(lab_id: Optional[str]) -> Optional[str]:
@@ -173,8 +183,10 @@ def lab_name(lab_id: Optional[str]) -> Optional[str]:
 
 
 def people() -> List[str]:
-    """Everyone with an account, by name."""
-    return [r['username'] for r in _read(directory_path(), 'SELECT username FROM users ORDER BY username')]
+    """Everyone with an account who has not left, by name."""
+    gone = archived()
+    return [r['username'] for r in _read(directory_path(), 'SELECT username FROM users ORDER BY username')
+            if r['username'] not in gone]
 
 
 def current() -> Optional[Person]:

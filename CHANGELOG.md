@@ -5,6 +5,10 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Someone who has left (archived in the suite) keeps their notebook for their lab's leads, marked
+  "(left)"; they are no longer offered to share with, and their bookings ahead are not shown.
+
 ## [0.14.0] - 2026-10-23
 
 ### Added

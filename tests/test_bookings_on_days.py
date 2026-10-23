@@ -161,3 +161,27 @@ def test_a_booking_gives_its_day_a_page(as_user, booking_db):
     # The page shows the booking.
     note = day_note(ana, today + timedelta(days=4))
     assert [b['id'] for b in note['bookings']['items']] == ['b1']
+
+
+def leaves(world, username, when='2000-01-01T00:00:00Z'):
+    conn = sqlite3.connect(world['paths']['suite'])
+    conn.execute('CREATE TABLE IF NOT EXISTS archived (username TEXT PRIMARY KEY, archived_at TEXT, archived_by TEXT)')
+    conn.execute('INSERT INTO archived VALUES (?, ?, ?)', (username, when, 'lead'))
+    conn.commit()
+    conn.close()
+
+
+def test_someone_who_left_keeps_their_notebook_for_the_lab(as_user, booking_db, world):
+    ana = as_user('ana')
+    ana.post('/api/days', json={'date': '2026-10-15'})
+    leaves(world, 'ana')
+    # Their lab lead still opens it, marked as theirs who left; they are not offered to share with.
+    others = as_user('lead').get('/api/me').get_json()['others']
+    mine = next(nb for nb in others if nb['owner'] == 'ana')
+    assert mine['archived'] is True
+    from app import people
+    assert 'ana' not in people.people() and 'ana' not in people.colleagues('ben')
+    # Their bookings ahead are freed: not on the days of those they tagged.
+    ahead = datetime.now(AMS).date() + timedelta(days=3)
+    booking_db['add']('b1', 'room', ahead, '10:00', '11:00', 'ana', people=['ben'])
+    assert day_note(as_user('ben'), ahead)['bookings']['items'] == []

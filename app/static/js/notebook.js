@@ -1145,7 +1145,7 @@ const App = {
       for (const nb of list) {
         const holder = el('div');
         box.append(holder);
-        await Tree.mount(holder, nb.id, { label: nb.owner, actions: actions(nb) });
+        await Tree.mount(holder, nb.id, { label: nb.archived ? `${nb.owner} (left)` : nb.owner, actions: actions(nb) });
       }
     }
     // Pages shared to work on together: opened, changed and added to right here.

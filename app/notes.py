@@ -391,11 +391,14 @@ def notebooks(person: Person) -> List[dict]:
         rows = conn.execute("SELECT * FROM notes WHERE type = 'notebook' AND deleted_at IS NULL "
                             'AND owner != ? ORDER BY owner', (person.username,)).fetchall()
     shared = _shared_with(person)['owners']
+    gone = people_mod.archived()
     found = []
     for r in rows:
         mine = (person.is_admin or person.is_lab_lead) and person.oversees(r['owner'])
         if mine or r['owner'] in shared:
-            found.append({**summary(r), 'shared': not mine, 'can_share': can_share(person, r)})
+            # Someone who left (archived) keeps their notebook, for their lab's leads.
+            found.append({**summary(r), 'shared': not mine, 'can_share': can_share(person, r),
+                          'archived': r['owner'] in gone})
     return found
 
 
