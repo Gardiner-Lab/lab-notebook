@@ -5,6 +5,8 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-23
+
 ### Added
 - **Bookings on the day.** A day's page shows the bookings in the Booking tool of whoever the notebook
   belongs to - those they made and those they are tagged in - with the time, the room or equipment,
