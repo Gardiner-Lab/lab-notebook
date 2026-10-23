@@ -5,6 +5,12 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Virtual digests from the Plasmid Editor.** A digest's virtual gel and fragments, sent from the
+  editor (📓 Add to notebook), go at the end of a day's page - started if needed - as a section: the
+  gel as a gel photo with its wells numbered and named, and a table of the fragments with a column to
+  tick off the bands seen on the real gel. Kept in the day's history as an import.
+
 ## [0.11.0] - 2026-10-23
 
 ### Added

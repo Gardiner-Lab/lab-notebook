@@ -448,7 +448,8 @@ class _Writer:
         self.shade(p)
         p.add_run(block.get('title') or '').bold = True
         origin = (f'Protocol{f" · version {src["version"]}" if src.get("version") else ""}'
-                  if src.get('kind') == 'protocol' else 'From the MoClo Library Tool' if src.get('kind') == 'moclo-reaction' else '')
+                  if src.get('kind') == 'protocol' else 'From the MoClo Library Tool' if src.get('kind') == 'moclo-reaction'
+                  else 'A virtual digest from the Plasmid Editor' if src.get('kind') == 'virtual-digest' else '')
         if origin:
             p.add_run('   ')
             if src.get('kind') == 'protocol' and src.get('id'):

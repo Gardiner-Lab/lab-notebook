@@ -415,6 +415,51 @@ def day(person: Person, when: Optional[date] = None) -> str:
         return day_id
 
 
+# Sections other tools put into a day, by where they come from.
+IMPORTED_KINDS = {'virtual-digest': 'the Plasmid Editor'}
+
+
+def import_to_day(person: Person, section: dict, picture: Optional[tuple] = None,
+                  when: Optional[date] = None) -> str:
+    """
+    Put a section another tool made (a virtual digest from the Plasmid Editor)
+    at the end of this person's page for a day, starting the day if needed.
+    A picture, given as (filename, bytes), is attached to the day, and a gel
+    block in the section naming it 'picture' shows it. Kept in the day's
+    history as an import.
+    """
+    if not isinstance(section, dict) or section.get('type') != 'section':
+        raise ValueError('Send a section to put into the day')
+    kind = (section.get('source') or {}).get('kind') if isinstance(section.get('source'), dict) else None
+    if kind not in IMPORTED_KINDS:
+        raise ValueError('Only a virtual digest can be put into a day this way')
+    day_id = day(person, when)
+    if picture:
+        added = attachments.add(person, day_id, [picture])
+        for block in section.get('blocks') or []:
+            if isinstance(block, dict) and block.get('type') == 'gel' and block.get('attachment') == 'picture':
+                block['attachment'] = added[0]['id']
+    with connect() as conn:
+        row = _row(conn, day_id)
+        previous = json.loads(row['content'] or '[]')
+        # A day just started holds an empty paragraph: the import takes its place.
+        untouched = all(b.get('type') == 'text' for b in previous) and not content_mod.plain_text(previous)
+        kept = [] if untouched else previous
+        blocks = content_mod.clean_blocks(kept + [section], previous, person.username)
+        body = json.dumps(blocks)
+        number = _keep_revision(conn, day_id, row['title'], body, person.username, 'imported',
+                               f"{_text_of(section.get('title'))} from {IMPORTED_KINDS[kind]}")
+        conn.execute('UPDATE notes SET content = ?, search_text = ?, revision = ?, version = version + 1, '
+                     'updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                     (body, content_mod.plain_text(blocks), number, person.username, day_id))
+        _index_links(conn, day_id, blocks)
+    return day_id
+
+
+def _text_of(value) -> str:
+    return str(value or '').strip()[:200] or 'A section'
+
+
 # --- changing notes ------------------------------------------------------------
 
 def create(person: Person, parent_id: str, title: str, type: str = 'page',
