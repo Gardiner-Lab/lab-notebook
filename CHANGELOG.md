@@ -5,6 +5,8 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-23
+
 ### Added
 - **Virtual digests from the Plasmid Editor.** A digest's virtual gel and fragments, sent from the
   editor (📓 Add to notebook), go at the end of a day's page - started if needed - as a section: the
