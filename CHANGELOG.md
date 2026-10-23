@@ -5,6 +5,8 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-23
+
 ### Added
 - **Figures from the other tools go into a day.** Besides a virtual digest: from the Plasmid Editor,
   a plasmid map, a cloning product, a PCR, a designed primer pair and a sequencing read; from the
