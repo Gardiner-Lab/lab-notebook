@@ -20,6 +20,8 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from app import people as people_mod
+
 UPCOMING_DAYS = 7
 UPCOMING_LIMIT = 8
 
@@ -69,6 +71,9 @@ def _between(username: str, start: datetime, end: datetime, limit: int = 200) ->
         "WHERE b.status != 'cancelled' AND b.kind = 'booking' AND b.starts_at < ? AND b.ends_at > ? "
         "AND (b.booked_by = ? OR EXISTS (SELECT 1 FROM booking_people p WHERE p.booking_id = b.id AND p.username = ?)) "
         "ORDER BY b.starts_at LIMIT ?", (_utc(end), _utc(start), username, username, limit))
+    # Freed: what someone who has left (archived in the suite) booked for after they left.
+    gone = people_mod.archived()
+    rows = [r for r in rows if not (r['booked_by'] in gone and r['ends_at'] > gone[r['booked_by']])]
     if not rows:
         return []
     ids = [r['id'] for r in rows]
