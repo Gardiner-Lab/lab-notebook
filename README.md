@@ -25,7 +25,15 @@ The Gardiner Lab suite's digital lab notebook.
 - **Plasmid links.** Type `@` in a page to link a plasmid from the editor's library. Clicking the link
   opens the plasmid in the Plasmid Editor.
 - **Who sees what.** Your notebook is yours. Lab leads can read their lab's notebooks, and
-  administrators can read all of them. Only the owner changes a notebook.
+  administrators can read all of them. Only the owner changes a notebook, and those its pages are
+  shared with.
+  - **Working together on a page.** Share a page (or a day) with people or labs of your chair group
+    (👥 Share, on the page): they open it and the pages under it under "Shared with me", change them
+    and add pages under them, and can show it under a page of their own too (⋯ › Show also under
+    another page), as in Trilium: one page in both notebooks, so a change shows in both. What they add
+    stays in your notebook, the history keeps who changed what, and an open page shows others' saves
+    within half a minute. Only you share it on or delete the shared page itself. Without chair groups,
+    a page is shared within your own lab(s).
   - A lab lead can share a notebook of their lab with another lab or a person (👥 beside it). They can
     then read, search and export it, under "Shared with me", until the share is retracted.
 - **Export.** ⤓ Export, on any page, day, protocol or folder, on a whole notebook, or on the

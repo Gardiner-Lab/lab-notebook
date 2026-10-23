@@ -5,6 +5,23 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Pages shared to work on together.** A lab member can share a page (or a day) - and everything
+  under it - with people or labs of their chair group (👥 Share, on the page). Those it is shared with
+  find it under "Shared with me", change it and the pages under it, and add pages under them; what
+  they add stays in the owner's notebook, and the history keeps who changed what. They can also show
+  it under a page of their own (⋯ › Show also under another page), as in Trilium: one page in both
+  notebooks, so a change shows in both. Only the owner shares it on or deletes the shared page itself;
+  a share reaches only the owner's own pages under it, never someone else's page shown there. The
+  page says whom it is shared with, or who shared it. Without chair groups, a page is shared within
+  the owner's lab(s).
+- An open page is looked at again every 20 seconds and shown afresh when someone else saved it - not
+  while it is being changed here.
+
+### Changed
+- A page or protocol shown in more than one place lists the places this person may see, and how many
+  others there are; deleting a page no longer takes someone else's page shown under it along.
+
 ## [0.10.2] - 2026-10-20
 
 ### Added

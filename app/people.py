@@ -148,6 +148,26 @@ def labs() -> List[dict]:
             for r in _read(suite_path(), 'SELECT id, name FROM labs ORDER BY name COLLATE NOCASE')]
 
 
+def chair_group_labs(lab_ids) -> set:
+    """
+    These labs and the labs they work with: every lab in a chair group with any
+    of them (the suite's labs.chair_group_id). A lab in no chair group works
+    with itself alone, as does every lab in a suite from before chair groups.
+    """
+    lab_ids = {str(i) for i in lab_ids if i}
+    rows = _read(suite_path(), 'SELECT id, chair_group_id FROM labs')
+    groups = {str(r['chair_group_id']) for r in rows if str(r['id']) in lab_ids and r['chair_group_id']}
+    return lab_ids | {str(r['id']) for r in rows if r['chair_group_id'] and str(r['chair_group_id']) in groups}
+
+
+def colleagues(username: str) -> List[str]:
+    """Everyone in a lab of this person's chair group(s) (their own labs included), but them, by name."""
+    member = membership(username) or {}
+    labs = chair_group_labs(m['lab_id'] for m in member.get('labs', []))
+    return sorted(u for u, m in memberships().items()
+                  if u != username and labs & {x['lab_id'] for x in m.get('labs', []) if x.get('lab_id')})
+
+
 def lab_name(lab_id: Optional[str]) -> Optional[str]:
     return next((lab['name'] for lab in labs() if lab['id'] == lab_id), None) if lab_id else None
 

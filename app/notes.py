@@ -10,9 +10,18 @@ Notes, where they sit, their attributes and their history, and who may do what.
     A protocol    belongs to its author's lab. It may be changed by whoever wrote
                   it, their lab's lead, or an admin, and shared by them with
                   other labs.
+    A page        (or a day) may be shared by its owner with people and labs
+                  of their chair group, to work on together: those it is shared
+                  with read it and the pages under it, change them, add pages
+                  under them, and may show it under a page of their own too (one
+                  note in two notebooks, a change showing in both). What they
+                  add stays in the owner's notebook. A share reaches only the
+                  owner's own notes under the page, never someone else's note
+                  shown there.
 
-A share lasts until it is retracted. A notebook is changed only by its owner;
-leads, admins and those it is shared with read it. Every
+A share lasts until it is retracted. A notebook is changed only by its owner,
+and those its pages are shared with; leads, admins and those a whole notebook
+is shared with read it. Every
 change to a note is kept as a revision (one person's edits within a few
 minutes of each other make one revision, as in Trilium), and any revision can
 be restored, which is a revision too.
@@ -32,6 +41,8 @@ from app.db import connect
 from app.people import Person
 
 LIBRARY_TITLE = 'Protocol library'
+# The notes of a notebook that can be shared to work on together.
+SHARED_PAGE_TYPES = ('page', 'day')
 # One person's edits closer together than this make one revision.
 REVISION_WINDOW_MINUTES = 10
 NOTE_TYPES = ('page', 'protocol', 'folder')
@@ -82,10 +93,54 @@ def _shared_with(person: Person) -> Dict[str, Set[str]]:
             f"OR (s.target_type = 'lab' AND s.target IN ({','.join('?' * len(labs))})))",
             (person.username, *labs)).fetchall()
     found = {'notes': {r['note_id'] for r in rows},
-             'owners': {r['owner'] for r in rows if r['type'] == 'notebook' and r['owner']}}
+             'owners': {r['owner'] for r in rows if r['type'] == 'notebook' and r['owner']},
+             # Pages shared to work on together, with their owners.
+             'pages': {(r['note_id'], r['owner']) for r in rows if r['type'] in SHARED_PAGE_TYPES and r['owner']}}
     if has_app_context():
         setattr(g, key, found)
     return found
+
+
+def _owned_subtree(conn, note_id: str, owner: Optional[str]) -> Set[str]:
+    """A note and what is under it, as far as the notes are this owner's (not deleted)."""
+    found, todo = set(), [note_id]
+    while todo:
+        current = todo.pop()
+        if current in found:
+            continue
+        found.add(current)
+        todo.extend(r['id'] for r in conn.execute(
+            'SELECT n.id FROM branches b JOIN notes n ON n.id = b.note_id '
+            'WHERE b.parent_id = ? AND n.deleted_at IS NULL AND n.owner IS ?', (current, owner)))
+    return found
+
+
+def _shared_pages(person: Person) -> Set[str]:
+    """Every note this person may work on because a page was shared with them: those pages, and their owners' notes under them."""
+    key = f'shared_pages_{person.username}'
+    if has_app_context() and key in g:
+        return g.get(key)
+    roots = _shared_with(person)['pages']
+    found: Set[str] = set()
+    if roots:
+        with connect() as conn:
+            for root, owner in roots:
+                found |= _owned_subtree(conn, root, owner)
+    if has_app_context():
+        setattr(g, key, found)
+    return found
+
+
+def _share_roots(conn, note) -> List[dict]:
+    """The shared pages this note is in (itself, or one above it in its owner's notebook)."""
+    if note['space'] != 'notebook' or note['type'] == 'notebook':
+        return []
+    roots = conn.execute(
+        'SELECT DISTINCT n.id, n.title FROM shares s JOIN notes n ON n.id = s.note_id '
+        f"WHERE n.owner = ? AND n.deleted_at IS NULL AND n.type IN ({','.join('?' * len(SHARED_PAGE_TYPES))})",
+        (note['owner'], *SHARED_PAGE_TYPES)).fetchall()
+    return [{'id': r['id'], 'title': r['title']} for r in roots
+            if note['id'] in _owned_subtree(conn, r['id'], note['owner'])]
 
 
 def _forget_shares() -> None:
@@ -107,7 +162,8 @@ def can_view(person: Person, note) -> bool:
             with connect() as conn:
                 return bool(shared.intersection(_subtree(conn, note['id'])))
         return note['id'] in shared
-    return person.oversees(note['owner']) or note['owner'] in _shared_with(person)['owners']
+    return (person.oversees(note['owner']) or note['owner'] in _shared_with(person)['owners']
+            or note['id'] in _shared_pages(person))
 
 
 def can_edit(person: Person, note) -> bool:
@@ -121,7 +177,9 @@ def can_edit(person: Person, note) -> bool:
         lab = note_lab(note)
         # The lead of the lab it belongs to.
         return bool(author and lab and lab in person.led_lab_ids)
-    return note['owner'] == person.username and note['type'] != 'notebook'
+    if note['type'] == 'notebook':
+        return False
+    return note['owner'] == person.username or note['id'] in _shared_pages(person)
 
 
 def can_add_under(person: Person, parent) -> bool:
@@ -133,7 +191,7 @@ def can_add_under(person: Person, parent) -> bool:
             # Into the lab's own folders (or every lab's), not into one another lab shares from.
             return person.is_admin or note_lab(parent) is None or note_lab(parent) in person.lab_ids
         return can_edit(person, parent)
-    return parent['owner'] == person.username
+    return parent['owner'] == person.username or parent['id'] in _shared_pages(person)
 
 
 def _visible(person: Person, note_id: str):
@@ -176,10 +234,16 @@ def summary(row) -> dict:
 def get(person: Person, note_id: str) -> dict:
     row = _visible(person, note_id)
     with connect() as conn:
-        placements = [dict(r) for r in conn.execute(
-            'SELECT b.id AS branch_id, b.parent_id, p.title AS parent_title FROM branches b '
-            'JOIN notes p ON p.id = b.parent_id WHERE b.note_id = ? AND p.deleted_at IS NULL',
-            (note_id,))]
+        # Where it is, as far as this person may see: a page shared and shown
+        # under someone else's page does not show their page to its owner.
+        found = conn.execute(
+            'SELECT b.id AS branch_id, b.parent_id, p.title AS parent_title, p.* FROM branches b '
+            'JOIN notes p ON p.id = b.parent_id WHERE b.note_id = ? AND p.deleted_at IS NULL ORDER BY b.rowid',
+            (note_id,)).fetchall()
+        placements = [{'branch_id': r['branch_id'], 'parent_id': r['parent_id'], 'parent_title': r['parent_title'],
+                       'parent_owner': r['owner']} for r in found if can_view(person, r)]
+        share_roots = _share_roots(conn, row)
+        shared_root = any(r['id'] == note_id for r in share_roots)
         backlinks = [r for r in conn.execute(
             "SELECT n.* FROM links l JOIN notes n ON n.id = l.note_id "
             "WHERE l.target_type = 'note' AND l.target_id = ? AND n.deleted_at IS NULL "
@@ -193,7 +257,12 @@ def get(person: Person, note_id: str) -> dict:
             'attributes': _attributes(conn, note_id),
             'path': _path(conn, note_id),
             'placements': placements,
+            'other_places': len(found) - len(placements),
+            # The shared pages it is in, to work on together, and who with.
+            'shared_in': [{**r, 'with': _share_labels(conn, r['id'])} for r in share_roots],
             'can_edit': can_edit(person, row),
+            'can_delete': can_edit(person, row) and row['type'] not in ('notebook', 'library')
+                          and not (shared_root and row['owner'] != person.username and not person.is_admin),
             'can_add': can_add_under(person, row),
             'can_share': can_share(person, row),
             'has_children': bool(conn.execute(
@@ -221,9 +290,14 @@ def children(person: Person, parent_id: str) -> List[dict]:
             "ORDER BY CASE WHEN n.type IN ('year', 'month', 'day') THEN 0 ELSE 1 END, "
             "CASE WHEN n.type IN ('year', 'month', 'day') THEN n.title END DESC, b.position, n.title",
             (parent_id,)).fetchall()
+        shared = {r['note_id'] for r in conn.execute(
+            'SELECT DISTINCT s.note_id FROM shares s JOIN branches b ON b.note_id = s.note_id WHERE b.parent_id = ?',
+            (parent_id,))}
+    # Someone else's page shown here is listed only to those who may open it.
     return [{**summary(r), 'branch_id': r['branch_id'], 'has_children': r['child_count'] > 0,
-             'cloned': r['placements'] > 1} for r in rows
-            if r['space'] != 'library' or can_view(person, r)]
+             'cloned': r['placements'] > 1,
+             'shared': r['space'] == 'notebook' and r['type'] in SHARED_PAGE_TYPES and r['id'] in shared}
+            for r in rows if can_view(person, r)]
 
 
 # --- roots ---------------------------------------------------------------------
@@ -354,9 +428,11 @@ def create(person: Person, parent_id: str, title: str, type: str = 'page',
         type = 'page'
     blocks = content_mod.clean_blocks(content or [{'type': 'text', 'html': ''}], username=person.username)
     with connect() as conn:
-        return _create(conn, title=(title or 'Untitled').strip()[:200] or 'Untitled', type=type,
-                       space=parent['space'], owner=parent['owner'], by=person.username,
-                       parent_id=parent_id, content=blocks, lab=person.lab_id)
+        note_id = _create(conn, title=(title or 'Untitled').strip()[:200] or 'Untitled', type=type,
+                          space=parent['space'], owner=parent['owner'], by=person.username,
+                          parent_id=parent_id, content=blocks, lab=person.lab_id)
+    _forget_shares()          # a page added under a shared one is shared too
+    return note_id
 
 
 def _index_links(conn, note_id: str, blocks: list) -> None:
@@ -465,15 +541,25 @@ def copy(person: Person, note_id: str) -> str:
 
 
 def delete(person: Person, note_id: str) -> None:
-    """Move a note, and everything under it, to the deleted notes (kept, not erased)."""
+    """
+    Move a note, and everything under it, to the deleted notes (kept, not
+    erased). Only its owner's own notes under it go with it: someone else's
+    page shown under it stays, in its own place. A page shared to work on
+    together is deleted by its owner; those it is shared with may delete the
+    pages under it.
+    """
     with connect() as conn:
         row = _row(conn, note_id)
         if row['type'] in ('notebook', 'library') or not can_edit(person, row):
             raise Forbidden('You cannot delete this note')
-        for nid in _subtree(conn, note_id):
+        if row['owner'] != person.username and not person.is_admin and row['space'] == 'notebook' and any(
+                r == note_id for r, _ in _shared_with(person)['pages']):
+            raise Forbidden('Only its owner can delete a page shared with you; you can delete the pages under it')
+        for nid in _owned_subtree(conn, note_id, row['owner']):
             # Notes already deleted on their own stay their own deletion.
             conn.execute('UPDATE notes SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ?, deleted_root = ? '
                          'WHERE id = ? AND deleted_at IS NULL', (person.username, note_id, nid))
+    _forget_shares()
 
 
 # --- deleted notes ---------------------------------------------------------------
@@ -546,46 +632,71 @@ def undelete(person: Person, note_id: str) -> str:
                                     (root,)).fetchone()[0]
             conn.execute('INSERT INTO branches (id, note_id, parent_id, position) VALUES (?, ?, ?, ?)',
                          (content_mod.new_id(), note_id, root, position))
+    _forget_shares()
     return note_id
 
 
-def _check_target(conn, person: Person, note, parent_id: str) -> None:
+def _check_target(conn, person: Person, note, parent_id: str, notebook: Optional[str] = None) -> None:
+    """
+    Whether the note may go under this parent: in `notebook`'s (the owner
+    whose notebook the placement is in: the note's own unless it is shown in
+    someone else's), or in the library for a library note.
+    """
     parent = _row(conn, parent_id)
     if not can_add_under(person, parent):
         raise Forbidden('You cannot put notes there')
-    if parent['space'] != note['space'] or parent['owner'] != note['owner']:
+    owner = note['owner'] if notebook is None else notebook
+    if parent['space'] != note['space'] or parent['owner'] != owner:
         raise ValueError('A note stays in its own notebook (or in the library)')
     if parent_id in _subtree(conn, note['id']):
         raise ValueError('A note cannot go inside itself')
 
 
 def move(person: Person, branch_id: str, parent_id: str, position: Optional[int] = None) -> None:
+    """
+    Move one placement of a note. In its own notebook, whoever may change the
+    note moves it; shown in someone else's, they move it about their own.
+    """
     with connect() as conn:
         branch = conn.execute('SELECT * FROM branches WHERE id = ?', (branch_id,)).fetchone()
         if branch is None:
             raise NotFound('Not found')
         note = _row(conn, branch['note_id'])
-        if note['type'] in ('year', 'month', 'day') or not can_edit(person, note):
+        here = _row(conn, branch['parent_id'])
+        elsewhere = note['space'] == 'notebook' and here['owner'] != note['owner']
+        allowed = can_add_under(person, here) if elsewhere else can_edit(person, note)
+        if note['type'] in ('year', 'month', 'day') or not allowed:
             raise Forbidden('You cannot move this note')
-        _check_target(conn, person, note, parent_id)
+        _check_target(conn, person, note, parent_id, here['owner'] if elsewhere else None)
         if position is None:
             position = conn.execute('SELECT COALESCE(MAX(position), 0) + 10 FROM branches WHERE parent_id = ?',
                                     (parent_id,)).fetchone()[0]
         conn.execute('UPDATE OR IGNORE branches SET parent_id = ?, position = ? WHERE id = ?',
                      (parent_id, int(position), branch_id))
+    _forget_shares()
 
 
 def place_also(person: Person, note_id: str, parent_id: str) -> None:
-    """Show a note in a second place too: one note, two branches (a Trilium clone)."""
+    """
+    Show a note in a second place too: one note, two branches (a Trilium
+    clone), so a change shows in both. A page someone may work on (their own,
+    or one shared with them) may also go under a page of their own notebook.
+    """
     with connect() as conn:
         note = _row(conn, note_id)
-        if not can_view(person, note) or note['type'] in ('notebook', 'library'):
+        if not can_view(person, note) or note['type'] in ('notebook', 'library', 'year', 'month'):
             raise Forbidden('You cannot place this note elsewhere')
-        _check_target(conn, person, note, parent_id)
+        parent = _row(conn, parent_id)
+        into_own = (note['space'] == 'notebook' and parent['space'] == 'notebook'
+                    and parent['owner'] == person.username != note['owner'])
+        if into_own and not can_edit(person, note):
+            raise Forbidden('Only a page shared with you to work on can go into your notebook')
+        _check_target(conn, person, note, parent_id, person.username if into_own else None)
         position = conn.execute('SELECT COALESCE(MAX(position), 0) + 10 FROM branches WHERE parent_id = ?',
                                 (parent_id,)).fetchone()[0]
         conn.execute('INSERT OR IGNORE INTO branches (id, note_id, parent_id, position) VALUES (?, ?, ?, ?)',
                      (content_mod.new_id(), note_id, parent_id, position))
+    _forget_shares()
 
 
 def remove_placement(person: Person, branch_id: str) -> None:
@@ -595,11 +706,17 @@ def remove_placement(person: Person, branch_id: str) -> None:
         if branch is None:
             raise NotFound('Not found')
         note = _row(conn, branch['note_id'])
-        if not can_add_under(person, _row(conn, branch['parent_id'])):
+        parent = _row(conn, branch['parent_id'])
+        if not can_add_under(person, parent):
             raise Forbidden('You cannot change this')
+        # Those a page is shared with take it out of their own pages, not its owner's.
+        if (note['space'] == 'notebook' and parent['owner'] == note['owner']
+                and person.username != note['owner'] and not person.is_admin):
+            raise Forbidden("Only its owner takes a page out of their own notebook")
         if conn.execute('SELECT COUNT(*) FROM branches WHERE note_id = ?', (note['id'],)).fetchone()[0] < 2:
             raise ValueError('This is its only place: delete the note instead')
         conn.execute('DELETE FROM branches WHERE id = ?', (branch_id,))
+    _forget_shares()
 
 
 # --- attributes ----------------------------------------------------------------
@@ -829,13 +946,47 @@ def _home_lab(note) -> Optional[str]:
 def can_share(person: Person, note) -> bool:
     """
     A notebook: its lab's lead, or an admin. A protocol (or a page in the
-    library): whoever may change it, unless it is every lab's already.
+    library): whoever may change it, unless it is every lab's already. A page
+    or a day of a notebook: its owner, or an admin.
     """
     if note['type'] == 'notebook':
         return person.is_admin or (person.is_lab_lead and person.oversees(note['owner']))
     if note['space'] == 'library' and note['type'] not in ('library', 'folder'):
         return can_edit(person, note) and note_lab(note) is not None
+    if note['space'] == 'notebook' and note['type'] in SHARED_PAGE_TYPES:
+        return person.is_admin or note['owner'] == person.username
     return False
+
+
+def _is_page(note) -> bool:
+    return note['space'] == 'notebook' and note['type'] in SHARED_PAGE_TYPES
+
+
+def _page_labs(note) -> Set[str]:
+    """The labs a page may be shared with: those of its owner's chair group(s), their own included."""
+    member = people_mod.membership(note['owner']) or {}
+    return people_mod.chair_group_labs(m['lab_id'] for m in member.get('labs', []))
+
+
+def _share_labels(conn, note_id: str) -> List[str]:
+    """Who a note is shared with, by name."""
+    names = {lab['id']: lab['name'] for lab in people_mod.labs()}
+    return [names.get(s['target'], f"Lab {s['target']}") if s['target_type'] == 'lab' else s['target']
+            for s in conn.execute('SELECT target_type, target FROM shares WHERE note_id = ? ORDER BY created_at, rowid',
+                                  (note_id,))]
+
+
+def shared_pages(person: Person) -> List[dict]:
+    """The pages others share with this person (or their lab) to work on together, by title."""
+    ids = [r for r, owner in _shared_with(person)['pages'] if owner != person.username]
+    if not ids:
+        return []
+    with connect() as conn:
+        rows = conn.execute(f"SELECT n.*, (SELECT COUNT(*) FROM branches c JOIN notes cn ON cn.id = c.note_id "
+                            f"WHERE c.parent_id = n.id AND cn.deleted_at IS NULL) AS child_count FROM notes n "
+                            f"WHERE n.id IN ({','.join('?' * len(ids))}) AND n.deleted_at IS NULL "
+                            'ORDER BY n.title COLLATE NOCASE', ids).fetchall()
+    return [{**summary(r), 'has_children': r['child_count'] > 0, 'shared': True} for r in rows]
 
 
 def _shareable(conn, person: Person, note_id: str):
@@ -847,7 +998,9 @@ def _shareable(conn, person: Person, note_id: str):
             raise Forbidden("Only the lab's lead or an administrator can share a notebook")
         if row['space'] == 'library' and row['type'] not in ('library', 'folder') and note_lab(row) is None:
             raise ValueError('Every lab can use this protocol already')
-        raise Forbidden('Only whoever may change a protocol can share it; notebooks are shared whole')
+        if _is_page(row):
+            raise Forbidden('Only its owner can share this page')
+        raise Forbidden('Only whoever may change a protocol can share it; a page or a day is shared by its owner')
     return row
 
 
@@ -866,7 +1019,12 @@ def shares(person: Person, note_id: str) -> dict:
            'shares': [{'id': s['id'], 'target_type': s['target_type'], 'target': s['target'],
                        'label': names.get(s['target'], f"Lab {s['target']}") if s['target_type'] == 'lab' else s['target'],
                        'created_by': s['created_by'], 'created_at': s['created_at']} for s in listed]}
-    if allowed:
+    if allowed and _is_page(row):
+        # A page goes to people and labs of its owner's chair group, its own lab too.
+        within = _page_labs(row)
+        out['labs'] = [lab for lab in labs if lab['id'] in within]
+        out['people'] = people_mod.colleagues(row['owner'])
+    elif allowed:
         home = _home_lab(row)
         out['labs'] = [lab for lab in labs if lab['id'] != home]
         # Notebooks go to people as well as labs; protocols to labs.
@@ -878,7 +1036,18 @@ def share(person: Person, note_id: str, target_type: str, target: str) -> dict:
     target = str(target or '').strip()
     with connect() as conn:
         row = _shareable(conn, person, note_id)
-        if target_type == 'lab':
+        if _is_page(row):
+            if target_type == 'lab':
+                if target not in _page_labs(row):
+                    raise ValueError('A page is shared within its owner\'s chair group: choose one of its labs')
+            elif target_type == 'person':
+                if target == row['owner']:
+                    raise ValueError('It is their own page')
+                if target not in people_mod.colleagues(row['owner']):
+                    raise ValueError('A page is shared within its owner\'s chair group: choose someone in one of its labs')
+            else:
+                raise ValueError('A page is shared with people or labs')
+        elif target_type == 'lab':
             if target not in {lab['id'] for lab in people_mod.labs()}:
                 raise ValueError('Choose a lab of the suite')
             if target == _home_lab(row):
