@@ -378,3 +378,52 @@ def test_someone_in_two_labs_sees_and_leads_in_each_as_their_role_there(as_user,
     assert olead.get(f"/api/notes/{day['id']}").status_code == 403
     # Shares with either of her labs reach her.
     assert [m['lab'] for m in zoe.get('/api/me').get_json()['person']['labs']] == ['Other Lab', 'Gardiner Lab']
+
+
+def test_a_virtual_digest_goes_into_the_day(as_user):
+    """The Plasmid Editor puts a virtual digest - its gel and fragments - into a day's page."""
+    import json
+    ana, zoe = as_user('ana'), as_user('zoe')
+    section = {
+        'type': 'section', 'title': 'Virtual digest: pGFP-35S (EcoRI+BamHI)',
+        'source': {'kind': 'virtual-digest', 'id': '', 'name': 'pGFP-35S'},
+        'blocks': [
+            {'type': 'text', 'html': '<p>Digest of <a data-plasmid="p1">pGFP-35S</a>, beside a 1 kb ladder.</p>'},
+            {'type': 'gel', 'title': 'Virtual gel', 'attachment': 'picture', 'order': 'rows',
+             'lanes': [{'x': 0.1, 'y': 0.05, 'label': 'Ladder: 1 kb ladder'},
+                       {'x': 0.3, 'y': 0.05, 'label': 'pGFP-35S · EcoRI+BamHI', 'note': '1,200 + 400 bp'}]},
+            {'type': 'table', 'title': 'Fragments',
+             'columns': [{'name': 'Lane', 'kind': 'text'}, {'name': 'Length', 'kind': 'number', 'unit': 'bp'},
+                         {'name': 'Seen on the gel', 'kind': 'check'}],
+             'rows': [{'cells': ['2', '1200', None]}, {'cells': ['2', '400', None]}]}]}
+    form = lambda **extra: {'section': json.dumps(section), **extra}
+
+    r = ana.post('/api/days/import', data={**form(date='2026-03-04'), 'picture': (io.BytesIO(_png()), 'gel.png')},
+                 content_type='multipart/form-data')
+    assert r.status_code == 201, r.get_json()
+    day = r.get_json()['note']
+    assert day['type'] == 'day' and day['title'].startswith('2026-03-04')
+    # It takes the place of the empty paragraph a new day starts with.
+    assert [b['type'] for b in day['content']] == ['section']
+    got = day['content'][0]
+    assert got['source']['kind'] == 'virtual-digest'
+    gel = got['blocks'][1]
+    assert gel['attachment'] in [a['id'] for a in day['attachments']]
+    assert [lane['label'] for lane in gel['lanes']] == ['Ladder: 1 kb ladder', 'pGFP-35S · EcoRI+BamHI']
+    assert ana.get(f"/api/attachments/{gel['attachment']}").status_code == 200
+    # Linked from the plasmid, found by its words, kept in the history as an import.
+    assert ('plasmid', 'p1') in [(t, i) for t, i in __import__('app').content.links(day['content'])]
+    assert day['id'] in [n['id'] for n in ana.get('/api/search?q=EcoRI').get_json()['notes']]
+    history = ana.get(f"/api/notes/{day['id']}/revisions").get_json()['revisions']
+    assert history[0]['kind'] == 'imported' and 'from the Plasmid Editor' in history[0]['note']
+
+    # A second one goes after it, on the same day; what was written there stays.
+    again = ana.post('/api/days/import', data=form(date='2026-03-04'), content_type='multipart/form-data').get_json()['note']
+    assert again['id'] == day['id'] and [b['type'] for b in again['content']] == ['section', 'section']
+
+    # Into one's own notebook only; and only a virtual digest.
+    assert zoe.get(f"/api/notes/{day['id']}").status_code == 403
+    bad = dict(section, source={'kind': 'protocol'})
+    assert ana.post('/api/days/import', data={'section': json.dumps(bad)},
+                    content_type='multipart/form-data').status_code == 400
+    assert ana.post('/api/days/import', data={'section': 'nonsense'}, content_type='multipart/form-data').status_code == 400

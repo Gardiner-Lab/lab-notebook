@@ -756,12 +756,13 @@ const Blocks = {
     const origin = src.kind === 'protocol'
       ? el('span', {}, 'Protocol', src.version ? ` · version ${src.version}` : '', ' · ',
         el('a', { href: `#note=${src.id}`, onclick: (e) => { e.preventDefault(); App.open(src.id); } }, 'open it'))
-      : src.kind === 'moclo-reaction' ? el('span', {}, 'From the MoClo Library Tool') : null;
+      : src.kind === 'moclo-reaction' ? el('span', {}, 'From the MoClo Library Tool')
+        : src.kind === 'virtual-digest' ? el('span', {}, 'A virtual digest from the Plasmid Editor') : null;
     const inner = el('div', { class: 'section-blocks' });
     this.renderList(block.blocks, inner, ctx);
     return el('div', { class: 'section-box' },
       el('div', { class: 'section-head' },
-        el('span', { class: 'section-icon' }, src.kind === 'moclo-reaction' ? '🧬' : '🧪'),
+        el('span', { class: 'section-icon' }, src.kind === 'moclo-reaction' ? '🧬' : src.kind === 'virtual-digest' ? '✂️' : '🧪'),
         ctx.editable
           ? el('input', { type: 'text', class: 'section-title', value: block.title || '',
             oninput: (e) => { block.title = e.target.value; ctx.changed(); } })

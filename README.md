@@ -46,6 +46,8 @@ The Gardiner Lab suite's digital lab notebook.
 - **Gel photos.** ▥ Gel photo… puts in a gel photo: click the wells you loaded, and each gets a
   number on the photo (row by row, top to bottom, each left to right) and a row beside it to name
   its sample.
+  - **Virtual digests** come from the Plasmid Editor (📓 Add to notebook, under its virtual gel): the
+    gel, its wells numbered and named, and a table of the fragments to tick off against the real gel.
 - **Numbered photos.** In the markup window, ① Number numbers plants (or anything) in the order you
   click them, with a table beside the photo to say what each is.
 - **Mark up photos.** Click a photo to draw on it: pen, highlighter, arrows, boxes, ellipses and

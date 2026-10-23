@@ -1,5 +1,6 @@
 """The notebook's JSON API, under /api."""
 
+import json
 from datetime import date
 from functools import wraps
 
@@ -227,6 +228,29 @@ def start_day(person):
     except ValueError:
         raise ValueError('date must be YYYY-MM-DD')
     return jsonify({'note': notes.get(person, notes.day(person, when))}), 201
+
+
+@api.post('/days/import')
+@signed_in
+def import_to_day(person):
+    """
+    A section from another tool (a virtual digest from the Plasmid Editor) put
+    at the end of a day's page: form fields `section` (JSON) and `date`
+    (YYYY-MM-DD, today when left out), and a `picture` file a gel in it shows.
+    """
+    try:
+        section = json.loads(request.form.get('section') or '')
+    except ValueError:
+        raise ValueError('section must be JSON')
+    raw = (request.form.get('date') or '').strip()
+    try:
+        when = date.fromisoformat(raw) if raw else None
+    except ValueError:
+        raise ValueError('date must be YYYY-MM-DD')
+    file = request.files.get('picture')
+    picture = (file.filename or 'gel.png', file.read(attachments.MAX_BYTES + 1)) if file else None
+    day_id = notes.import_to_day(person, section, picture, when)
+    return jsonify({'note': notes.get(person, day_id)}), 201
 
 
 @api.get('/search')
