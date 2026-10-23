@@ -5,6 +5,12 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Figures from the other tools go into a day.** Besides a virtual digest: from the Plasmid Editor,
+  a plasmid map, a cloning product, a PCR, a designed primer pair and a sequencing read; from the
+  MoClo Library Tool, a part, a plasmid and a cassette. Each comes with its pictures (several at a time) and
+  what they show, and says on its heading, and in exports, where it came from.
+
 ## [0.12.0] - 2026-10-23
 
 ### Added

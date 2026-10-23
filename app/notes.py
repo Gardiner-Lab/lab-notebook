@@ -415,30 +415,63 @@ def day(person: Person, when: Optional[date] = None) -> str:
         return day_id
 
 
-# Sections other tools put into a day, by where they come from.
-IMPORTED_KINDS = {'virtual-digest': 'the Plasmid Editor'}
+# Sections other tools put into a day, by kind: where each comes from.
+IMPORTED_KINDS = {
+    'virtual-digest': 'the Plasmid Editor',
+    'plasmid-map': 'the Plasmid Editor',
+    'cloning-product': 'the Plasmid Editor',
+    'pcr': 'the Plasmid Editor',
+    'primers': 'the Plasmid Editor',
+    'sequencing-read': 'the Plasmid Editor',
+    'moclo-plasmid': 'the MoClo Library Tool',
+    'moclo-cassette': 'the MoClo Library Tool',
+    'moclo-part': 'the MoClo Library Tool',
+}
+MAX_PICTURES = 8
 
 
-def import_to_day(person: Person, section: dict, picture: Optional[tuple] = None,
+def picture_key(n: int) -> str:
+    """How a section names its n-th picture (from 0) before it is attached: 'picture', 'picture-2', ..."""
+    return 'picture' if n == 0 else f'picture-{n + 1}'
+
+
+def _name_pictures(blocks: list, ids: Dict[str, str]) -> None:
+    """Point the section's pictures at their attachments: a gel's photo, and images in its text."""
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        if block.get('type') == 'gel' and block.get('attachment') in ids:
+            block['attachment'] = ids[block['attachment']]
+        elif block.get('type') == 'text' and isinstance(block.get('html'), str):
+            for key, att in ids.items():
+                block['html'] = block['html'].replace(f'data-attachment="{key}"', f'data-attachment="{att}"')
+        elif block.get('type') == 'section':
+            _name_pictures(block.get('blocks') or [], ids)
+
+
+def import_to_day(person: Person, section: dict, pictures: Optional[List[tuple]] = None,
                   when: Optional[date] = None) -> str:
     """
-    Put a section another tool made (a virtual digest from the Plasmid Editor)
-    at the end of this person's page for a day, starting the day if needed.
-    A picture, given as (filename, bytes), is attached to the day, and a gel
-    block in the section naming it 'picture' shows it. Kept in the day's
-    history as an import.
+    Put a section another tool made - a figure and what it shows: a virtual
+    digest, a plasmid map, a MoClo cassette... (IMPORTED_KINDS) - at the end of
+    this person's page for a day, starting the day if needed. Pictures, given
+    as (filename, bytes), are attached to the day; the section names them
+    'picture', 'picture-2', ... (picture_key), in a gel block's attachment or
+    an image in its text (data-attachment). Kept in the day's history as an
+    import.
     """
     if not isinstance(section, dict) or section.get('type') != 'section':
         raise ValueError('Send a section to put into the day')
     kind = (section.get('source') or {}).get('kind') if isinstance(section.get('source'), dict) else None
     if kind not in IMPORTED_KINDS:
-        raise ValueError('Only a virtual digest can be put into a day this way')
+        raise ValueError('That kind of section cannot be put into a day this way')
+    pictures = list(pictures or [])
+    if len(pictures) > MAX_PICTURES:
+        raise ValueError(f'At most {MAX_PICTURES} pictures at a time')
     day_id = day(person, when)
-    if picture:
-        added = attachments.add(person, day_id, [picture])
-        for block in section.get('blocks') or []:
-            if isinstance(block, dict) and block.get('type') == 'gel' and block.get('attachment') == 'picture':
-                block['attachment'] = added[0]['id']
+    if pictures:
+        added = attachments.add(person, day_id, pictures)
+        _name_pictures(section.get('blocks') or [], {picture_key(i): a['id'] for i, a in enumerate(added)})
     with connect() as conn:
         row = _row(conn, day_id)
         previous = json.loads(row['content'] or '[]')

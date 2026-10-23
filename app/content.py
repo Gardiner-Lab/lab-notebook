@@ -50,6 +50,21 @@ _ATTACHMENT_ID = re.compile(r'^[0-9a-f]{12,48}$')
 _LINK = re.compile(r'data-(note|plasmid|seed|stock)="([^"]{1,80})"')
 
 
+# What a section put into a day by another tool is, by its source's kind: shown
+# on its heading, on the page and in exports.
+IMPORTED_LABELS = {
+    'virtual-digest': 'A virtual digest from the Plasmid Editor',
+    'plasmid-map': 'A plasmid map from the Plasmid Editor',
+    'cloning-product': 'A cloning product from the Plasmid Editor',
+    'pcr': 'A PCR from the Plasmid Editor',
+    'primers': 'Primers designed in the Plasmid Editor',
+    'sequencing-read': 'A sequencing read from the Plasmid Editor',
+    'moclo-plasmid': 'A plasmid from the MoClo Library Tool',
+    'moclo-cassette': 'A cassette from the MoClo Library Tool',
+    'moclo-part': 'A part from the MoClo Library Tool',
+}
+
+
 # Wells closer in height than this (a fraction of the photo's) are one row of a gel.
 ROW_GAP = 0.06
 

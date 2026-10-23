@@ -119,6 +119,19 @@ const store = {
   get(key, fallback) { try { return JSON.parse(localStorage.getItem(`nb:${key}`)) ?? fallback; } catch (e) { return fallback; } },
   set(key, value) { try { localStorage.setItem(`nb:${key}`, JSON.stringify(value)); } catch (e) { /* private window */ } },
 };
+// Sections other tools put into a day, by their source's kind: an icon, and where they come from
+// (as content.IMPORTED_LABELS says on the server).
+const IMPORTED = {
+  'virtual-digest': ['✂️', 'A virtual digest from the Plasmid Editor'],
+  'plasmid-map': ['🧬', 'A plasmid map from the Plasmid Editor'],
+  'cloning-product': ['🔗', 'A cloning product from the Plasmid Editor'],
+  pcr: ['🧪', 'A PCR from the Plasmid Editor'],
+  primers: ['🧷', 'Primers designed in the Plasmid Editor'],
+  'sequencing-read': ['📈', 'A sequencing read from the Plasmid Editor'],
+  'moclo-plasmid': ['🧬', 'A plasmid from the MoClo Library Tool'],
+  'moclo-cassette': ['🧩', 'A cassette from the MoClo Library Tool'],
+  'moclo-part': ['🧱', 'A part from the MoClo Library Tool'],
+};
 const ICONS = { notebook: '📓', library: '📚', year: '🗓️', month: '📆', day: '📅', page: '📄', folder: '📁', protocol: '🧪' };
 const editorLink = (id) => `${NB.editor}/editor?open=${encodeURIComponent(id)}`;
 const SEED_KINDS = { L: 'line', S: 'lot', P: 'plant' };
@@ -757,12 +770,12 @@ const Blocks = {
       ? el('span', {}, 'Protocol', src.version ? ` · version ${src.version}` : '', ' · ',
         el('a', { href: `#note=${src.id}`, onclick: (e) => { e.preventDefault(); App.open(src.id); } }, 'open it'))
       : src.kind === 'moclo-reaction' ? el('span', {}, 'From the MoClo Library Tool')
-        : src.kind === 'virtual-digest' ? el('span', {}, 'A virtual digest from the Plasmid Editor') : null;
+        : IMPORTED[src.kind] ? el('span', {}, IMPORTED[src.kind][1]) : null;
     const inner = el('div', { class: 'section-blocks' });
     this.renderList(block.blocks, inner, ctx);
     return el('div', { class: 'section-box' },
       el('div', { class: 'section-head' },
-        el('span', { class: 'section-icon' }, src.kind === 'moclo-reaction' ? '🧬' : src.kind === 'virtual-digest' ? '✂️' : '🧪'),
+        el('span', { class: 'section-icon' }, src.kind === 'moclo-reaction' ? '🧬' : IMPORTED[src.kind]?.[0] || '🧪'),
         ctx.editable
           ? el('input', { type: 'text', class: 'section-title', value: block.title || '',
             oninput: (e) => { block.title = e.target.value; ctx.changed(); } })

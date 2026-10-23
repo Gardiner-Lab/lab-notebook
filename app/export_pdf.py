@@ -286,7 +286,7 @@ class _Builder:
         src = block.get('source') or {}
         origin = (f'Protocol{f" · version {src["version"]}" if src.get("version") else ""}'
                   if src.get('kind') == 'protocol' else 'From the MoClo Library Tool' if src.get('kind') == 'moclo-reaction'
-                  else 'A virtual digest from the Plasmid Editor' if src.get('kind') == 'virtual-digest' else '')
+                  else content.IMPORTED_LABELS.get(src.get('kind'), ''))
         if src.get('kind') == 'protocol' and src.get('id'):
             origin = f'<a href="{esc(self.ctx.note_link(src["id"]))}">{esc(origin)}</a>'
         else:
