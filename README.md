@@ -1,6 +1,6 @@
 # Lab Notebook
 
-The Gardiner Lab suite's digital lab notebook.
+Trellis Tools' digital lab notebook.
 
 - **A notebook for everyone.** "Start today" files a page for the day under its year and month.
   Pages can hold pages (the ＋ beside each note adds one), and a page can sit in two places at once.
@@ -62,7 +62,7 @@ The Gardiner Lab suite's digital lab notebook.
 
 ## Running it
 
-The notebook runs inside the [Gardiner Lab suite](https://github.com/Gardiner-Lab/gardiner-lab-suite),
+The notebook runs inside [Trellis Tools](https://github.com/Gardiner-Lab/gardiner-lab-suite),
 behind its proxy at `/notebook/`. Sign-in is the suite's: the proxy says who is signed in, and the
 notebook reads who is an administrator from the suite's account directory and who leads which lab
 from the suite's own database. It has no accounts of its own. Don't expose it outside the proxy.

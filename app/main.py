@@ -1,5 +1,5 @@
 """
-Lab Notebook: the Gardiner Lab suite's digital lab notebook.
+Lab Notebook: Trellis Tools' digital lab notebook.
 
 Everyone keeps a notebook of days and pages; protocols are shared in a library
 anyone can use; plasmids link to the Plasmid Editor and MoClo reactions come
