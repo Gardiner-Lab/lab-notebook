@@ -351,7 +351,7 @@ class _Builder:
                  f'<tr><td>Exported by</td><td>{esc(person.username)}{f" ({esc(person.lab)})" if person.lab else ""}</td></tr>'
                  f'<tr><td>On</td><td>{esc(ctx.stamp)}</td></tr>'
                  f'<tr><td>Contains</td><td>{pages} page{"s" if pages != 1 else ""}, {files} file{"s" if files != 1 else ""}</td></tr>'
-                 f'<tr><td>From</td><td>the Lab Notebook of the Gardiner Lab suite. Every version of each page is '
+                 f'<tr><td>From</td><td>the Lab Notebook of Trellis Tools. Every version of each page is '
                  f'kept in the notebook; this is the current one.</td></tr></table></div>')
         toc = ''
         if len(ctx.entries) > 1:

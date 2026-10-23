@@ -530,7 +530,7 @@ class _Writer:
         info = doc.add_paragraph()
         info.add_run(f'Exported by {ctx.person.username}{f" ({ctx.person.lab})" if ctx.person.lab else ""} on {ctx.stamp}. ')
         info.add_run(f'{pages} page{"s" if pages != 1 else ""}, {files} file{"s" if files != 1 else ""}. ')
-        self.grey(info, 'From the Lab Notebook of the Gardiner Lab suite: a copy to edit. The notebook keeps '
+        self.grey(info, 'From the Lab Notebook of Trellis Tools: a copy to edit. The notebook keeps '
                         'every version of each page; this is the current one.', 9)
         if len(ctx.entries) > 1:
             doc.add_paragraph().add_run('Contents').bold = True

@@ -1,7 +1,7 @@
 """
 Who is signed in, and whose notebooks they may open.
 
-The notebook has no accounts of its own: it runs inside the Gardiner Lab suite,
+The notebook has no accounts of its own: it runs inside Trellis Tools,
 whose proxy says who is signed in in an X-Suite-User header (set on every
 request, and stripped from what the browser sends). Administrators are marked
 in the suite's account directory (MoClo's users table); labs, and who leads
