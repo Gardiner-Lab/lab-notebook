@@ -93,6 +93,13 @@ CREATE TABLE IF NOT EXISTS attachments (
 );
 CREATE INDEX IF NOT EXISTS idx_attachments_note ON attachments(note_id);
 
+-- An office file turned into a PDF to be shown in the browser, kept by the file's checksum.
+CREATE TABLE IF NOT EXISTS file_views (
+    sha256 TEXT PRIMARY KEY,
+    pdf BLOB NOT NULL,
+    made_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Each person's favourite protocols, listed in their sidebar.
 CREATE TABLE IF NOT EXISTS favorites (
     username TEXT NOT NULL,

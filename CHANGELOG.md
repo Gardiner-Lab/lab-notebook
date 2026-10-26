@@ -5,6 +5,15 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-26
+
+### Added
+- Word, PowerPoint and Excel files on a note open in the browser, without downloading: old and new
+  formats (.doc, .docx, .ppt, .pptx, .xls, .xlsx), OpenDocument, RTF and CSV are turned into a PDF by the suite's
+  converter (`CONVERTER_URL`) the first time they are opened, and the PDF is kept for the next time. Text files
+  (notes, FASTA, GenBank) open as plain text. The original still downloads. Without a converter, office files
+  download as before.
+
 ## [0.16.1] - 2026-10-26
 
 ### Added

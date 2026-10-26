@@ -7,7 +7,9 @@ in the notebook's database, so the suite's backup takes them with the rest.
 
 Any kind of file can be attached: Word, PowerPoint, Excel, PDF, data files.
 Photos in common formats are shown in pages, and PDFs open in the browser's
-own PDF viewer. Everything else is sent as a download, with its real type so
+own PDF viewer; so do Word, PowerPoint and Excel files, turned into a PDF by
+the suite's converter (viewer.py), and text files open as plain text. The
+original is always there to download. Everything else is sent as a download, with its real type so
 it opens in Word, PowerPoint and so on; SVG, HTML and other types a browser
 could run as a page are sent as plain bytes, so a file cannot run scripts in
 the notebook for whoever opens it. Removing an attachment takes it off the note's
@@ -26,7 +28,7 @@ import re
 from typing import Dict, List, Optional
 
 from app import content as content_mod
-from app import notes
+from app import notes, viewer
 from app.db import connect
 from app.people import Person
 
@@ -52,7 +54,8 @@ mimetypes.add_type('application/vnd.openxmlformats-officedocument.spreadsheetml.
 for ext in ('.gb', '.gbk', '.ape'):
     mimetypes.add_type('chemical/x-genbank', ext)
 mimetypes.add_type('application/x-snapgene', '.dna')
-mimetypes.add_type('chemical/x-fasta', '.fasta')
+for ext in ('.fasta', '.fa', '.fna'):
+    mimetypes.add_type('chemical/x-fasta', ext)
 _SIGNATURES = [(b'\x89PNG\r\n\x1a\n', 'image/png'), (b'\xff\xd8\xff', 'image/jpeg'), (b'GIF8', 'image/gif'),
                (b'BM', 'image/bmp')]
 
@@ -95,6 +98,7 @@ def _summary(row) -> dict:
     return {'id': row['id'], 'note_id': row['note_id'], 'filename': row['filename'], 'mime': row['mime'],
             'size': row['size'], 'image': row['mime'] in INLINE_TYPES,
             'preview': row['mime'] in PREVIEW_TYPES, 'kind': kind(row['mime']),
+            'view': viewer.converted(kind(row['mime'])) or kind(row['mime']) in viewer.TEXT_KINDS,
             'created_by': row['created_by'], 'created_at': row['created_at'],
             # Marked up from another photo of the note: which.
             'source_id': row['source_id'] if 'source_id' in keys else None}
@@ -150,7 +154,7 @@ def fetch(person: Person, att_id: str) -> Dict:
         raise notes.Forbidden('This file is not yours to open')
     return {'data': bytes(row['data']), 'mime': row['mime'], 'filename': row['filename'],
             'inline': row['mime'] in INLINE_TYPES, 'preview': row['mime'] in PREVIEW_TYPES,
-            'sha256': row['sha256']}
+            'sha256': row['sha256'], 'kind': kind(row['mime'])}
 
 
 def remove(person: Person, att_id: str) -> None:

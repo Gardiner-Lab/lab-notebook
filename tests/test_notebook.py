@@ -654,3 +654,47 @@ def test_a_copy_of_a_page_keeps_its_marked_up_photos_marked_from_its_own_origina
     assert new_marked['source_id'] == new_photo['id'] and new_photo['id'] != photo['id']
     assert f'data-attachment="{new_marked["id"]}"' in copy['content'][0]['html']
     assert [m['t'] for m in ana.get(f"/api/attachments/{new_marked['id']}/markup").get_json()['marks']] == ['rect']
+
+
+def test_office_and_text_files_open_in_the_browser(as_user, monkeypatch):
+    import http.server
+    import threading
+    calls = []
+
+    class Converter(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers['Content-Length']))
+            calls.append((self.path, b'filename="results.xlsx"' in body))
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'%PDF-1.4 the results')
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(('127.0.0.1', 0), Converter)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    ana = as_user('ana')
+    page = _page(ana, _me(ana)['notebook'], 'Results')
+    xlsx = b'PK\x03\x04' + b'\x00' * 40
+    sheet, notes_txt, gel = _attach(ana, page['id'], ('results.xlsx', xlsx), ('notes.txt', b'OD 0.6'),
+                                    ('gel.png', PNG)).get_json()['attachments']
+    # Without the suite's converter an office file only downloads.
+    assert (sheet['view'], notes_txt['view'], gel['view']) == (False, True, False)
+    assert ana.get(f"/api/attachments/{sheet['id']}?view").headers['Content-Disposition'].startswith('attachment')
+    shown = ana.get(f"/api/attachments/{notes_txt['id']}?view")
+    assert shown.mimetype == 'text/plain' and shown.data == b'OD 0.6' and 'sandbox' in shown.headers['Content-Security-Policy']
+    # A photo asked to be viewed is shown as it always was.
+    assert ana.get(f"/api/attachments/{gel['id']}?view").headers['Content-Disposition'].startswith('inline')
+    monkeypatch.setenv('CONVERTER_URL', f'http://127.0.0.1:{server.server_port}')
+    for _ in range(2):
+        pdf = ana.get(f"/api/attachments/{sheet['id']}?view")
+        assert pdf.mimetype == 'application/pdf' and pdf.data == b'%PDF-1.4 the results'
+        assert pdf.headers['Content-Disposition'] == "inline; filename*=UTF-8''results.xlsx.pdf"
+    assert calls == [('/forms/libreoffice/convert', True)], 'converted once, then kept'
+    assert ana.get(f"/api/attachments/{sheet['id']}?download").data == xlsx
+    server.shutdown()
+    monkeypatch.setenv('CONVERTER_URL', 'http://127.0.0.1:9')
+    other = _attach(ana, page['id'], ('other.doc', xlsx + b'x')).get_json()['attachments'][0]
+    failed = ana.get(f"/api/attachments/{other['id']}?view")
+    assert failed.status_code == 502 and b'Download it' in failed.data

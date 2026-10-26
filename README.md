@@ -75,6 +75,7 @@ from the suite's own database. It has no accounts of its own. Don't expose it ou
 | `SUITE_DATABASE_PATH` | `/suite/suite.db` | labs and their leads (read only) |
 | `URL_PREFIX` | `/notebook` | where the proxy mounts it |
 | `EDITOR_URL` | `/editor` | where plasmid links open |
+| `CONVERTER_URL` | none | the suite's file converter (Gotenberg), to open Word, PowerPoint and Excel files in the browser as PDFs; unset, they download |
 
 ## Development
 

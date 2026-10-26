@@ -108,6 +108,8 @@ function localTime(stamp) {
 
 const newId = () => Math.random().toString(16).slice(2, 14);
 const attachmentUrl = (id, download = false) => url(`/api/attachments/${encodeURIComponent(id)}${download ? '?download' : ''}`);
+// Opened in the browser where it can be: an office file as a PDF, a text file as text; anything else as before.
+const viewUrl = (id) => url(`/api/attachments/${encodeURIComponent(id)}?view`);
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (ch) => `&#${ch.charCodeAt(0)};`);
 const sizeLabel = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} kB`);
 /** One of Trellis Tools' small icons (static/trellis/glyphs/), in place of an emoji. */
@@ -593,7 +595,7 @@ const Blocks = {
       const link = e.target.closest('a');
       if (!link) return;
       e.preventDefault();
-      if (link.dataset.attachment) window.open(attachmentUrl(link.dataset.attachment), '_blank', 'noopener');
+      if (link.dataset.attachment) window.open(viewUrl(link.dataset.attachment), '_blank', 'noopener');
       else if (link.dataset.seed) window.open(seedLink(link.dataset.seed), '_blank', 'noopener');
       else if (link.dataset.stock) window.open(stockLink(link.dataset.stock), '_blank', 'noopener');
       else if (link.dataset.plasmid) window.open(editorLink(link.dataset.plasmid), '_blank', 'noopener');
@@ -729,9 +731,9 @@ const Blocks = {
       img.title = 'Open the full picture';
     }
     for (const a of area.querySelectorAll('a[data-attachment]')) {
-      a.href = attachmentUrl(a.dataset.attachment);
+      a.href = viewUrl(a.dataset.attachment);
       a.classList.add('file-link');
-      a.title = 'Open (PDFs open in the browser; other files download, to open in Word, PowerPoint…)';
+      a.title = 'Open (PDFs, Word, PowerPoint, Excel and text files open in the browser; other files download)';
     }
   },
 
@@ -1617,8 +1619,8 @@ const App = {
             onclick: () => window.open(attachmentUrl(a.id), '_blank', 'noopener') })
           : el('span', { class: 'attachment-icon', title: a.kind }, glyph(FILE_ICONS[a.kind] || 'attach')),
         el('div', { class: 'attachment-info' },
-          el('a', { href: attachmentUrl(a.id), target: '_blank', rel: 'noopener', text: a.filename,
-            title: a.image || a.preview ? 'Open it in a new tab' : 'Download, to open in its program' }),
+          el('a', { href: a.view ? viewUrl(a.id) : attachmentUrl(a.id), target: '_blank', rel: 'noopener', text: a.filename,
+            title: a.image || a.preview || a.view ? 'Open it in a new tab' : 'Download, to open in its program' }),
           el('div', { class: 'hint' }, `${sizeLabel(a.size)} · ${a.created_by || '—'} · ${localTime(a.created_at)}`)),
         el('span', { class: 'attachment-actions' },
           el('a', { class: 'btn btn-secondary btn-sm', href: attachmentUrl(a.id, true), title: 'Download' }, '⤓'),
