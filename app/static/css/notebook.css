@@ -123,6 +123,7 @@ input.note-title:focus { outline: none; border-bottom: 2px solid var(--accent-so
 .text-block:empty::before { content: attr(data-placeholder); color: var(--muted); }
 .text-block p { margin: .25rem 0; }
 .text-block h3 { margin: .6rem 0 .3rem; }
+.text-block .tab { white-space: pre; tab-size: 3em; }
 .plasmid-link {
     background: color-mix(in srgb, var(--tt-editor) 11%, white); color: color-mix(in srgb, var(--tt-editor) 80%, black); border-radius: .3rem; padding: 0 .3rem; text-decoration: none;
     font-weight: 500; cursor: pointer;

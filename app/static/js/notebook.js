@@ -604,6 +604,7 @@ const Blocks = {
 
     const sync = () => { block.html = this.storable(area); ctx.changed(); };
     area.addEventListener('input', () => {
+      this.keepTabsAlone(area);
       sync();
       // "@" opens the link picker, as in Trilium's autocomplete.
       const sel = window.getSelection();
@@ -638,6 +639,32 @@ const Blocks = {
       if (at) { const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(at); }
       App.attachHere(area, [...e.dataTransfer.files], sync);
     });
+    // Tab works as in a word processor: in a list it moves the item in a level (Shift+Tab out),
+    // elsewhere it puts in a tab (Shift+Tab takes back the one just before the cursor).
+    area.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey) return;
+      e.preventDefault();
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      const { startContainer: node, startOffset: at } = range;
+      const inside = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+      const item = inside.closest('li');
+      if (item && area.contains(item)) document.execCommand(e.shiftKey ? 'outdent' : 'indent');
+      else if (!e.shiftKey) document.execCommand('insertHTML', false, '<span class="tab">\t</span>');
+      else {
+        // The tab just before the cursor: the cursor at the end of its span, or right after it.
+        const before = inside.closest('span.tab')
+          || (node.nodeType === Node.TEXT_NODE ? (at === 0 ? node.previousSibling : null) : node.childNodes[at - 1]);
+        if (!range.collapsed || !before?.classList?.contains('tab')) return;
+        range.selectNode(before);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.execCommand('delete');
+      }
+      this.keepTabsAlone(area);
+      sync();
+    });
     area.addEventListener('focus', () => App.showFormatBar(area, sync));
     return area;
   },
@@ -651,7 +678,29 @@ const Blocks = {
     for (const img of copy.querySelectorAll('img[data-attachment]')) {
       for (const attr of ['src', 'loading', 'class']) img.removeAttribute(attr);
     }
+    for (const tab of copy.querySelectorAll('span.tab')) tab.removeAttribute('style');
     return copy.innerHTML;
+  },
+
+  /** What is typed next to a tab goes into the tab's span; it is taken out again, the cursor with it. */
+  keepTabsAlone(area) {
+    const sel = window.getSelection();
+    for (const span of area.querySelectorAll('span.tab')) {
+      const text = span.textContent;
+      if (/^\t+$/.test(text)) continue;
+      const caret = sel.rangeCount && span.contains(sel.anchorNode) ? sel.anchorOffset : -1;
+      let seen = 0;
+      let place = null;
+      const parts = (text.match(/\t+|[^\t]+/g) || []).map((run) => {
+        const part = run[0] === '\t' ? el('span', { class: 'tab' }, run) : document.createTextNode(run);
+        const target = part.nodeType === Node.TEXT_NODE ? part : part.firstChild;
+        if (caret >= seen && caret <= seen + run.length) place = [target, caret - seen];
+        seen += run.length;
+        return part;
+      });
+      span.replaceWith(...parts);
+      if (place) sel.collapse(...place);
+    }
   },
 
   decorateLinks(area) {

@@ -241,6 +241,17 @@ def test_a_word_export_is_editable_with_its_files_beside_it(as_user):
     assert 'Just text' in '\n'.join(p.text for p in docx.Document(io.BytesIO(plain.data)).paragraphs)
 
 
+def test_a_tab_typed_in_text_is_kept_and_exported(as_user):
+    import docx
+    ana = as_user('ana')
+    typed = '<p>Tube<span class="tab" contenteditable="false">\t</span>Volume</p>'
+    page = ana.post('/api/notes', json={'parent_id': _me(ana)['notebook'], 'title': 'Tabs',
+                                        'content': [{'type': 'text', 'html': typed}]}).get_json()['note']
+    assert page['content'][0]['html'] == '<p>Tube<span class="tab">\t</span>Volume</p>'
+    _, _, got = _export(ana, page['id'], 'docx')
+    assert 'Tube\tVolume' in [p.text for p in docx.Document(io.BytesIO(got.data)).paragraphs]
+
+
 def test_who_may_export_what(as_user):
     from pypdf import PdfReader
     ana, ben, lead, zoe = (as_user(u) for u in ('ana', 'ben', 'lead', 'zoe'))

@@ -66,6 +66,7 @@ a { color: #1d4ed8; text-decoration: none; }
 .text h1 { font-size: 13pt; } .text h2 { font-size: 12pt; } .text h3 { font-size: 11pt; }
 .text img, figure img { max-width: 100%; max-height: 200mm; }
 .text mark { background: #fef08a; }
+.text .tab { white-space: pre; tab-size: 3em; }
 pre, code { font-family: "DejaVu Sans Mono", monospace; font-size: 8pt; }
 pre { white-space: pre-wrap; background: #f3f4f6; padding: 2mm; border-radius: 1mm; }
 blockquote { border-left: 2pt solid #d1d5db; margin-left: 0; padding-left: 3mm; color: #374151; }

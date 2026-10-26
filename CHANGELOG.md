@@ -5,6 +5,11 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Tab in text works as in a word processor: it puts in a tab (Shift+Tab takes it back), and in a
+  list it moves the item in a level (Shift+Tab moves it out). Tabs are kept in the PDF and Word
+  exports.
+
 ## [0.16.0] - 2026-10-23
 
 ### Changed
