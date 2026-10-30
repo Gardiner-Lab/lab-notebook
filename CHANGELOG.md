@@ -5,6 +5,8 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-30
+
 ### Added
 - A **Help** page, *How to use the Lab Notebook*: how the notebook is arranged, writing a day, formatting,
   tables, steps, gel photos, attachments, links to plasmids, stocks and seeds, protocols, labels, sharing,
