@@ -1713,7 +1713,30 @@ const App = {
 
     this._blocks = { blocks, ctx };
     put(box, crumbs, el('div', { class: 'note-head' }, title), meta, this.attributeBar(note), this.bookingsPanel(note),
-      blocks, editable ? this.insertBar(note, blocks, ctx) : null, this.attachmentPanel(note), this.linksPanel(note));
+      blocks, editable ? this.insertBar(note, blocks, ctx) : null, note.has_children ? this.childCards(note) : null,
+      this.attachmentPanel(note), this.linksPanel(note));
+  },
+
+  /** What is under this page, as cards with the start of each one, as Trilium shows a note's children. */
+  childCards(note) {
+    const grid = el('div', { class: 'child-cards' }, el('p', { class: 'hint' }, 'Loading…'));
+    const head = el('h3', { class: 'children-head' }, glyph('folder'), ' Under this page');
+    api('GET', `/notes/${note.id}/children?previews=1`).then(({ children }) => {
+      if (this.note?.id !== note.id) return;
+      head.append(` (${children.length})`);
+      put(grid, children.length ? children.map((c) => el('a', {
+        class: 'child-card', href: `#note=${c.id}`,
+        onclick: (e) => { if (plainClick(e)) { e.preventDefault(); this.open(c.id); } },
+      },
+      c.picture ? el('img', { class: 'child-picture', src: attachmentUrl(c.picture), alt: '', loading: 'lazy' }) : null,
+      el('div', { class: 'child-title' }, noteGlyph(c.type), el('span', { text: c.title })),
+      c.preview ? el('p', { class: 'child-text', text: c.preview }) : null,
+      el('div', { class: 'child-meta hint' }, [
+        c.child_count ? `${c.child_count} note${c.child_count === 1 ? '' : 's'} under it` : '',
+        c.updated_at ? `${c.updated_by ? `${c.updated_by} · ` : ''}${localTime(c.updated_at).slice(0, 10)}` : '',
+      ].filter(Boolean).join(' · ')))) : el('p', { class: 'hint' }, 'Nothing you can open is under it.'));
+    }).catch((err) => put(grid, el('p', { class: 'hint' }, err.message)));
+    return el('section', { class: 'children-panel' }, head, grid);
   },
 
   insertBar(note, blocks, ctx) {

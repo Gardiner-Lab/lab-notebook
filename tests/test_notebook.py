@@ -722,3 +722,22 @@ def test_day_pages_are_named_day_first_and_kept_in_date_order(as_user, world):
     titles = {d['id']: ana.get(f"/api/notes/{d['id']}").get_json()['note']['title'] for d in days}
     assert titles[days[2]['id']] == '15-10-2026 Thursday' and titles[days[1]['id']] == 'Thesis deadline'
     assert ana.get(f'/api/notes/{october}').get_json()['note']['title'] == 'October 2026'
+
+
+def test_a_page_shows_previews_of_the_notes_under_it(as_user):
+    ana = as_user('ana')
+    day = ana.post('/api/days', json={'date': '2026-10-15'}).get_json()['note']
+    month = day['path'][2]['id']
+    long = 'Colony PCR of clones 1 to 8. ' * 30
+    ana.put(f"/api/notes/{day['id']}", json={'content': [
+        {'type': 'text', 'html': f'<h2>PCR</h2><p>{long}</p><p><img data-attachment="pic1"></p>'}]})
+    plain = ana.get(f'/api/notes/{month}/children').get_json()['children'][0]
+    assert 'preview' not in plain, 'only when asked for'
+    card = ana.get(f'/api/notes/{month}/children?previews=1').get_json()['children'][0]
+    assert card['title'] == '15-10-2026 Thursday' and card['picture'] == 'pic1'
+    assert card['preview'].startswith('PCR Colony PCR of clones 1 to 8.') and card['preview'].endswith('…')
+    assert len(card['preview']) <= 281 and card['child_count'] == 0 and card['updated_by'] == 'ana'
+    # A note with no text of its own (the month) shows what is under it: their titles, the first picture.
+    year = day['path'][1]['id']
+    month_card = ana.get(f'/api/notes/{year}/children?previews=1').get_json()['children'][0]
+    assert month_card['child_count'] == 1 and month_card['preview'] == '15-10-2026 Thursday' and month_card['picture'] == 'pic1'

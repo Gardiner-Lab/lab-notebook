@@ -70,7 +70,7 @@ def booking_note(person, note_id, booking_id):
 @api.get('/notes/<note_id>/children')
 @signed_in
 def get_children(person, note_id):
-    return jsonify({'children': notes.children(person, note_id)})
+    return jsonify({'children': notes.children(person, note_id, previews=request.args.get('previews') == '1')})
 
 
 @api.post('/notes')

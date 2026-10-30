@@ -425,3 +425,18 @@ textarea.step-text:focus { outline: 1px solid var(--border); border-radius: .3re
 .viewer-image { max-width: 100%; max-height: 100%; object-fit: contain; }
 .viewer-waiting { position: absolute; }
 @media (max-width: 640px) { .viewer-backdrop { padding: 0; } .viewer { border-radius: 0; } .viewer-tools .btn { padding: .2rem .45rem; } }
+
+/* the notes under a page, as cards (as Trilium shows a note's children) */
+.children-panel { margin-top: 1.2rem; }
+.children-head { display: flex; align-items: center; gap: .35rem; font-size: .8rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--muted); margin: 0; }
+.child-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .7rem; margin-top: .5rem; }
+.child-card { display: flex; flex-direction: column; gap: .35rem; padding: .7rem .8rem; background: var(--card); border: 1px solid var(--border);
+    border-radius: .5rem; color: inherit; text-decoration: none; overflow: hidden; transition: border-color .1s, box-shadow .1s; }
+.child-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.child-title { display: flex; align-items: center; gap: .35rem; font-weight: 600; }
+.child-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.child-text { margin: 0; font-size: .85rem; line-height: 1.4; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical; overflow: hidden; }
+.child-picture { width: calc(100% + 1.6rem); margin: -.7rem -.8rem .2rem; height: 120px; object-fit: cover; background: var(--hover); }
+.child-meta { font-size: .75rem; margin-top: auto; }

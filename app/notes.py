@@ -28,6 +28,7 @@ be restored, which is a revision too.
 """
 
 import json
+import re
 from datetime import date
 from typing import Any, Dict, List, Optional, Set
 
@@ -309,7 +310,11 @@ def write_booking_note(person: Person, note_id: str, booking_id: str, text: str)
         bookings_mod.write_note(conn, note_id, booking_id, text, person.username)
 
 
-def children(person: Person, parent_id: str) -> List[dict]:
+def children(person: Person, parent_id: str, previews: bool = False) -> List[dict]:
+    """
+    The notes under one, as the tree lists them. With previews, as a page shows what is under it (as
+    Trilium does): the start of each one's text, its first picture, and how many notes are under it.
+    """
     _visible(person, parent_id)
     with connect() as conn:
         rows = conn.execute(
@@ -331,8 +336,57 @@ def children(person: Person, parent_id: str) -> List[dict]:
     # Someone else's page shown here is listed only to those who may open it.
     return [{**summary(r), 'branch_id': r['branch_id'], 'has_children': r['child_count'] > 0,
              'cloned': r['placements'] > 1,
-             'shared': r['space'] == 'notebook' and r['type'] in SHARED_PAGE_TYPES and r['id'] in shared}
+             'shared': r['space'] == 'notebook' and r['type'] in SHARED_PAGE_TYPES and r['id'] in shared,
+             **(_preview(person, r) if previews else {})}
             for r in rows if can_view(person, r)]
+
+
+PREVIEW_CHARS = 280
+
+
+def _preview(person: Person, row) -> dict:
+    """
+    The start of a note's text and its first picture, for a card of it on the page above. A note with no text of
+    its own (a day whose work is in pages under it, a month) shows what is under it instead: their titles, and
+    the first picture among them.
+    """
+    text = ' '.join((row['search_text'] or '').split())
+    picture = _first_picture(json.loads(row['content'] or '[]'))
+    under = []
+    if row['child_count'] and (not text or not picture):
+        with connect() as conn:
+            under = [r for r in conn.execute(
+                'SELECT n.* FROM branches b JOIN notes n ON n.id = b.note_id WHERE b.parent_id = ? AND n.deleted_at IS NULL '
+                # As the tree lists them: days and months newest first, by their date.
+                "ORDER BY CASE WHEN n.type IN ('year', 'month', 'day') THEN 0 ELSE 1 END, "
+                "CASE WHEN n.type IN ('year', 'month', 'day') THEN (SELECT a.value FROM attributes a WHERE a.note_id = n.id "
+                "  AND a.name IN ('yearNote', 'monthNote', 'dateNote') LIMIT 1) END DESC, b.position, n.title LIMIT 12",
+                (row['id'],)).fetchall() if can_view(person, r)]
+    if not text and under:
+        text = ' · '.join(r['title'] for r in under)
+    for r in under if not picture else []:
+        picture = _first_picture(json.loads(r['content'] or '[]'))
+        if picture:
+            break
+    return {'preview': text[:PREVIEW_CHARS] + ('…' if len(text) > PREVIEW_CHARS else ''), 'picture': picture,
+            'child_count': row['child_count'], 'updated_at': row['updated_at'], 'updated_by': row['updated_by']}
+
+
+def _first_picture(blocks: list) -> Optional[str]:
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        if block.get('type') == 'gel' and block.get('attachment'):
+            return block['attachment']
+        if block.get('type') == 'text':
+            found = re.search(r'<img[^>]*data-attachment="([^"]+)"', block.get('html') or '')
+            if found:
+                return found.group(1)
+        if block.get('type') == 'section':
+            inner = _first_picture(block.get('blocks') or [])
+            if inner:
+                return inner
+    return None
 
 
 # --- roots ---------------------------------------------------------------------

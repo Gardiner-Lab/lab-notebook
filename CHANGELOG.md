@@ -6,6 +6,10 @@ and the project uses [semantic versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- A page with notes under it shows them below its own content, as Trilium does: a card for each, with the
+  start of its text, its first picture, how many notes are under it, and who saved it when; a click opens it. A
+  note with no text of its own (a day whose work is in pages under it, a month, a year) shows what is under it
+  instead: their titles, newest first, and the first picture among them.
 - Attached documents open in the notebook itself: a photo, PDF, Word, PowerPoint or Excel file or text file,
   clicked in Attachments or in the text, is shown over the page (an office file as its PDF), with ‹ › (or the
   arrow keys) to go through the note's others, ⤓ to download the original and ↗ to open it in a tab of its own;
