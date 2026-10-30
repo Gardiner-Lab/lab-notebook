@@ -11,6 +11,8 @@ and the project uses [semantic versioning](https://semver.org/).
   numbers are number columns, so formulas work on them. Pasted into a table's cell, the cells fill the table from
   there, right and down, adding rows and columns as needed; in a tick-off column, TRUE, yes or x ticks. A table
   holds up to 500 rows and 40 columns, and a paste says when it left some out.
+- A table's column names are changed where they are: click a name in the header and type. Their kind, unit and
+  formula are still set under ⚙ Columns.
 
 ## [0.17.0] - 2026-10-26
 

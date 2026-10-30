@@ -873,7 +873,16 @@ const Blocks = {
       const head = el('tr', {}, block.columns.map((col, c) => el('th', { class: `kind-${col.kind}` },
         design ? this.columnEditor(block, c, () => { draw(); changed(); }) : [
           el('span', { class: 'col-letter' }, Sheet.colName(c)),
-          el('span', { text: col.name || '' }),
+          // The name is changed where it is, by clicking it; the rest of a column under ⚙ Columns.
+          ctx.editable
+            ? el('input', {
+              type: 'text', class: 'col-name', value: col.name || '', placeholder: 'Name', title: 'The column\'s name: click to change it',
+              style: `width:${Math.max(4, (col.name || '').length + 1)}ch`,
+              onfocus: (e) => e.target.select(),
+              oninput: (e) => { col.name = e.target.value; e.target.style.width = `${Math.max(4, col.name.length + 1)}ch`; ctx.changed(); },
+              onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } },
+            })
+            : el('span', { text: col.name || '' }),
           col.unit ? el('span', { class: 'col-unit' }, ` (${col.unit})`) : null,
           col.kind === 'formula' && col.formula ? el('div', { class: 'col-formula', text: col.formula }) : null,
           col.kind === 'fill' ? el('div', { class: 'col-formula' }, 'fill in') : null,

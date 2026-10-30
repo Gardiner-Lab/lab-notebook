@@ -169,6 +169,10 @@ input.step-text:focus { outline: 1px solid var(--border); border-radius: .3rem; 
 .sheet th { background: var(--hover); text-align: left; padding: .3rem .4rem; font-weight: 600; }
 .sheet th .col-letter { color: var(--muted); font-weight: 400; font-size: .75rem; margin-right: .3rem; }
 .sheet th .col-unit { color: var(--muted); font-weight: 400; }
+.sheet th input.col-name { font: inherit; font-weight: 600; color: inherit; border: 0; border-bottom: 1px dashed transparent;
+  background: none; padding: 0; max-width: 100%; }
+.sheet th input.col-name:hover { border-bottom-color: var(--border); }
+.sheet th input.col-name:focus { outline: none; border-bottom: 1px solid var(--accent); }
 .sheet th .col-formula { font-family: ui-monospace, monospace; font-weight: 400; font-size: .72rem; color: var(--tt-booking); }
 .sheet .cell { font: inherit; width: 100%; min-width: 4.5rem; border: 0; padding: .3rem .4rem; background: transparent; }
 .sheet .cell:focus { outline: 2px solid var(--primary); outline-offset: -2px; background: #fff; }
