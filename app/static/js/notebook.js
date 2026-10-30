@@ -700,6 +700,70 @@ const Blocks = {
     if (kept) this.selectOffsets(area, kept);
   },
 
+  /**
+   * The selected text given one highlight (kind 'mark') or one colour of letters (kind 'colour'), whatever
+   * highlights or colours its parts had: each part is taken out of them first, then given the one chosen
+   * ('none': left plain), and pieces alike that end up side by side are joined. False without a selection.
+   */
+  restyle(area, kind, name) {
+    const kept = this.selectionOffsets(area);
+    if (!kept || kept[0] === kept[1]) return false;
+    const [start, end] = kept;
+    const is = kind === 'mark' ? (n) => n.tagName === 'MARK' : (n) => n.tagName === 'SPAN' && /(^|\s)tc-/.test(n.className);
+    // The selected text, as whole text nodes.
+    const all = [];
+    const walker = document.createTreeWalker(area, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) all.push(n);
+    const nodes = [];
+    let pos = 0;
+    for (let n of all) {
+      const from = pos;
+      const to = pos + n.length;
+      pos = to;
+      if (to <= start || from >= end || !n.length) continue;
+      if (end < to) n.splitText(end - from);
+      if (start > from) n = n.splitText(start - from);
+      nodes.push(n);
+    }
+    const anything = (fragment) => fragment.textContent || fragment.querySelector('img');
+    for (const node of nodes) {
+      // Out of every highlight (or colour) around it: what was before and after it in one keeps it.
+      for (let m = node.parentElement; m && m !== area; m = node.parentElement) {
+        while (m && m !== area && !is(m)) m = m.parentElement;
+        if (!m || m === area) break;
+        const before = document.createRange();
+        before.setStart(m, 0);
+        before.setEndBefore(node);
+        const head = before.extractContents();
+        if (anything(head)) { const c = m.cloneNode(false); c.append(head); m.before(c); }
+        const after = document.createRange();
+        after.setStartAfter(node);
+        after.setEnd(m, m.childNodes.length);
+        const tail = after.extractContents();
+        if (anything(tail)) { const c = m.cloneNode(false); c.append(tail); m.after(c); }
+        m.replaceWith(...m.childNodes);
+      }
+      if (name !== 'none') {
+        const wrap = kind === 'mark' ? el('mark', { class: `hl-${name}` }) : el('span', { class: `tc-${name}` });
+        node.before(wrap);
+        wrap.append(node);
+      }
+    }
+    // Alike neighbours joined, empty ones gone.
+    for (const x of area.querySelectorAll('mark, span[class^="tc-"]')) {
+      if (!x.isConnected) continue;
+      while (x.nextSibling?.nodeType === Node.ELEMENT_NODE && x.nextSibling.tagName === x.tagName && x.nextSibling.className === x.className) {
+        const next = x.nextSibling;
+        x.append(...next.childNodes);
+        next.remove();
+      }
+      if (!x.textContent && !x.querySelector('img')) x.remove();
+    }
+    area.normalize();
+    this.selectOffsets(area, kept);
+    return true;
+  },
+
   /** The selection in a text area as character counts from its start, to put it back after the text is rebuilt. */
   selectionOffsets(area) {
     const sel = window.getSelection();
@@ -845,6 +909,7 @@ const Blocks = {
   /** The text as kept: links by what they point at, not by this page's address for it. */
   storable(area) {
     const copy = area.cloneNode(true);
+    this.tidyNodes(copy);
     for (const a of copy.querySelectorAll('a[data-plasmid], a[data-note], a[data-seed], a[data-stock], a[data-attachment]')) {
       for (const attr of ['href', 'class', 'title']) a.removeAttribute(attr);
     }
@@ -2402,6 +2467,7 @@ const App = {
       const sel = window.getSelection();
       return sel.rangeCount && !sel.isCollapsed && area.contains(sel.anchorNode) ? sel.getRangeAt(0) : null;
     };
+    // Whether all the selected text is highlighted in the marker's colour already.
     const allMarked = (range) => {
       const walker = document.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT);
       let n = walker.currentNode.nodeType === Node.TEXT_NODE ? walker.currentNode : walker.nextNode();
@@ -2409,14 +2475,15 @@ const App = {
       for (; n; n = walker.nextNode()) {
         if (!range.intersectsNode(n) || !n.textContent.trim()) continue;
         any = true;
-        if (!n.parentElement.closest('mark:not(.hl-none)')) return false;
+        if (n.parentElement.closest('mark')?.className !== `hl-${Marker.colour}`) return false;
       }
       return any;
     };
+    const mark = (e, name) => { e.preventDefault(); if (Blocks.restyle(area, 'mark', name)) sync(); };
     button.append(pen);
     button.addEventListener('mousedown', (e) => {
       const range = selected();
-      if (range) cmd('hiliteColor', allMarked(range) ? NO_COLOUR : MARKERS[Marker.colour])(e);
+      if (range) mark(e, allMarked(range) ? 'none' : Marker.colour);
       else { e.preventDefault(); Marker.on = !Marker.on; show(); }
     });
     const menu = el('div', { class: 'format-swatches', hidden: true },
@@ -2425,7 +2492,7 @@ const App = {
         onmousedown: (e) => {
           Marker.colour = name;
           menu.hidden = true;
-          if (selected()) cmd('hiliteColor', hex)(e);
+          if (selected()) mark(e, name);
           else { e.preventDefault(); Marker.on = true; }
           show();
         },
@@ -2435,14 +2502,14 @@ const App = {
         menu.hidden = true;
         Marker.on = false;
         show();
-        if (selected()) { cmd('hiliteColor', NO_COLOUR)(e); return; }
+        if (selected()) { mark(e, 'none'); return; }
         e.preventDefault();
         const sel = window.getSelection();
         const at = sel.rangeCount && area.contains(sel.anchorNode) ? sel.anchorNode : null;
-        const mark = (at?.nodeType === Node.ELEMENT_NODE ? at : at?.parentElement)?.closest('mark');
-        if (!mark || !area.contains(mark)) return;
+        const stretch = (at?.nodeType === Node.ELEMENT_NODE ? at : at?.parentElement)?.closest('mark');
+        if (!stretch || !area.contains(stretch)) return;
         const kept = Blocks.selectionOffsets(area);
-        mark.replaceWith(...mark.childNodes);
+        stretch.replaceWith(...stretch.childNodes);
         for (const inner of area.querySelectorAll('mark.hl-none')) if (!inner.parentElement.closest('mark')) inner.replaceWith(...inner.childNodes);
         if (kept) Blocks.selectOffsets(area, kept);
         sync();
@@ -2468,14 +2535,19 @@ const App = {
       Blocks.tidyFormatting(area);
       sync();
     };
+    // A colour chosen with text selected: all of it that colour, whatever colours its parts had. Without a
+    // selection, the colour of what is typed next.
+    const restyle = (e, name, hex) => {
+      if (Blocks.restyle(area, 'colour', name)) { e.preventDefault(); sync(); } else cmd('foreColor', hex)(e);
+    };
     // A row of colours under the bar, opened by a button on it.
     const swatches = (title, glyphText, colours, command, none) => {
       const menu = el('div', { class: 'format-swatches', hidden: true },
         Object.entries(colours).map(([name, hex]) => el('button', {
           class: 'swatch', title: name, style: command === 'foreColor' ? `color:${hex}` : `background:${hex}`,
-          onmousedown: (e) => { cmd(command, hex)(e); menu.hidden = true; },
+          onmousedown: (e) => { restyle(e, name, hex); menu.hidden = true; },
         }, command === 'foreColor' ? 'A' : '')),
-        el('button', { class: 'swatch none', title: none, onmousedown: (e) => { cmd(command, NO_COLOUR)(e); menu.hidden = true; } }, '⌀'));
+        el('button', { class: 'swatch none', title: none, onmousedown: (e) => { restyle(e, 'none', NO_COLOUR); menu.hidden = true; } }, '⌀'));
       const button = el('button', { title, onmousedown: (e) => {
         e.preventDefault();
         for (const m of bar.querySelectorAll('.format-swatches')) if (m !== menu) m.hidden = true;
