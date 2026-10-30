@@ -60,6 +60,10 @@ def create_app() -> Flask:
             return redirect(f'{login}?next={request.script_root}/')
         return render_template('notebook.html', version=APP_VERSION, person=person, links=links())
 
+    @app.route('/help')
+    def help_page():
+        return render_template('help.html', version=APP_VERSION, links=links())
+
     @app.route('/about')
     def about_page():
         return render_template('about.html', version=APP_VERSION, links=links())

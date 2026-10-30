@@ -10,29 +10,124 @@
 <body class="tt">
 <header class="tt-bar">
     <a class="tt-home" href="{{ request.script_root }}/" title="All of Trellis Tools"><img src="{{ request.script_root }}/static/trellis/trellis.svg" alt=""><span>Trellis Tools</span></a>
-    <a class="tt-module" href="{{ request.script_root }}/"><img src="{{ request.script_root }}/static/trellis/notebook.svg" alt="">Lab Notebook</a>
+    <a class="tt-module" href="{{ request.script_root }}/"><img src="{{ request.script_root }}/static/trellis/notebook.svg" alt="">Lab Notebook</a><span class="tt-sub">About</span>
 </header>
-<main class="about">
+<main class="help">
     <h1>Lab Notebook {{ version }}</h1>
-    <p>Trellis Tools' digital lab notebook: a notebook of days and pages for everyone,
-       a library of protocols, shared between labs as they choose, with active tables, MoClo reactions, and links to plasmids
-       that open in the Plasmid Editor.</p>
+    <p class="lead">The lab's daily record: a page for every day, a library of protocols the lab shares, and
+       links to the plasmids, stocks and seeds the work is about. Everything stays on the lab's own server.
+       <a href="{{ request.script_root }}/help">How to use it →</a></p>
 
-    <h2>Built on Trilium's design</h2>
-    <p>Its structure follows <a href="https://github.com/TriliumNext/Trilium" rel="noopener">Trilium Notes</a>
-       (TriliumNext; originally by zadam), a hierarchical note-taking application:
-       content is kept in notes, and where a note sits in the tree is kept apart from it, so one note
-       can appear in several places; notes carry labels and relations; every change is kept as a revision;
-       and days are filed under their year and month as in Trilium's journal.
-       The Lab Notebook is a separate program written for the lab suite, with its own code;
-       it shares Trilium's ideas, not its source.</p>
-    <p>Trilium Notes is © zadam, Elian Doran and contributors, and licensed under the
-       GNU Affero General Public License v3.0. See the <code>NOTICE</code> file.</p>
+    <nav class="help-toc">
+        <a href="#holds">What it holds</a>
+        <a href="#shape">How it is arranged</a>
+        <a href="#together">With the other tools</a>
+        <a href="#sees">Who sees what</a>
+        <a href="#keeps">Nothing is lost</a>
+        <a href="#trilium">Built on Trilium's design</a>
+        <a href="#licence">Licence</a>
+    </nav>
 
-    <h2>Licence</h2>
-    <p>The Lab Notebook is free software under the GNU Affero General Public License v3.0, as Trilium is.
-       Anyone using it over a network may have its source code: it is published at
-       <a href="https://github.com/Gardiner-Lab/lab-notebook" rel="noopener">github.com/Gardiner-Lab/lab-notebook</a>.</p>
+    <section id="holds">
+        <h2>What it holds</h2>
+        <div class="help-cards">
+            <div class="help-card">
+                <h3><img class="tt-glyph" src="{{ request.script_root }}/static/trellis/glyphs/calendar.svg" alt=""> Days</h3>
+                <p>A page for each day, filed under its month and year without you arranging anything.
+                   <b>Start today</b> opens today's in one press.</p>
+            </div>
+            <div class="help-card">
+                <h3><img class="tt-glyph" src="{{ request.script_root }}/static/trellis/glyphs/text.svg" alt=""> Pages</h3>
+                <p>Text, headings, colours and a marker, photos, and pages inside pages for a long experiment
+                   or a project.</p>
+            </div>
+            <div class="help-card">
+                <h3><img class="tt-glyph" src="{{ request.script_root }}/static/trellis/glyphs/sheet.svg" alt=""> Active tables</h3>
+                <p>Tables that do the arithmetic: formulas, a mix scaled by the number of reactions, cells to
+                   fill in on the day, and boxes to tick off that record who ticked them.</p>
+            </div>
+            <div class="help-card">
+                <h3><img class="tt-glyph" src="{{ request.script_root }}/static/trellis/glyphs/protocol.svg" alt=""> Protocols</h3>
+                <p>A library the whole lab shares. A day takes a copy of the version it used, so improving a
+                   protocol never rewrites the past.</p>
+            </div>
+            <div class="help-card">
+                <h3><img class="tt-glyph" src="{{ request.script_root }}/static/trellis/glyphs/image.svg" alt=""> Gel photos</h3>
+                <p>Click the wells you used and name what was in each. The numbers stay on the picture, so a
+                   figure taken from the notebook explains itself.</p>
+            </div>
+            <div class="help-card">
+                <h3><img class="tt-glyph" src="{{ request.script_root }}/static/trellis/glyphs/attach.svg" alt=""> Attachments</h3>
+                <p>Photos and files kept inside the notebook. Documents open in the page itself rather than
+                   downloading, and a photo can be drawn on.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="shape">
+        <h2>How it is arranged</h2>
+        <p>Everything is a page, and pages sit inside pages. Days fill themselves in as you write:</p>
+        <div class="flow">
+            <span class="flow-box">your notebook</span><span class="flow-arrow">→</span>
+            <span class="flow-box">2026</span><span class="flow-arrow">→</span>
+            <span class="flow-box">October 2026</span><span class="flow-arrow">→</span>
+            <span class="flow-box">30-10-2026 Friday</span>
+        </div>
+        <p>A page may sit in more than one place without being copied, so one experiment can be filed under both
+           its day and its project. <b>Labels</b> (<code>#project=GFP</code>) cut across the tree, and opening a
+           page shows cards of the pages under it.</p>
+    </section>
+
+    <section id="together">
+        <h2>With the other tools</h2>
+        <ul>
+            <li><b>Plasmid Editor.</b> Type <code>@</code> to link a plasmid; it opens there with its map and
+                sequencing reads.</li>
+            <li><b>Lab Stocks.</b> Link a glycerol stock, primer, chemical or antibody. The stock then lists the
+                pages that mention it, so a tube shows what was done with it.</li>
+            <li><b>Seed Bank.</b> Link a line, seed lot or plant, with the same two-way effect.</li>
+            <li><b>MoClo Library Tool.</b> Bring a reaction into a page, with its parts and volumes as a table.</li>
+            <li><b>Booking.</b> A day shows the equipment booked that day, so the page knows which microscope you
+                were on.</li>
+        </ul>
+    </section>
+
+    <section id="sees">
+        <h2>Who sees what</h2>
+        <ul>
+            <li><b>Your notebook is yours.</b> Nobody else reads it unless you share it.</li>
+            <li><b>Share</b> a page with a person or a whole lab, to read or to write.</li>
+            <li>A <b>lab lead</b> can be given the whole notebook of someone in their lab.</li>
+            <li>The <b>Protocols</b> library is shared with the lab.</li>
+        </ul>
+    </section>
+
+    <section id="keeps">
+        <h2>Nothing is lost</h2>
+        <p>Every save keeps the version before it, with who saved it, and any version can be read or restored.
+           A deleted page goes to <b>Deleted</b> and can be brought back; attachments stay with the versions
+           that showed them. A page can be exported as a PDF or a Word document, with everything underneath it,
+           so a project or a year leaves in one file.</p>
+    </section>
+
+    <section id="trilium">
+        <h2>Built on Trilium's design</h2>
+        <p>Its structure follows <a href="https://github.com/TriliumNext/Trilium" rel="noopener">Trilium Notes</a>
+           (TriliumNext; originally by zadam), a hierarchical note-taking application: content is kept in notes,
+           and where a note sits in the tree is kept apart from it, so one note can appear in several places;
+           notes carry labels and relations; every change is kept as a revision; and days are filed under their
+           year and month as in Trilium's journal. The Lab Notebook is a separate program written for the lab
+           suite, with its own code; it shares Trilium's ideas, not its source.</p>
+        <p>Trilium Notes is © zadam, Elian Doran and contributors, and licensed under the GNU Affero General
+           Public License v3.0. See the <code>NOTICE</code> file.</p>
+    </section>
+
+    <section id="licence">
+        <h2>Licence</h2>
+        <p>The Lab Notebook is free software under the GNU Affero General Public License v3.0, as Trilium is.
+           Anyone using it over a network may have its source code: it is published at
+           <a href="https://github.com/Gardiner-Lab/lab-notebook" rel="noopener">github.com/Gardiner-Lab/lab-notebook</a>.</p>
+    </section>
 </main>
 </body>
 </html>

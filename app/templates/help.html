@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Help · Lab Notebook</title>
+    <link rel="stylesheet" href="{{ request.script_root }}/static/trellis/trellis.css?v={{ version }}">
+    <link rel="stylesheet" href="{{ request.script_root }}/static/css/notebook.css?v={{ version }}">
+</head>
+<body class="tt">
+<header class="tt-bar">
+    <a class="tt-home" href="{{ request.script_root }}/" title="All of Trellis Tools"><img src="{{ request.script_root }}/static/trellis/trellis.svg" alt=""><span>Trellis Tools</span></a>
+    <a class="tt-module" href="{{ request.script_root }}/"><img src="{{ request.script_root }}/static/trellis/notebook.svg" alt="">Lab Notebook</a><span class="tt-sub">Help</span>
+</header>
+<main class="help">
+    <h1>How to use the Lab Notebook</h1>
+    <p class="lead">A notebook is worth keeping when someone else &mdash; including you, in two years &mdash;
+       can read a day and repeat what was done. This page covers how the notebook is arranged, writing a day,
+       the blocks a page is built from, protocols, linking to plasmids, stocks and seeds, sharing, and finding
+       things again. <a href="{{ request.script_root }}/about">What the Lab Notebook is →</a></p>
+
+    <nav class="help-toc">
+        <a href="#rules">Golden rules</a>
+        <a href="#shape">How it is arranged</a>
+        <a href="#day">Writing a day</a>
+        <a href="#text">Writing and formatting</a>
+        <a href="#tables">Tables</a>
+        <a href="#steps">Steps</a>
+        <a href="#gels">Gel photos</a>
+        <a href="#files">Photos and files</a>
+        <a href="#links">Links to the rest of the lab</a>
+        <a href="#protocols">Protocols</a>
+        <a href="#labels">Labels and finding things</a>
+        <a href="#sharing">Sharing</a>
+        <a href="#history">History and export</a>
+        <a href="#mistakes">Fixing mistakes</a>
+    </nav>
+
+    <section id="rules">
+        <h2>Golden rules</h2>
+        <ol class="rules">
+            <li><b>Write on the day, not at the end of the week.</b> <b>Start today</b> opens today's page in one
+                press. What you did not write down, you did not do.</li>
+            <li><b>Link, don't retype.</b> Type <code>@</code> to link a plasmid, a stock, a seed lot or another
+                page. The link stays right when things are renamed, and the other record then shows this page
+                in return.</li>
+            <li><b>Say what you actually did,</b> including the part that went wrong. A failed day that says why
+                is worth more than a tidy one that hides it.</li>
+            <li><b>Put numbers in a table,</b> not in a sentence. A table can do the arithmetic, scale a mix by
+                the number of reactions, and be read later.</li>
+            <li><b>Use a protocol for anything done twice.</b> Bring it into the day with <b>Protocol…</b>; the
+                day keeps the version you used, so improving the protocol later does not rewrite your history.</li>
+            <li><b>One page, one piece of work.</b> Keep a day page for the day, and put a long experiment on its
+                own page underneath it.</li>
+            <li><b>Nothing is lost.</b> Every save keeps the version before it, and a deleted page can be brought
+                back. There is no reason to keep a second copy somewhere else.</li>
+        </ol>
+    </section>
+
+    <section id="shape">
+        <h2>How it is arranged</h2>
+        <p>Everything is a <b>page</b>, and pages sit inside pages, like folders that can also be written in.
+           Your notebook fills itself as you go:</p>
+        <div class="flow">
+            <span class="flow-box">your notebook</span><span class="flow-arrow">→</span>
+            <span class="flow-box">2026</span><span class="flow-arrow">→</span>
+            <span class="flow-box">October 2026</span><span class="flow-arrow">→</span>
+            <span class="flow-box">30-10-2026 Friday</span>
+        </div>
+        <p>Days, months and years are made for you the first time you write on a day, and are listed newest
+           first. Anything else you make yourself: a page for a long experiment, a folder for a project.</p>
+        <p>Opening a page that has pages under it shows them as <b>cards</b> below it, with the start of each
+           one, so a month shows its days and a project shows its experiments without clicking through.</p>
+        <p>Besides your notebook there is the <b>Protocols</b> library, which the whole lab shares.</p>
+    </section>
+
+    <section id="day">
+        <h2>Writing a day</h2>
+        <ol class="steps">
+            <li>Press <b>Start today</b>. Today's page opens, filed under its month and year, named
+                <i>30-10-2026 Friday</i>. Pressing it again later opens the same page.</li>
+            <li>Write what you are doing as you do it. The page saves itself a second after you stop typing;
+                the header says when it was last saved.</li>
+            <li>Use <b>Add:</b> at the bottom to put in a table, steps, a gel photo or a protocol.</li>
+            <li>A day with a <b>booking</b> shows it at the top, so the page knows which microscope you were on.</li>
+        </ol>
+        <p>For an experiment that runs over several days, make a page of its own (<b>+</b> on your notebook) and
+           link to it from each day. Keep the day for what happened that day.</p>
+    </section>
+
+    <section id="text">
+        <h2>Writing and formatting</h2>
+        <p>Select text and the formatting bar appears above it:</p>
+        <ul>
+            <li><b>B</b>, <i>I</i>, <u>U</u> and <b>S</b> for bold, italic, underline and strike-through.</li>
+            <li><b>A</b> opens the <b>colours</b> for the letters; <b>⌀</b> takes a colour off again.</li>
+            <li>The <b>marker</b> ✎ switches on and off like a real one: while it is on, what you type is
+                highlighted. With text selected it highlights that text, or clears it if it is highlighted
+                already. <b>▾</b> picks the colour, and <b>⌀ No highlight</b> takes highlighting off.</li>
+            <li><b>H1, H2, H3</b> for headings, <b>¶</b> for ordinary text, and bulleted or numbered lists.</li>
+            <li><b>@</b> links a plasmid, page, stock or seed lot &mdash; the same as typing <code>@</code>.</li>
+        </ul>
+        <p><b>Tab</b> indents a list item and puts in a tab anywhere else, as in a word processor.</p>
+    </section>
+
+    <section id="tables">
+        <h2>Tables</h2>
+        <p><b>Add: ▦ Table</b> makes a table that can do arithmetic &mdash; a reaction mix, a set of
+           measurements, a scoring sheet.</p>
+        <ol class="steps">
+            <li>Click a column's name in the header to rename it.</li>
+            <li><b>⚙ Columns</b> sets what each column is: text, a number, a <b>formula</b>, one <b>scaled by
+                reactions</b>, one to <b>fill in on the day</b>, or a <b>tick off</b> box that records who ticked
+                it and when.</li>
+            <li>Formulas start with <code>=</code>. Name a column on its own (<code>=B*C</code>) for the same row,
+                a cell as <code>A1</code>, a range as <code>A1:A5</code>. <code>N</code> is the number of reactions,
+                and SUM, MIN, MAX, AVERAGE, ROUND, ABS and IF all work.</li>
+            <li><b>Scale by reactions</b> adds a box at the top: type 6 and a mix for one reaction becomes a mix
+                for six.</li>
+        </ol>
+        <p>A table copied from <b>Excel</b>, Google Sheets, LibreOffice or Word can be pasted straight in. Pasted
+           into the text it becomes a table where you pasted it, keeping its rows and columns; pasted into a
+           cell, it fills the table from there, adding rows and columns as needed.</p>
+    </section>
+
+    <section id="steps">
+        <h2>Steps</h2>
+        <p><b>Add: Steps</b> is a list you tick off as you go, each tick keeping who ticked it and when. Use it
+           for a procedure you are following now, where a protocol would be too much. A long step wraps onto
+           more lines, so nothing is hidden.</p>
+    </section>
+
+    <section id="gels">
+        <h2>Gel photos</h2>
+        <ol class="steps">
+            <li><b>Add: ▥ Gel photo…</b> and choose the photo, or pick one already on the page.</li>
+            <li>Click each <b>well you used</b>, left to right. Each gets a number on the picture.</li>
+            <li>Say what was in each lane in the table beside it. The numbers stay on the photo, so a figure
+                taken from the notebook explains itself.</li>
+        </ol>
+    </section>
+
+    <section id="files">
+        <h2>Photos and files</h2>
+        <p>Drag photos and files onto a page, paste a screenshot straight in, or use <b>Attach…</b>. They are
+           listed under <b>Attachments</b> and kept inside the notebook, so they are backed up with it.</p>
+        <p>Click one and it <b>opens in the notebook itself</b>, over the page: photos, PDFs, and Word,
+           PowerPoint, Excel and text files (office files are shown as a PDF). <b>‹ ›</b> or the arrow keys step
+           through the page's other attachments, <b>⤓</b> downloads the original, <b>↗</b> opens it in a tab of
+           its own, and <b>Esc</b> closes it.</p>
+        <p>A photo can be <b>marked up</b> &mdash; drawn and written on &mdash; from its menu. The original is
+           kept; the marked-up copy is a new attachment you can change again later.</p>
+    </section>
+
+    <section id="links">
+        <h2>Links to the rest of the lab</h2>
+        <p>Type <code>@</code> anywhere in the text and pick what you mean:</p>
+        <ul>
+            <li>a <b>plasmid</b>, which opens in the Plasmid Editor;</li>
+            <li>a <b>stock</b> from Lab Stocks &mdash; a glycerol stock, primer, chemical or antibody;</li>
+            <li>a <b>seed lot, line or plant</b> from the Seed Bank;</li>
+            <li>another <b>page</b> of the notebook.</li>
+        </ul>
+        <p>Links work both ways: the stock or seed lot you link lists this page under <i>Mentioned in</i>. That
+           is what lets a tube in a freezer show what was done with it.</p>
+        <p><b>Add: MoClo reaction…</b> brings a reaction from the MoClo Library Tool into the page, with its
+           parts and volumes as a table.</p>
+    </section>
+
+    <section id="protocols">
+        <h2>Protocols</h2>
+        <p>The <b>Protocols</b> library is shared by the lab: one copy of each method, improved over time.</p>
+        <ol class="steps">
+            <li>Write a protocol as a page in the library, with its steps and tables.</li>
+            <li>In a day page, <b>Add: Protocol…</b> and choose it. A copy of it is placed in the day, marked
+                with the version it came from.</li>
+            <li>Tick its steps and fill in its <i>fill in on the day</i> cells as you work. What you write stays
+                in the day; the library's protocol is untouched.</li>
+            <li>Improving the protocol later does not change the days that already used it.</li>
+        </ol>
+        <p>Star a protocol to keep it in <b>Favourite protocols</b> on the left.</p>
+    </section>
+
+    <section id="labels">
+        <h2>Labels and finding things</h2>
+        <p>The search box searches titles and the whole text of every page you may read, including protocols.</p>
+        <p><b>Labels</b> sort pages across the tree: press <b>＋ label</b> and add, say,
+           <code>#project=GFP</code> or <code>#strain=GV3101</code>. Searching <code>#project=GFP</code> then finds
+           every page of that project whatever day it is filed under. Days, months and years carry their own
+           label with their date.</p>
+    </section>
+
+    <section id="sharing">
+        <h2>Sharing</h2>
+        <ul>
+            <li>Your notebook is <b>yours</b> by default: nobody else reads it.</li>
+            <li><b>Share</b> on a page opens it to a person or a whole lab, to read or to write.</li>
+            <li>A <b>lab lead</b> can be given the whole notebook of someone in their lab.</li>
+            <li>The <b>Protocols</b> library is shared with the lab as a matter of course.</li>
+        </ul>
+        <p>A page someone shared with you appears under their name in the tree, and says whether you may change
+           it.</p>
+    </section>
+
+    <section id="history">
+        <h2>History and export</h2>
+        <ul>
+            <li><b>History</b> shows every saved version of a page, with who saved it, and lets you read or
+                restore one.</li>
+            <li><b>Export</b> makes a <b>PDF</b> to keep, print or send, or a <b>Word document</b> to edit. Both
+                can take everything underneath the page with them, so a whole project or a whole year goes in
+                one file. Photos are in the text, an attached PDF's pages are placed where it is attached, and
+                other files travel with it.</li>
+        </ul>
+    </section>
+
+    <section id="mistakes">
+        <h2>Fixing mistakes</h2>
+        <ul>
+            <li><b>Wrote on the wrong day:</b> cut the blocks and paste them into the right page, or use the ⋯
+                menu to move the page.</li>
+            <li><b>Deleted a page by accident:</b> <b>Deleted</b> at the bottom left lists what was deleted, and
+                brings it back.</li>
+            <li><b>Saved something wrong:</b> open <b>History</b> and restore the version before it.</li>
+            <li><b>Two people editing at once:</b> the notebook says so rather than overwriting, and shows you
+                what the other person saved.</li>
+            <li><b>A link points at the wrong thing:</b> delete it and type <code>@</code> again. Renaming the
+                plasmid or stock it points at does not break it.</li>
+            <li><b>A page is in the wrong place:</b> drag it in the tree. A page can also sit in two places at
+                once without being copied.</li>
+        </ul>
+    </section>
+</main>
+</body>
+</html>

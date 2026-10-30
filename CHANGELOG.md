@@ -6,6 +6,11 @@ and the project uses [semantic versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- A **Help** page, *How to use the Lab Notebook*: how the notebook is arranged, writing a day, formatting,
+  tables, steps, gel photos, attachments, links to plasmids, stocks and seeds, protocols, labels, sharing,
+  history and export, and putting mistakes right. Linked from the top bar and from the welcome panel.
+- **About** says much more: what the notebook holds, how it is arranged, how it fits with the other tools,
+  who sees what, and what is kept.
 - A page with notes under it shows them below its own content, as Trilium does: a card for each, with the
   start of its text, its first picture, how many notes are under it, and who saved it when; a click opens it. A
   note with no text of its own (a day whose work is in pages under it, a month, a year) shows what is under it

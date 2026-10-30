@@ -19,6 +19,7 @@
     <nav class="tt-links">
         <a href="{{ links.editor }}/editor" target="_blank" rel="noopener">Plasmid Editor ↗</a>
         <a href="{{ links.moclo }}/parts" target="_blank" rel="noopener">MoClo ↗</a>
+        <a href="{{ request.script_root }}/help">Help</a>
         <a href="{{ request.script_root }}/about">About</a>
     </nav>
     <span class="tt-user">{{ person.username }}{% if person.role != 'member' %} · {{ 'admin' if person.role == 'admin' else 'lab lead' }}{% endif %}</span>
@@ -71,6 +72,8 @@
         <div class="empty-state" id="emptyState">
             <h2>Your lab notebook</h2>
             <p>Start today's page, or open a page or protocol on the left.</p>
+            <p class="hint">New here? <a href="{{ request.script_root }}/help">How to use the Lab Notebook</a>
+               &mdash; days, tables, protocols and links to plasmids, stocks and seeds.</p>
         </div>
         <article class="note" id="note" hidden></article>
         <section class="library" id="library" hidden></section>

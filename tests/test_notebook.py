@@ -741,3 +741,13 @@ def test_a_page_shows_previews_of_the_notes_under_it(as_user):
     year = day['path'][1]['id']
     month_card = ana.get(f'/api/notes/{year}/children?previews=1').get_json()['children'][0]
     assert month_card['child_count'] == 1 and month_card['preview'] == '15-10-2026 Thursday' and month_card['picture'] == 'pic1'
+
+
+def test_the_about_and_help_pages_are_there_and_point_at_each_other(world):
+    client = world['app'].test_client()
+    for path, heading in (('/about', 'Lab Notebook'), ('/help', 'How to use the Lab Notebook')):
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert heading in r.get_data(as_text=True)
+    assert '/help' in client.get('/about').get_data(as_text=True)
+    assert '/about' in client.get('/help').get_data(as_text=True)
