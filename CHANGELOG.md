@@ -5,6 +5,8 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-30
+
 ### Added
 - Tables paste in from Excel, Google Sheets, LibreOffice, Word or a web page. Pasted into text, they become a table
   where they were pasted (the text splits around it); a first row of names names the columns, and columns of
