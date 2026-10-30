@@ -410,3 +410,18 @@ textarea.step-text:focus { outline: 1px solid var(--border); border-radius: .3re
     border-radius: .4rem; resize: vertical; background: #fff; }
 .booking-notes-text { margin-top: .25rem; font-size: .9rem; white-space: pre-wrap; }
 .booking-upcoming { margin-top: .5rem; font-size: .88rem; }
+
+/* attached documents, shown over the page */
+.viewer-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(43, 38, 32, .55); display: flex; padding: 2.5vh 2.5vw; }
+.viewer { flex: 1; display: flex; flex-direction: column; background: var(--card); border-radius: .6rem; overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0,0,0,.3); }
+.viewer-head { display: flex; align-items: center; gap: .5rem; padding: .5rem .8rem; border-bottom: 1px solid var(--border); }
+.viewer-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.viewer-count { white-space: nowrap; }
+.viewer-tools { margin-left: auto; display: flex; gap: .35rem; align-items: center; flex-shrink: 0; }
+.viewer-tools a.btn { text-decoration: none; }
+.viewer-stage { flex: 1; position: relative; background: var(--hover); display: flex; align-items: center; justify-content: center; min-height: 0; }
+.viewer-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
+.viewer-image { max-width: 100%; max-height: 100%; object-fit: contain; }
+.viewer-waiting { position: absolute; }
+@media (max-width: 640px) { .viewer-backdrop { padding: 0; } .viewer { border-radius: 0; } .viewer-tools .btn { padding: .2rem .45rem; } }

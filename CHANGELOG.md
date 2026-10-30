@@ -5,6 +5,12 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Attached documents open in the notebook itself: a photo, PDF, Word, PowerPoint or Excel file or text file,
+  clicked in Attachments or in the text, is shown over the page (an office file as its PDF), with ‹ › (or the
+  arrow keys) to go through the note's others, ⤓ to download the original and ↗ to open it in a tab of its own;
+  Esc closes it. Ctrl- or ⌘-click still opens a new tab, and other files still download.
+
 ## [0.18.0] - 2026-10-30
 
 ### Added

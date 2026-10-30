@@ -425,6 +425,70 @@ const NO_COLOUR = '#010203';
 // The marker is switched on and off like a pen: on, what is typed is marked; off, it is plain, even next to marked text.
 const Marker = { on: false, colour: 'yellow' };
 
+/* --- attached documents, shown in the page ------------------------------------------- */
+
+/**
+ * A note's photos, PDFs, Word, PowerPoint and Excel files and text files, opened over the page rather than
+ * in another tab: ‹ › (or the arrow keys) go through the others on the note, ⤓ downloads the original, ↗ opens
+ * it in a tab of its own. Other files download, as before.
+ */
+const Viewer = {
+  shows: (a) => !!(a && (a.image || a.preview || a.view)),
+
+  /** Open the attachment with this id; false when it is not one the viewer shows (the caller does as before). */
+  open(id) {
+    const list = (App.note?.attachments || []).filter(Viewer.shows);
+    let at = list.findIndex((a) => a.id === id);
+    if (at < 0) return false;
+    document.getElementById('docViewer')?.remove();
+    const title = el('span', { class: 'viewer-title' });
+    const count = el('span', { class: 'viewer-count hint' });
+    const stage = el('div', { class: 'viewer-stage' });
+    const download = el('a', { class: 'btn btn-secondary btn-sm', title: 'Download the original' }, '⤓ Download');
+    const tab = el('a', { class: 'btn btn-secondary btn-sm', target: '_blank', rel: 'noopener', title: 'Open it in a tab of its own' }, '↗ New tab');
+    const prev = el('button', { class: 'btn btn-secondary btn-sm', title: 'The one before (←)', onclick: () => go(-1) }, '‹');
+    const next = el('button', { class: 'btn btn-secondary btn-sm', title: 'The next one (→)', onclick: () => go(1) }, '›');
+    const close = () => { box.remove(); document.removeEventListener('keydown', keys); };
+    const box = el('div', { class: 'viewer-backdrop', id: 'docViewer', role: 'dialog', 'aria-modal': 'true' },
+      el('div', { class: 'viewer' },
+        el('div', { class: 'viewer-head' }, title, count,
+          el('span', { class: 'viewer-tools' }, list.length > 1 ? [prev, next] : null, download, tab,
+            el('button', { class: 'icon-btn', title: 'Close (Esc)', onclick: close }, '✕'))),
+        stage));
+    const show = () => {
+      const a = list[at];
+      title.textContent = a.filename;
+      count.textContent = list.length > 1 ? ` ${at + 1} of ${list.length}` : '';
+      download.href = attachmentUrl(a.id, true);
+      tab.href = a.image ? attachmentUrl(a.id) : viewUrl(a.id);
+      if (a.image) { put(stage, el('img', { class: 'viewer-image', src: attachmentUrl(a.id), alt: a.filename })); return; }
+      // A Word, PowerPoint or Excel file is turned into a PDF the first time, which can take a moment: it is
+      // fetched first (and then shown from the browser's cache), or what went wrong said.
+      const waiting = el('p', { class: 'viewer-waiting hint' }, 'Preparing the preview…');
+      put(stage, waiting);
+      const url = viewUrl(a.id);
+      fetch(url, { credentials: 'same-origin' }).then(async (r) => {
+        if (!stage.contains(waiting)) return;          // moved on to another one meanwhile
+        if (!r.ok) { waiting.textContent = (await r.text()).slice(0, 300) || 'It cannot be shown here: download it.'; return; }
+        put(stage, el('iframe', { class: 'viewer-frame', src: url, title: a.filename }));
+      }).catch(() => { if (stage.contains(waiting)) waiting.textContent = 'It could not be fetched: download it instead.'; });
+    };
+    const go = (step) => { at = (at + step + list.length) % list.length; show(); };
+    const keys = (e) => {
+      if (e.key === 'Escape') close();
+      else if (e.key === 'ArrowLeft' && list.length > 1) go(-1);
+      else if (e.key === 'ArrowRight' && list.length > 1) go(1);
+    };
+    box.addEventListener('mousedown', (e) => { if (e.target === box) close(); });
+    document.addEventListener('keydown', keys);
+    document.body.append(box);
+    show();
+    return true;
+  },
+};
+// A plain click opens the viewer; Ctrl/⌘- or middle-clicks still open a tab, as links do.
+const plainClick = (e) => e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey;
+
 const Blocks = {
   /** Draw a list of blocks into `container`; `list` is edited in place. */
   renderList(list, container, ctx) {
@@ -601,11 +665,11 @@ const Blocks = {
     area.addEventListener('click', (e) => {
       const photo = e.target.closest('img[data-attachment]');
       if (photo && ctx.editable) { App.photoMenu(photo); return; }
-      if (photo) { window.open(attachmentUrl(photo.dataset.attachment), '_blank', 'noopener'); return; }
+      if (photo) { if (!Viewer.open(photo.dataset.attachment)) window.open(attachmentUrl(photo.dataset.attachment), '_blank', 'noopener'); return; }
       const link = e.target.closest('a');
       if (!link) return;
       e.preventDefault();
-      if (link.dataset.attachment) window.open(viewUrl(link.dataset.attachment), '_blank', 'noopener');
+      if (link.dataset.attachment) { if (!(plainClick(e) && Viewer.open(link.dataset.attachment))) window.open(viewUrl(link.dataset.attachment), '_blank', 'noopener'); }
       else if (link.dataset.seed) window.open(seedLink(link.dataset.seed), '_blank', 'noopener');
       else if (link.dataset.stock) window.open(stockLink(link.dataset.stock), '_blank', 'noopener');
       else if (link.dataset.plasmid) window.open(editorLink(link.dataset.plasmid), '_blank', 'noopener');
@@ -969,7 +1033,7 @@ const Blocks = {
     for (const a of area.querySelectorAll('a[data-attachment]')) {
       a.href = viewUrl(a.dataset.attachment);
       a.classList.add('file-link');
-      a.title = 'Open (PDFs, Word, PowerPoint, Excel and text files open in the browser; other files download)';
+      a.title = 'Open (PDFs, Word, PowerPoint, Excel and text files open here; Ctrl-click: in a new tab; other files download)';
     }
   },
 
@@ -1744,7 +1808,7 @@ const App = {
       style: `top:${r.top + window.scrollY + 8}px;left:${r.left + window.scrollX + 8}px` },
     el('button', { class: 'btn btn-primary btn-sm', title: 'Draw and write on it (the photo is kept as it is)',
       onclick: () => { menu.remove(); this.markUp(id); } }, glyph('pencil'), ' Mark up'),
-    el('button', { class: 'btn btn-secondary btn-sm', onclick: () => { menu.remove(); window.open(attachmentUrl(id), '_blank', 'noopener'); } }, '↗ Open'));
+    el('button', { class: 'btn btn-secondary btn-sm', onclick: () => { menu.remove(); if (!Viewer.open(id)) window.open(attachmentUrl(id), '_blank', 'noopener'); } }, '↗ Open'));
     document.body.append(menu);
     const away = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('mousedown', away, true); } };
     setTimeout(() => document.addEventListener('mousedown', away, true), 0);
@@ -1939,11 +2003,12 @@ const App = {
       el('ul', { class: 'attachment-list' }, list.map((a) => el('li', { class: 'attachment' },
         a.image
           ? el('img', { class: 'attachment-thumb', src: attachmentUrl(a.id), alt: '', loading: 'lazy',
-            onclick: () => window.open(attachmentUrl(a.id), '_blank', 'noopener') })
+            onclick: () => { if (!Viewer.open(a.id)) window.open(attachmentUrl(a.id), '_blank', 'noopener'); } })
           : el('span', { class: 'attachment-icon', title: a.kind }, glyph(FILE_ICONS[a.kind] || 'attach')),
         el('div', { class: 'attachment-info' },
           el('a', { href: a.view ? viewUrl(a.id) : attachmentUrl(a.id), target: '_blank', rel: 'noopener', text: a.filename,
-            title: a.image || a.preview || a.view ? 'Open it in a new tab' : 'Download, to open in its program' }),
+            title: Viewer.shows(a) ? 'Open it here (Ctrl-click: in a new tab)' : 'Download, to open in its program',
+            onclick: (e) => { if (plainClick(e) && Viewer.open(a.id)) e.preventDefault(); } }),
           el('div', { class: 'hint' }, `${sizeLabel(a.size)} · ${a.created_by || '—'} · ${localTime(a.created_at)}`)),
         el('span', { class: 'attachment-actions' },
           el('a', { class: 'btn btn-secondary btn-sm', href: attachmentUrl(a.id, true), title: 'Download' }, '⤓'),
