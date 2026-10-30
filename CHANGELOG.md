@@ -5,6 +5,13 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Tables paste in from Excel, Google Sheets, LibreOffice, Word or a web page. Pasted into text, they become a table
+  where they were pasted (the text splits around it); a first row of names names the columns, and columns of
+  numbers are number columns, so formulas work on them. Pasted into a table's cell, the cells fill the table from
+  there, right and down, adding rows and columns as needed; in a tick-off column, TRUE, yes or x ticks. A table
+  holds up to 500 rows and 40 columns, and a paste says when it left some out.
+
 ## [0.17.0] - 2026-10-26
 
 ### Added

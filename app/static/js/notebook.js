@@ -415,6 +415,7 @@ function gelRows(lanes) {
   return rows.map((row) => row.sort((a, b) => a.x - b.x));
 }
 
+
 const Blocks = {
   /** Draw a list of blocks into `container`; `list` is edited in place. */
   renderList(list, container, ctx) {
@@ -621,9 +622,13 @@ const Blocks = {
       }
     });
     // Pasted text comes in as plain text: what else a page holds is added with the tools.
+    // A table copied from a spreadsheet or a web page becomes a table, where it was pasted.
     // A pasted picture (a screenshot, say) is attached to the note and shown where it was pasted.
     area.addEventListener('paste', (e) => {
       e.preventDefault();
+      // First: Excel copies a picture of the cells too, which is not what is meant.
+      const grid = Clip.grid(e.clipboardData);
+      if (grid && (grid.length > 1 || grid[0].length > 1)) { App.pasteTable(block, area, grid); return; }
       const files = [...(e.clipboardData.files || [])];
       if (files.length) { App.attachHere(area, files, sync); return; }
       document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
@@ -894,6 +899,16 @@ const Blocks = {
           onfocus: () => { input.value = row.cells[c] ?? ''; input.select(); },
           onblur: () => update(),
           oninput: () => { row.cells[c] = input.value; changed(); },
+          // Cells copied from a spreadsheet fill the table from here, right and down, with rows and columns added as needed.
+          onpaste: (e) => {
+            if (!ctx.editable) return;
+            const grid = Clip.gridOrLines(e.clipboardData);
+            if (!grid || (grid.length === 1 && grid[0].length === 1)) return;
+            e.preventDefault();
+            this.fillTable(block, r, c, grid);
+            draw(); changed();
+            cells.find((x) => x.r === r && x.c === c)?.input.focus();
+          },
           onkeydown: (e) => {
             // Enter goes down a row, as in a spreadsheet.
             if (e.key === 'Enter') { e.preventDefault(); cells.find((x) => x.r === r + 1 && x.c === c)?.input.focus(); }
@@ -950,6 +965,24 @@ const Blocks = {
     };
     draw();
     return wrap;
+  },
+
+  /** Copied cells put into a table from row r, column c: rows and (text) columns added where it is too small. */
+  fillTable(block, r, c, grid) {
+    const cut = grid.cut || r + grid.length > Clip.MAX_ROWS || c + grid[0].length > Clip.MAX_COLUMNS;
+    grid = grid.slice(0, Clip.MAX_ROWS - r).map((values) => values.slice(0, Clip.MAX_COLUMNS - c));
+    for (let j = block.columns.length; j < c + grid[0].length; j++) {
+      block.columns.push({ name: `Column ${Sheet.colName(j)}`, kind: 'text', unit: '', formula: '' });
+      for (const row of block.rows) row.cells.push('');
+    }
+    while (block.rows.length < r + grid.length) {
+      block.rows.push({ id: newId(), cells: block.columns.map((col) => (col.kind === 'check' ? null : '')) });
+    }
+    grid.forEach((values, i) => values.forEach((value, j) => {
+      const row = block.rows[r + i];
+      row.cells[c + j] = block.columns[c + j].kind === 'check' ? (Clip.ticked(value) ? { done: true } : null) : value.trim();
+    }));
+    if (cut) toast(`A table holds at most ${Clip.MAX_ROWS} rows and ${Clip.MAX_COLUMNS} columns: the rest was left out.`, 'error', 7000);
   },
 
   columnEditor(block, c, redraw) {
@@ -1504,6 +1537,44 @@ const App = {
         if (att) toast('Marked up. The original photo is kept, under Attachments.', 'success', 5000);
       },
     });
+  },
+
+  /**
+   * A table pasted into text: the text splits where it was pasted, into what came before it, the table,
+   * and what came after. Text that was empty is replaced by the table.
+   */
+  pasteTable(block, area, grid) {
+    const sel = window.getSelection();
+    const after = document.createElement('div');
+    if (sel.rangeCount && area.contains(sel.getRangeAt(0).startContainer)) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      const rest = document.createRange();
+      rest.setStart(range.startContainer, range.startOffset);
+      rest.setEnd(area, area.childNodes.length);
+      after.append(rest.extractContents());
+    }
+    const empty = (html) => !html.replace(/<(?!img)[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    block.html = Blocks.storable(area);
+    const table = Clip.table(grid);
+    const rest = Blocks.storable(after);
+    const place = (list) => {
+      const i = list.indexOf(block);
+      if (i >= 0) {
+        const added = [table, ...(empty(rest) ? [] : [{ id: newId(), type: 'text', html: rest }])];
+        if (empty(block.html)) list.splice(i, 1, ...added); else list.splice(i + 1, 0, ...added);
+        return true;
+      }
+      return list.some((b) => b.type === 'section' && place(b.blocks || []));
+    };
+    if (!place(this.note.content)) return;
+    const { blocks, ctx } = this._blocks;
+    Blocks.renderList(this.note.content, blocks, ctx);
+    this.changed();
+    blocks.querySelector(`[data-block="${table.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    toast(`Pasted as a table: ${table.rows.length} row${table.rows.length === 1 ? '' : 's'}, ${table.columns.length} column${table.columns.length === 1 ? '' : 's'}.`
+      + (grid.cut ? ` A table holds at most ${Clip.MAX_ROWS} rows and ${Clip.MAX_COLUMNS} columns: the rest was left out.` : ''),
+    grid.cut ? 'error' : 'success', grid.cut ? 7000 : 3500);
   },
 
   /** A photo numbered from the text: a numbered photo in its place (just after its text), else at the end. */

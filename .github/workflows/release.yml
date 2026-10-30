@@ -33,6 +33,7 @@ jobs:
       - run: |
           for f in app/static/js/*.js; do node --check "$f"; done
           node tests/js/sheet.test.js
+          node tests/js/clip.test.js
 
   build-and-push:
     needs: test
