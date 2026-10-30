@@ -15,8 +15,9 @@ and the project uses [semantic versioning](https://semver.org/).
   formula are still set under ⚙ Columns.
 
 ### Fixed
-- A long step wraps onto more lines, its box growing to show all of it; it used to run on out of sight in a
-  one-line box. A step stays one paragraph: Enter does not break it, and pasted lines join up.
+- A long step, and a long title of the steps, wrap onto more lines, their box growing to show all of it; they
+  used to run on out of sight in a one-line box. Each stays one paragraph: Enter does not break it, and pasted
+  lines join up.
 
 ## [0.17.0] - 2026-10-26
 

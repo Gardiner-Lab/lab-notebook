@@ -142,7 +142,8 @@ a[data-attachment]::before { background-image: url("../trellis/glyphs/attach.svg
 .seed-link:hover { background: color-mix(in srgb, var(--tt-seeds) 20%, white); }
 .note-link { background: color-mix(in srgb, var(--tt-notebook) 13%, white); color: color-mix(in srgb, var(--tt-notebook) 70%, black); border-radius: .3rem; padding: 0 .3rem; text-decoration: none; cursor: pointer; }
 .block-title { font: inherit; font-weight: 600; border: 0; background: none; padding: 0; margin-bottom: .4rem; width: 60%; }
-input.block-title:focus { outline: none; border-bottom: 1px solid var(--border); }
+input.block-title:focus, textarea.block-title:focus { outline: none; border-bottom: 1px solid var(--border); }
+textarea.block-title { display: block; resize: none; overflow: hidden; line-height: 1.4; color: inherit; }
 
 .steps-list { margin: 0 0 .5rem; padding-left: 1.6rem; }
 .steps-list li { padding: .15rem 0; }

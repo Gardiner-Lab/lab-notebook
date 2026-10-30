@@ -784,10 +784,18 @@ const Blocks = {
 
   steps(block, ctx) {
     const list = el('ol', { class: 'steps-list' });
-    // A long step wraps onto more lines, its box growing to show all of it.
+    // A long step, or title, wraps onto more lines, its box growing to show all of it.
     const fit = (area) => { area.style.height = 'auto'; area.style.height = `${area.scrollHeight}px`; };
-    const fitAll = () => list.querySelectorAll('textarea.step-text').forEach(fit);
-    new ResizeObserver(fitAll).observe(list);
+    const wrap = el('div', {});
+    const fitAll = () => wrap.querySelectorAll('textarea').forEach(fit);
+    new ResizeObserver(fitAll).observe(wrap);
+    // One paragraph: Enter does not break it, and pasted lines join up.
+    const oneLine = (e) => {
+      if (/[\r\n]/.test(e.target.value)) e.target.value = e.target.value.replace(/\s*[\r\n]+\s*/g, ' ');
+      fit(e.target);
+      return e.target.value;
+    };
+    const noEnter = (e) => { if (e.key === 'Enter') e.preventDefault(); };
     const draw = () => put(list, ...block.items.map((item, i) => {
       const done = !!(item.by || item.done);
       const box = el('input', {
@@ -800,14 +808,9 @@ const Blocks = {
           ctx.changed();
         },
       });
-      // A step is one paragraph: Enter does not break it, and pasted lines join up.
       const text = ctx.editable
         ? el('textarea', { class: 'step-text', rows: 1, placeholder: 'A step',
-          oninput: (e) => {
-            if (/[\r\n]/.test(e.target.value)) e.target.value = e.target.value.replace(/\s*[\r\n]+\s*/g, ' ');
-            item.text = e.target.value; fit(e.target); ctx.changed();
-          },
-          onkeydown: (e) => { if (e.key === 'Enter') e.preventDefault(); } }, item.text || '')
+          oninput: (e) => { item.text = oneLine(e); ctx.changed(); }, onkeydown: noEnter }, item.text || '')
         : el('span', { class: 'step-text', text: item.text });
       const tick = el('span', { class: 'tick', 'data-tick': `${block.id}|${item.id}` }, done && item.by ? `✓ ${item.by} · ${localTime(item.at)}` : '');
       const li = el('li', { class: done ? 'done' : '' }, box, text, tick,
@@ -816,10 +819,10 @@ const Blocks = {
       return li;
     }));
     draw();
-    return el('div', {},
+    return put(wrap,
       ctx.editable
-        ? el('input', { type: 'text', class: 'block-title', value: block.title || '', placeholder: 'Steps',
-          oninput: (e) => { block.title = e.target.value; ctx.changed(); } })
+        ? el('textarea', { class: 'block-title', rows: 1, placeholder: 'Steps',
+          oninput: (e) => { block.title = oneLine(e); ctx.changed(); }, onkeydown: noEnter }, block.title || '')
         : (block.title ? el('div', { class: 'block-title', text: block.title }) : null),
       list,
       ctx.editable ? el('button', { class: 'btn btn-secondary btn-sm', onclick: () => {
