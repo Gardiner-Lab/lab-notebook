@@ -208,6 +208,32 @@ def connect() -> _Connection:
     return _Connection()
 
 
+def _day_first_titles(conn) -> None:
+    """
+    Day and month pages named as before 0.18.0 (2026-10-30 Thursday, 2026-10 October) renamed day-first
+    (30-10-2026 Thursday, October 2026). Only the names the notebook gave them: a page someone renamed keeps
+    its name.
+    """
+    import calendar
+    from datetime import date
+    from app import dates
+    rows = conn.execute(
+        "SELECT n.id, n.type, n.title, a.value FROM notes n JOIN attributes a ON a.note_id = n.id "
+        "WHERE (n.type = 'day' AND a.name = 'dateNote') OR (n.type = 'month' AND a.name = 'monthNote')").fetchall()
+    for row in rows:
+        try:
+            if row['type'] == 'day':
+                when = date.fromisoformat(row['value'])
+                old, new = f'{row["value"]} {calendar.day_name[when.weekday()]}', dates.day_title(when)
+            else:
+                when = date.fromisoformat(row['value'] + '-01')
+                old, new = f'{row["value"]} {calendar.month_name[when.month]}', dates.month_title(when)
+        except ValueError:
+            continue
+        if row['title'] == old:
+            conn.execute('UPDATE notes SET title = ? WHERE id = ?', (new, row['id']))
+
+
 def initialize(db_path: Optional[str] = None) -> None:
     if db_path:
         set_path(db_path)
@@ -226,3 +252,4 @@ def initialize(db_path: Optional[str] = None) -> None:
             for name, decl in added:
                 if name not in columns:
                     conn.execute(f'ALTER TABLE {table} ADD COLUMN {name} {decl}')
+        _day_first_titles(conn)

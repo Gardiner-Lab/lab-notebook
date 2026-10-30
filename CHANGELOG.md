@@ -23,6 +23,13 @@ and the project uses [semantic versioning](https://semver.org/).
   headings instead of one, told apart by more than size: Heading 1 a serif title, Heading 2 bold and underlined,
   Heading 3 small grey capitals. All of it comes along in PDF and Word exports.
 
+### Changed
+- Dates are written day-first, as in Europe: 30-10-2026, and 30-10-2026 16:40 on the 24-hour clock, on pages, in
+  their history, ticks and attachments, and in PDF and Word exports. Day pages are named 30-10-2026 Thursday and
+  months October 2026; those already made under the old names (2026-10-30 Thursday, 2026-10 October) are renamed
+  when the notebook starts, unless someone renamed them. The tree still lists them newest first, by their date.
+  Stored dates stay as they were (2026-10-30).
+
 ### Fixed
 - A long step, and a long title of the steps, wrap onto more lines, their box growing to show all of it; they
   used to run on out of sight in a one-line box. Each stays one paragraph: Enter does not break it, and pasted

@@ -27,7 +27,6 @@ minutes of each other make one revision, as in Trilium), and any revision can
 be restored, which is a revision too.
 """
 
-import calendar
 import json
 from datetime import date
 from typing import Any, Dict, List, Optional, Set
@@ -37,6 +36,7 @@ from flask import g, has_app_context
 from app import attachments
 from app import bookings as bookings_mod
 from app import content as content_mod
+from app import dates
 from app import people as people_mod
 from app.db import connect
 from app.people import Person
@@ -319,9 +319,11 @@ def children(person: Person, parent_id: str) -> List[dict]:
             '  (SELECT COUNT(*) FROM branches o WHERE o.note_id = n.id) AS placements '
             'FROM branches b JOIN notes n ON n.id = b.note_id '
             'WHERE b.parent_id = ? AND n.deleted_at IS NULL '
-            # Days, months and years newest first, as in a journal; the rest in their order.
+            # Days, months and years newest first, as in a journal, by the date they are for (their
+            # titles are day-first, which would not sort); the rest in their order.
             "ORDER BY CASE WHEN n.type IN ('year', 'month', 'day') THEN 0 ELSE 1 END, "
-            "CASE WHEN n.type IN ('year', 'month', 'day') THEN n.title END DESC, b.position, n.title",
+            "CASE WHEN n.type IN ('year', 'month', 'day') THEN (SELECT a.value FROM attributes a WHERE a.note_id = n.id "
+            "  AND a.name IN ('yearNote', 'monthNote', 'dateNote') LIMIT 1) END DESC, b.position, n.title",
             (parent_id,)).fetchall()
         shared = {r['note_id'] for r in conn.execute(
             'SELECT DISTINCT s.note_id FROM shares s JOIN branches b ON b.note_id = s.note_id WHERE b.parent_id = ?',
@@ -439,12 +441,12 @@ def day(person: Person, when: Optional[date] = None) -> str:
             _label(conn, year_id, 'yearNote', year)
         month_id = _child_with_label(conn, year_id, 'monthNote', month)
         if not month_id:
-            month_id = _create(conn, title=f'{month} {calendar.month_name[when.month]}', type='month',
+            month_id = _create(conn, title=dates.month_title(when), type='month',
                                space='notebook', owner=person.username, by=person.username, parent_id=year_id)
             _label(conn, month_id, 'monthNote', month)
         day_id = _child_with_label(conn, month_id, 'dateNote', iso)
         if not day_id:
-            day_id = _create(conn, title=f'{iso} {calendar.day_name[when.weekday()]}', type='day',
+            day_id = _create(conn, title=dates.day_title(when), type='day',
                              space='notebook', owner=person.username, by=person.username, parent_id=month_id,
                              content=[{'id': content_mod.new_id(), 'type': 'text', 'html': ''}])
             _label(conn, day_id, 'dateNote', iso)

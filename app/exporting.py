@@ -31,7 +31,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from flask import current_app
 
 from app import bookings as bookings_mod
-from app import notes
+from app import dates, notes
 from app.db import connect
 from app.people import Person
 
@@ -97,7 +97,7 @@ class Context:
             moment = datetime.strptime(str(stamp)[:19], '%Y-%m-%d %H:%M:%S').replace(tzinfo=dt_timezone.utc)
         except ValueError:
             return str(stamp)[:16]
-        return moment.astimezone(self.tz).strftime('%Y-%m-%d %H:%M')
+        return moment.astimezone(self.tz).strftime(dates.STAMP)
 
     def absolute(self, path: str) -> str:
         return f'{self.origin}{path}' if path.startswith('/') and self.origin else path
@@ -339,7 +339,7 @@ def _run(app, job, person, note_id, fmt, children, tz, origin, base):
             job.update(status='working', stage='Gathering the pages')
             ctx = collect(person, note_id, children, progress=lambda n: job.update(total=n))
             ctx.tz, ctx.origin, ctx.base = tz, origin, base
-            ctx.stamp = datetime.now(dt_timezone.utc).astimezone(tz).strftime('%Y-%m-%d %H:%M')
+            ctx.stamp = datetime.now(dt_timezone.utc).astimezone(tz).strftime(dates.STAMP)
 
             def step(done, stage=None):
                 job['done'] = done

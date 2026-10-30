@@ -122,7 +122,7 @@ def test_lab_leads_share_notebooks_with_labs_and_people(as_user):
     assert [(n['owner'], n['shared']) for n in _me(zoe)['others']] == [('ana', True)]
     assert olead.get(f"/api/notes/{day['id']}").status_code == 403
     assert ben.get(f"/api/notes/{day['id']}").status_code == 403
-    assert [n['title'] for n in zoe.get('/api/search?q=2026-10-16').get_json()['notes']] == ['2026-10-16 Friday']
+    assert [n['title'] for n in zoe.get('/api/search?q=16-10-2026').get_json()['notes']] == ['16-10-2026 Friday']
 
     # With a lab: everyone in it.
     lab_share = lead.post(f'/api/notes/{notebook}/shares', json={'target_type': 'lab', 'target': '2'}).get_json()
@@ -183,7 +183,7 @@ def test_a_pdf_export_has_every_page_under_it_with_its_pictures_and_files(as_use
     assert got.headers['Content-Disposition'].startswith('attachment')
     pdf = PdfReader(io.BytesIO(got.data))
     text = '\n'.join(p.extract_text() for p in pdf.pages)
-    for words in ('2026-10-16 Friday', 'Gel analysis', 'Bands at 1 kb', 'Spin down', 'Reactions: 3',
+    for words in ('16-10-2026 Friday', 'Gel analysis', 'Bands at 1 kb', 'Spin down', 'Reactions: 3',
                   '7.5', '52.5', 'scan.pdf · page 2 of 2', 'A1', '0.51', 'Contents'):
         assert words in text, words
     # Times in the exporter's zone; the tick recorded by the server.
@@ -209,7 +209,7 @@ def test_a_pdf_export_has_every_page_under_it_with_its_pictures_and_files(as_use
     # The whole notebook, from its top.
     _, _, whole = _export(ana, notebook)
     whole_text = '\n'.join(p.extract_text() for p in PdfReader(io.BytesIO(whole.data)).pages)
-    assert "ana's notebook" in whole_text and '2026-10 October' in whole_text and 'Bands at 1 kb' in whole_text
+    assert "ana's notebook" in whole_text and 'October 2026' in whole_text and 'Bands at 1 kb' in whole_text
 
 
 def test_a_word_export_is_editable_with_its_files_beside_it(as_user):
@@ -223,13 +223,13 @@ def test_a_word_export_is_editable_with_its_files_beside_it(as_user):
     assert {'files/scan.pdf', 'files/plate.csv', 'files/notes.docx', 'README.txt'} <= set(names)
     document = docx.Document(io.BytesIO(bundle.read(next(n for n in names if n.endswith('.docx')))))
     text = '\n'.join(p.text for p in document.paragraphs)
-    for words in ('2026-10-16 Friday', 'Gel analysis', 'Bands at 1 kb', '☑ 1. Spin down', '• one', '1. nested',
+    for words in ('16-10-2026 Friday', 'Gel analysis', 'Bands at 1 kb', '☑ 1. Spin down', '• one', '1. nested',
                   'Reactions: 3'):
         assert words in text, words
     cells = [c.text for t in document.tables for r in t.rows for c in r.cells]
     assert '7.5' in cells and '52.5' in cells and 'Buffer' in cells
     headings = [p.text for p in document.paragraphs if p.style.name.startswith('Heading')]
-    assert headings[:2] == ['2026-10-16 Friday', 'Gel analysis']
+    assert headings[:2] == ['16-10-2026 Friday', 'Gel analysis']
     # The photo, and the attached PDF's two pages, are pictures in the document.
     assert len(document.inline_shapes) == 3
 
@@ -413,7 +413,7 @@ def test_a_virtual_digest_goes_into_the_day(as_user):
                  content_type='multipart/form-data')
     assert r.status_code == 201, r.get_json()
     day = r.get_json()['note']
-    assert day['type'] == 'day' and day['title'].startswith('2026-03-04')
+    assert day['type'] == 'day' and day['title'].startswith('04-03-2026')
     # It takes the place of the empty paragraph a new day starts with.
     assert [b['type'] for b in day['content']] == ['section']
     got = day['content'][0]

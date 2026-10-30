@@ -30,15 +30,15 @@ def test_starting_a_day_files_it_under_year_and_month(as_user):
     r = ana.post('/api/days', json={'date': '2026-10-15'})
     assert r.status_code == 201
     day = r.get_json()['note']
-    assert day['title'] == '2026-10-15 Thursday' and day['type'] == 'day'
-    assert [p['title'] for p in day['path']] == ["ana's notebook", '2026', '2026-10 October', '2026-10-15 Thursday']
+    assert day['title'] == '15-10-2026 Thursday' and day['type'] == 'day'
+    assert [p['title'] for p in day['path']] == ["ana's notebook", '2026', 'October 2026', '15-10-2026 Thursday']
     assert {'type': 'label', 'name': 'dateNote', 'value': '2026-10-15'} in [
         {k: a[k] for k in ('type', 'name', 'value')} for a in day['attributes']]
 
     # The same day again is the same page; today works without a date.
     assert ana.post('/api/days', json={'date': '2026-10-15'}).get_json()['note']['id'] == day['id']
     today = ana.post('/api/days', json={}).get_json()['note']
-    assert today['path'][-1]['title'].startswith(date.today().isoformat())
+    assert today['path'][-1]['title'].startswith(date.today().strftime('%d-%m-%Y'))
     assert ana.post('/api/days', json={'date': '15/10/2026'}).status_code == 400
 
 
@@ -698,3 +698,27 @@ def test_office_and_text_files_open_in_the_browser(as_user, monkeypatch):
     other = _attach(ana, page['id'], ('other.doc', xlsx + b'x')).get_json()['attachments'][0]
     failed = ana.get(f"/api/attachments/{other['id']}?view")
     assert failed.status_code == 502 and b'Download it' in failed.data
+
+
+def test_day_pages_are_named_day_first_and_kept_in_date_order(as_user, world):
+    import sqlite3
+    from app import db
+    ana = as_user('ana')
+    days = [ana.post('/api/days', json={'date': d}).get_json()['note'] for d in ('2026-09-30', '2026-10-02', '2026-10-15')]
+    october = days[-1]['path'][2]['id']
+    # Newest first, by date, though 15-10 comes before 02-10 by its letters.
+    assert [c['title'] for c in ana.get(f'/api/notes/{october}/children').get_json()['children']] == \
+        ['15-10-2026 Thursday', '02-10-2026 Friday']
+    year = days[-1]['path'][1]['id']
+    assert [c['title'] for c in ana.get(f'/api/notes/{year}/children').get_json()['children']] == ['October 2026', 'September 2026']
+    # Pages named the old way are renamed when the notebook starts; a page someone named stays as it is.
+    conn = sqlite3.connect(db.path())
+    conn.execute("UPDATE notes SET title = '2026-10-15 Thursday' WHERE id = ?", (days[2]['id'],))
+    conn.execute("UPDATE notes SET title = '2026-10 October' WHERE id = ?", (october,))
+    conn.execute("UPDATE notes SET title = 'Thesis deadline' WHERE id = ?", (days[1]['id'],))
+    conn.commit()
+    conn.close()
+    db.initialize()
+    titles = {d['id']: ana.get(f"/api/notes/{d['id']}").get_json()['note']['title'] for d in days}
+    assert titles[days[2]['id']] == '15-10-2026 Thursday' and titles[days[1]['id']] == 'Thesis deadline'
+    assert ana.get(f'/api/notes/{october}').get_json()['note']['title'] == 'October 2026'
