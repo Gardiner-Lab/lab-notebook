@@ -1970,7 +1970,10 @@ const App = {
   attributeBar(note) {
     const bar = el('div', { class: 'attributes' });
     for (const a of note.attributes) {
-      const text = a.type === 'label' ? `#${a.name}${a.value ? `=${a.value}` : ''}` : `~${a.name}=`;
+      // A day's or month's own label shown day-first (30-10-2026, 10-2026); it is kept as it is (2026-10-30).
+      const shown = ['dateNote', 'monthNote'].includes(a.name) && /^\d{4}-\d\d(-\d\d)?$/.test(a.value || '')
+        ? a.value.split('-').reverse().join('-') : a.value;
+      const text = a.type === 'label' ? `#${a.name}${shown ? `=${shown}` : ''}` : `~${a.name}=`;
       bar.append(el('span', { class: `attr attr-${a.type}` }, text,
         a.type === 'relation' ? el('a', { href: `#note=${a.value}`, onclick: (e) => { e.preventDefault(); this.open(a.value); } },
           a.target_title || 'a deleted note') : null,
