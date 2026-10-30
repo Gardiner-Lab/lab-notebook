@@ -422,6 +422,8 @@ const TEXT_COLOURS = { red: '#c62828', orange: '#c2570c', green: '#2b8040', blue
 const MARKERS = { yellow: '#fef08a', green: '#bbf7d0', blue: '#bfdbfe', pink: '#fbcfe8' };
 // What "no colour" is applied as, to be recognised and taken off again.
 const NO_COLOUR = '#010203';
+// The marker is switched on and off like a pen: on, what is typed is marked; off, it is plain, even next to marked text.
+const Marker = { on: false, colour: 'yellow' };
 
 const Blocks = {
   /** Draw a list of blocks into `container`; `list` is edited in place. */
@@ -679,6 +681,10 @@ const Blocks = {
       this.keepTabsAlone(area);
       sync();
     });
+    // Typing with the marker on marks what is typed; with it off, typing in or next to marked text is plain.
+    area.addEventListener('beforeinput', (e) => {
+      if (e.inputType === 'insertText' && e.data && Blocks.typeWithMarker(area, e.data)) { e.preventDefault(); sync(); }
+    });
     area.addEventListener('focus', () => App.showFormatBar(area, sync));
     return area;
   },
@@ -689,6 +695,44 @@ const Blocks = {
    * ordinary colour (tc-none, hl-none); elsewhere it is simply taken off.
    */
   tidyFormatting(area) {
+    const kept = this.selectionOffsets(area);
+    this.tidyNodes(area);
+    if (kept) this.selectOffsets(area, kept);
+  },
+
+  /** The selection in a text area as character counts from its start, to put it back after the text is rebuilt. */
+  selectionOffsets(area) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount || !area.contains(sel.anchorNode)) return null;
+    const range = sel.getRangeAt(0);
+    const count = (node, offset) => {
+      const r = document.createRange();
+      r.setStart(area, 0);
+      r.setEnd(node, offset);
+      return r.toString().length;
+    };
+    return [count(range.startContainer, range.startOffset), count(range.endContainer, range.endOffset)];
+  },
+
+  selectOffsets(area, [start, end]) {
+    const walker = document.createTreeWalker(area, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    let seen = 0;
+    let n;
+    let started = false;
+    while ((n = walker.nextNode())) {
+      const len = n.textContent.length;
+      if (!started && start <= seen + len) { range.setStart(n, start - seen); started = true; }
+      if (started && end <= seen + len) { range.setEnd(n, end - seen); break; }
+      seen += len;
+    }
+    if (!started) return;
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  },
+
+  tidyNodes(area) {
     const rgb = (value) => {
       const m = String(value || '').match(/\d+/g);
       return m && m.length >= 3 ? `#${m.slice(0, 3).map((n) => Number(n).toString(16).padStart(2, '0')).join('')}` : String(value || '').toLowerCase();
@@ -710,14 +754,79 @@ const Blocks = {
       const name = named(rgb(font.getAttribute('color')), TEXT_COLOURS);
       swap(font, 'span', name && `tc-${name}`, '[class^="tc-"]:not(.tc-none)');
     }
-    for (const span of area.querySelectorAll('span[style]')) {
-      const fore = span.style.color && named(rgb(span.style.color), TEXT_COLOURS);
-      const back = span.style.backgroundColor && named(rgb(span.style.backgroundColor), MARKERS);
-      if (back) swap(span, 'mark', `hl-${back}`, 'mark:not(.hl-none)');
-      else if (fore) swap(span, 'span', `tc-${fore}`, '[class^="tc-"]:not(.tc-none)');
-      else if (!span.classList.length) span.replaceWith(...span.childNodes);
-      else span.removeAttribute('style');
+    // A colour the browser put on an element as a style (on a span of its own, or on what was there already).
+    const within = (node, tag, cls) => {
+      const inner = document.createElement(tag);
+      inner.className = cls;
+      inner.append(...node.childNodes);
+      node.append(inner);
+      return inner;
+    };
+    for (const node of area.querySelectorAll('[style]')) {
+      const fore = node.style.color && named(rgb(node.style.color), TEXT_COLOURS);
+      const back = node.style.backgroundColor && named(rgb(node.style.backgroundColor), MARKERS);
+      node.removeAttribute('style');
+      if (back && node.tagName === 'MARK') {
+        if (back === 'none' && !node.parentElement.closest('mark:not(.hl-none)')) { node.replaceWith(...node.childNodes); continue; }
+        node.className = `hl-${back}`;
+      } else if (back) {
+        if (back !== 'none' || node.parentElement.closest('mark:not(.hl-none)')) within(node, 'mark', `hl-${back}`);
+      }
+      if (fore && node.isConnected) {
+        if (node.tagName === 'SPAN' && !node.classList.contains('tab')) node.className = `tc-${fore}`;
+        else within(node, 'span', `tc-${fore}`);
+        if (fore === 'none' && !node.parentElement.closest('[class^="tc-"]:not(.tc-none)')) {
+          const tagged = node.tagName === 'SPAN' ? node : node.lastChild;
+          tagged.replaceWith(...tagged.childNodes);
+        }
+      }
+      if (node.isConnected && node.tagName === 'SPAN' && !node.className) node.replaceWith(...node.childNodes);
     }
+    // Nothing left in it: gone.
+    for (const node of area.querySelectorAll('mark, span[class^="tc-"]')) if (!node.textContent) node.remove();
+  },
+
+  /**
+   * Text typed where the marker's being on or off says otherwise than where the cursor is: with the marker on
+   * outside marked text, the text goes in marked; with it off inside marked text, the marking is split there
+   * and the text goes in between, plain. False when the browser can type it as usual.
+   */
+  typeWithMarker(area, text) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount || !sel.isCollapsed || !area.contains(sel.anchorNode)) return false;
+    const range = sel.getRangeAt(0);
+    const inside = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement;
+    const mark = inside.closest('mark:not(.hl-none)');
+    const marked = !!(mark && area.contains(mark));
+    // Just after marked text (at the end of a line, say), a browser would carry on in it: decided here instead.
+    const before = !marked && range.startContainer.nodeType === Node.ELEMENT_NODE && range.startOffset > 0
+      ? range.startContainer.childNodes[range.startOffset - 1] : null;
+    // A space put in by hand at the end of a line would not show (nor keep the cursor): a fixed one does.
+    const typed = document.createTextNode(text.replace(/ /g, '\u00a0'));
+    if (before?.nodeType === Node.ELEMENT_NODE && before.matches('mark:not(.hl-none)')) {
+      if (Marker.on) before.append(typed); else before.after(typed);
+    } else if (Marker.on === marked) return false;
+    else if (Marker.on) {
+      const node = el('mark', { class: `hl-${Marker.colour}` }, typed);
+      range.insertNode(node);
+    } else {
+      // What comes after the cursor stays marked, in a mark of its own after the typed text.
+      const rest = document.createRange();
+      rest.setStart(range.startContainer, range.startOffset);
+      rest.setEnd(mark, mark.childNodes.length);
+      const after = mark.cloneNode(false);
+      after.append(rest.extractContents());
+      mark.after(typed);
+      if (after.textContent) typed.after(after);
+      if (!mark.textContent) mark.remove();
+    }
+    const caret = document.createRange();
+    caret.setStart(typed, typed.length);
+    caret.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(caret);
+    for (const node of area.querySelectorAll('mark')) if (!node.textContent) node.remove();
+    return true;
   },
 
   /** The text as kept: links by what they point at, not by this page's address for it. */
@@ -2267,6 +2376,55 @@ const App = {
 
   /* the formatting bar for text ---------------------------------------------- */
 
+  /**
+   * The marker: its button switches it on and off, for what is typed next; with text selected, it marks the
+   * selection, or takes the marking off when it is all marked already. ▾ chooses its colour.
+   */
+  markerTool(area, sync, cmd, bar) {
+    const pen = el('span', { class: 'marker-a', style: `background:${MARKERS[Marker.colour]}` }, '✎');
+    const button = el('button', { class: Marker.on ? 'on' : '', title: 'Marker: switch it on or off (with text selected, mark it or unmark it)',
+      'aria-pressed': String(Marker.on) });
+    const show = () => { button.classList.toggle('on', Marker.on); button.setAttribute('aria-pressed', String(Marker.on)); pen.style.background = MARKERS[Marker.colour]; };
+    const selected = () => {
+      const sel = window.getSelection();
+      return sel.rangeCount && !sel.isCollapsed && area.contains(sel.anchorNode) ? sel.getRangeAt(0) : null;
+    };
+    const allMarked = (range) => {
+      const walker = document.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT);
+      let n = walker.currentNode.nodeType === Node.TEXT_NODE ? walker.currentNode : walker.nextNode();
+      let any = false;
+      for (; n; n = walker.nextNode()) {
+        if (!range.intersectsNode(n) || !n.textContent.trim()) continue;
+        any = true;
+        if (!n.parentElement.closest('mark:not(.hl-none)')) return false;
+      }
+      return any;
+    };
+    button.append(pen);
+    button.addEventListener('mousedown', (e) => {
+      const range = selected();
+      if (range) cmd('hiliteColor', allMarked(range) ? NO_COLOUR : MARKERS[Marker.colour])(e);
+      else { e.preventDefault(); Marker.on = !Marker.on; show(); }
+    });
+    const menu = el('div', { class: 'format-swatches', hidden: true },
+      Object.entries(MARKERS).map(([name, hex]) => el('button', {
+        class: 'swatch', title: name, style: `background:${hex}`,
+        onmousedown: (e) => {
+          Marker.colour = name;
+          menu.hidden = true;
+          if (selected()) cmd('hiliteColor', hex)(e);
+          else { e.preventDefault(); Marker.on = true; }
+          show();
+        },
+      })));
+    const more = el('button', { class: 'format-more', title: 'The marker\'s colour', onmousedown: (e) => {
+      e.preventDefault();
+      for (const m of bar.querySelectorAll('.format-swatches')) if (m !== menu) m.hidden = true;
+      menu.hidden = !menu.hidden;
+    } }, '▾');
+    return el('span', { class: 'format-menu' }, button, more, menu);
+  },
+
   showFormatBar(area, sync) {
     let bar = document.getElementById('formatBar');
     if (!bar) {
@@ -2301,7 +2459,7 @@ const App = {
       el('button', { title: 'Underline (Ctrl+U)', onmousedown: cmd('underline') }, el('u', {}, 'U')),
       el('button', { title: 'Strike through', onmousedown: cmd('strikethrough') }, el('s', {}, 'S')),
       swatches('Colour of the letters', el('span', { class: 'colour-a' }, 'A'), TEXT_COLOURS, 'foreColor', 'No colour'),
-      swatches('Marker: highlight the text', el('span', { class: 'marker-a' }, '✎'), MARKERS, 'hiliteColor', 'No marker'),
+      this.markerTool(area, sync, cmd, bar),
       el('span', { class: 'format-sep' }),
       el('button', { title: 'Heading 1: a title', onmousedown: cmd('formatBlock', 'h1') }, 'H1'),
       el('button', { title: 'Heading 2', onmousedown: cmd('formatBlock', 'h2') }, 'H2'),

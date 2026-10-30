@@ -211,6 +211,8 @@ textarea.step-text:focus { outline: 1px solid var(--border); border-radius: .3re
 .format-bar[hidden] { display: none; }
 .format-bar button { font: inherit; font-size: .85rem; color: #fff; background: none; border: 0; min-width: 1.8rem; padding: .2rem .4rem; border-radius: .3rem; cursor: pointer; }
 .format-bar button:hover { background: var(--tt-text); }
+.format-bar button.on { background: rgba(255,255,255,.22); box-shadow: inset 0 0 0 1px rgba(255,255,255,.5); }
+.format-bar .format-more { min-width: 0; padding: .2rem .15rem; font-size: .7rem; }
 .format-bar .format-sep { width: 1px; margin: .2rem .15rem; background: rgba(255,255,255,.25); }
 .format-bar .format-menu { position: relative; display: inline-flex; }
 .format-bar .colour-a { border-bottom: 3px solid #c62828; line-height: 1; }

@@ -14,7 +14,9 @@ and the project uses [semantic versioning](https://semver.org/).
 - A table's column names are changed where they are: click a name in the header and type. Their kind, unit and
   formula are still set under ⚙ Columns.
 - More in the text's formatting bar: strike-through; colours for letters (red, orange, green, blue, purple, grey);
-  a marker to highlight text (yellow, green, blue, pink), each with a way to take it off again; and three
+  a marker to highlight text (yellow, green, blue, pink), switched on and off like a pen: on, what is typed is
+  highlighted; off, typing is plain, even next to or inside highlighted text; with text selected it highlights it,
+  or takes the highlight off when it is all highlighted already. Colours can be taken off again. And three
   headings instead of one, told apart by more than size: Heading 1 a serif title, Heading 2 bold and underlined,
   Heading 3 small grey capitals. All of it comes along in PDF and Word exports.
 
