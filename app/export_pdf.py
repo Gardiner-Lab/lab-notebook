@@ -63,9 +63,15 @@ a { color: #1d4ed8; text-decoration: none; }
 .labels { font-size: 8pt; color: #4338ca; margin-bottom: 2mm; }
 .empty { color: #9ca3af; font-style: italic; }
 .text h1, .text h2, .text h3 { bookmark-level: none; }
-.text h1 { font-size: 13pt; } .text h2 { font-size: 12pt; } .text h3 { font-size: 11pt; }
+.text h1 { font-family: "DejaVu Serif", serif; font-size: 14pt; font-weight: 600; }
+.text h2 { font-size: 12pt; border-bottom: 0.5pt solid #d1d5db; padding-bottom: 0.5mm; }
+.text h3 { font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.04em; color: #6b7280; }
 .text img, figure img { max-width: 100%; max-height: 200mm; }
-.text mark { background: #fef08a; }
+.text mark, .text mark.hl-yellow { background: #fef08a; }
+.text mark.hl-green { background: #bbf7d0; } .text mark.hl-blue { background: #bfdbfe; }
+.text mark.hl-pink { background: #fbcfe8; } .text mark.hl-none { background: none; }
+.tc-red { color: #c62828; } .tc-orange { color: #c2570c; } .tc-green { color: #2b8040; }
+.tc-blue { color: #1d5fa8; } .tc-purple { color: #7b3fa0; } .tc-grey { color: #6b7280; } .tc-none { color: #111827; }
 .text .tab { white-space: pre; tab-size: 3em; }
 pre, code { font-family: "DejaVu Sans Mono", monospace; font-size: 8pt; }
 pre { white-space: pre-wrap; background: #f3f4f6; padding: 2mm; border-radius: 1mm; }

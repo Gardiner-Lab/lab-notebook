@@ -13,6 +13,10 @@ and the project uses [semantic versioning](https://semver.org/).
   holds up to 500 rows and 40 columns, and a paste says when it left some out.
 - A table's column names are changed where they are: click a name in the header and type. Their kind, unit and
   formula are still set under ⚙ Columns.
+- More in the text's formatting bar: strike-through; colours for letters (red, orange, green, blue, purple, grey);
+  a marker to highlight text (yellow, green, blue, pink), each with a way to take it off again; and three
+  headings instead of one, told apart by more than size: Heading 1 a serif title, Heading 2 bold and underlined,
+  Heading 3 small grey capitals. All of it comes along in PDF and Word exports.
 
 ### Fixed
 - A long step, and a long title of the steps, wrap onto more lines, their box growing to show all of it; they

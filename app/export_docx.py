@@ -27,6 +27,12 @@ GREY = (0x6B, 0x72, 0x80)
 GREEN = (0x04, 0x78, 0x57)
 
 
+# The colours of letters and markers in the notebook (notebook.js, notebook.css): letters as RGB, markers
+# as the nearest of Word's highlight colours.
+TEXT_COLOURS = {'red': 'C62828', 'orange': 'C2570C', 'green': '2B8040', 'blue': '1D5FA8', 'purple': '7B3FA0',
+                'grey': '6B7280', 'none': '111827'}
+MARKERS = {'yellow': 'YELLOW', 'green': 'BRIGHT_GREEN', 'blue': 'TURQUOISE', 'pink': 'PINK'}
+
 def _docx():
     import docx
     from docx.enum.text import WD_BREAK, WD_COLOR_INDEX
@@ -240,9 +246,12 @@ class _Writer:
         doc = self.doc
         tag = node.tag
         if tag in ('h1', 'h2', 'h3'):
+            # As in the notebook: a serif title, a bold heading, a small grey capitalised one.
             p = doc.add_paragraph()
+            heading = {'h1': {'size': 15, 'font': 'Georgia'}, 'h2': {'size': 12.5},
+                       'h3': {'size': 10, 'caps': True, 'color': 'grey'}}[tag]
             for c in node.children:
-                self._inline(p, c, after, {**style, 'b': True, 'size': {'h1': 13, 'h2': 12, 'h3': 11}[tag]})
+                self._inline(p, c, after, {**style, 'b': True, **heading})
         elif tag == 'p':
             p = doc.add_paragraph()
             for c in node.children:
@@ -300,8 +309,14 @@ class _Writer:
                 run.font.name = 'Consolas'
             if style.get('size'):
                 run.font.size = self.Pt(style['size'])
-            if style.get('mark'):
-                run.font.highlight_color = self.WD_COLOR_INDEX.YELLOW
+            if style.get('font'):
+                run.font.name = style['font']
+            if style.get('caps'):
+                run.font.all_caps = True
+            if style.get('color') in TEXT_COLOURS:
+                run.font.color.rgb = self.RGBColor.from_string(TEXT_COLOURS[style['color']])
+            if style.get('mark') and style['mark'] != 'none':
+                run.font.highlight_color = getattr(self.WD_COLOR_INDEX, MARKERS.get(style['mark'], 'YELLOW'))
             return
         tag, attrs = node.tag, node.attrs
         if tag == 'br':
@@ -343,8 +358,16 @@ class _Writer:
                 self._inline(p, text, after, style)
             return
         flags = {'b': 'b', 'strong': 'b', 'i': 'i', 'em': 'i', 'u': 'u', 's': 's', 'sub': 'sub', 'sup': 'sup',
-                 'code': 'code', 'mark': 'mark'}
+                 'code': 'code'}
         inner = {**style, flags[tag]: True} if tag in flags else style
+        # A colour (span class tc-…) or a marker (mark, class hl-…), as the notebook keeps them.
+        classes = (attrs.get('class') or '').split()
+        if tag == 'mark':
+            inner = {**inner, 'mark': next((c[3:] for c in classes if c.startswith('hl-')), 'yellow')}
+        elif tag == 'span':
+            colour = next((c[3:] for c in classes if c.startswith('tc-')), None)
+            if colour:
+                inner = {**inner, 'color': colour}
         for c in node.children:
             self._inline(p, c, after, inner)
 

@@ -416,6 +416,13 @@ function gelRows(lanes) {
 }
 
 
+// The colours text can have and be marked with: kept as class names (tc-red, hl-yellow), which the
+// notebook's styles, its PDF and its Word documents all know (app/export_*.py has the same values).
+const TEXT_COLOURS = { red: '#c62828', orange: '#c2570c', green: '#2b8040', blue: '#1d5fa8', purple: '#7b3fa0', grey: '#6b7280' };
+const MARKERS = { yellow: '#fef08a', green: '#bbf7d0', blue: '#bfdbfe', pink: '#fbcfe8' };
+// What "no colour" is applied as, to be recognised and taken off again.
+const NO_COLOUR = '#010203';
+
 const Blocks = {
   /** Draw a list of blocks into `container`; `list` is edited in place. */
   renderList(list, container, ctx) {
@@ -674,6 +681,43 @@ const Blocks = {
     });
     area.addEventListener('focus', () => App.showFormatBar(area, sync));
     return area;
+  },
+
+  /**
+   * What the browser's own formatting makes, as the notebook keeps it: a colour as <span class="tc-…">,
+   * a marker as <mark class="hl-…">, strike-through as <s>. "No colour" inside a coloured stretch keeps the
+   * ordinary colour (tc-none, hl-none); elsewhere it is simply taken off.
+   */
+  tidyFormatting(area) {
+    const rgb = (value) => {
+      const m = String(value || '').match(/\d+/g);
+      return m && m.length >= 3 ? `#${m.slice(0, 3).map((n) => Number(n).toString(16).padStart(2, '0')).join('')}` : String(value || '').toLowerCase();
+    };
+    const named = (hex, colours) => (hex === NO_COLOUR ? 'none' : Object.keys(colours).find((k) => colours[k] === hex) || null);
+    const swap = (old, tag, cls, inside) => {
+      if (!cls || (cls.endsWith('-none') && !old.parentElement.closest(inside))) { old.replaceWith(...old.childNodes); return; }
+      const node = document.createElement(tag);
+      node.className = cls;
+      node.append(...old.childNodes);
+      old.replaceWith(node);
+    };
+    for (const strike of area.querySelectorAll('strike')) {
+      const s = document.createElement('s');
+      s.append(...strike.childNodes);
+      strike.replaceWith(s);
+    }
+    for (const font of area.querySelectorAll('font')) {
+      const name = named(rgb(font.getAttribute('color')), TEXT_COLOURS);
+      swap(font, 'span', name && `tc-${name}`, '[class^="tc-"]:not(.tc-none)');
+    }
+    for (const span of area.querySelectorAll('span[style]')) {
+      const fore = span.style.color && named(rgb(span.style.color), TEXT_COLOURS);
+      const back = span.style.backgroundColor && named(rgb(span.style.backgroundColor), MARKERS);
+      if (back) swap(span, 'mark', `hl-${back}`, 'mark:not(.hl-none)');
+      else if (fore) swap(span, 'span', `tc-${fore}`, '[class^="tc-"]:not(.tc-none)');
+      else if (!span.classList.length) span.replaceWith(...span.childNodes);
+      else span.removeAttribute('style');
+    }
   },
 
   /** The text as kept: links by what they point at, not by this page's address for it. */
@@ -2229,12 +2273,39 @@ const App = {
       bar = el('div', { class: 'format-bar', id: 'formatBar' });
       document.body.append(bar);
     }
-    const cmd = (command, value) => (e) => { e.preventDefault(); document.execCommand(command, false, value); sync(); };
+    const cmd = (command, value) => (e) => {
+      e.preventDefault();
+      document.execCommand('styleWithCSS', false, false);
+      document.execCommand(command, false, value);
+      Blocks.tidyFormatting(area);
+      sync();
+    };
+    // A row of colours under the bar, opened by a button on it.
+    const swatches = (title, glyphText, colours, command, none) => {
+      const menu = el('div', { class: 'format-swatches', hidden: true },
+        Object.entries(colours).map(([name, hex]) => el('button', {
+          class: 'swatch', title: name, style: command === 'foreColor' ? `color:${hex}` : `background:${hex}`,
+          onmousedown: (e) => { cmd(command, hex)(e); menu.hidden = true; },
+        }, command === 'foreColor' ? 'A' : '')),
+        el('button', { class: 'swatch none', title: none, onmousedown: (e) => { cmd(command, NO_COLOUR)(e); menu.hidden = true; } }, '⌀'));
+      const button = el('button', { title, onmousedown: (e) => {
+        e.preventDefault();
+        for (const m of bar.querySelectorAll('.format-swatches')) if (m !== menu) m.hidden = true;
+        menu.hidden = !menu.hidden;
+      } }, glyphText);
+      return el('span', { class: 'format-menu' }, button, menu);
+    };
     put(bar, 
       el('button', { title: 'Bold (Ctrl+B)', onmousedown: cmd('bold') }, el('b', {}, 'B')),
       el('button', { title: 'Italic (Ctrl+I)', onmousedown: cmd('italic') }, el('i', {}, 'I')),
       el('button', { title: 'Underline (Ctrl+U)', onmousedown: cmd('underline') }, el('u', {}, 'U')),
-      el('button', { title: 'Heading', onmousedown: cmd('formatBlock', 'h3') }, 'H'),
+      el('button', { title: 'Strike through', onmousedown: cmd('strikethrough') }, el('s', {}, 'S')),
+      swatches('Colour of the letters', el('span', { class: 'colour-a' }, 'A'), TEXT_COLOURS, 'foreColor', 'No colour'),
+      swatches('Marker: highlight the text', el('span', { class: 'marker-a' }, '✎'), MARKERS, 'hiliteColor', 'No marker'),
+      el('span', { class: 'format-sep' }),
+      el('button', { title: 'Heading 1: a title', onmousedown: cmd('formatBlock', 'h1') }, 'H1'),
+      el('button', { title: 'Heading 2', onmousedown: cmd('formatBlock', 'h2') }, 'H2'),
+      el('button', { title: 'Heading 3', onmousedown: cmd('formatBlock', 'h3') }, 'H3'),
       el('button', { title: 'Paragraph', onmousedown: cmd('formatBlock', 'p') }, '¶'),
       el('button', { title: 'Bulleted list', onmousedown: cmd('insertUnorderedList') }, '•'),
       el('button', { title: 'Numbered list', onmousedown: cmd('insertOrderedList') }, '1.'),

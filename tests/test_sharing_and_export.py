@@ -469,3 +469,27 @@ def test_figures_from_the_tools_go_into_the_day(as_user):
                         content_type='multipart/form-data').status_code == 201, kind
     assert ana.post('/api/days/import', data={'section': json.dumps(dict(section, source={'kind': 'whatever'}))},
                     content_type='multipart/form-data').status_code == 400
+
+
+def test_colours_markers_strike_through_and_headings_are_kept_and_exported(as_user):
+    import docx
+    ana = as_user('ana')
+    html = ('<h1>Results</h1><h2>Gels</h2><h3>Lane notes</h3>'
+            '<p><span class="tc-red">failed</span>, <mark class="hl-green">worked</mark>, <mark>checked</mark>, '
+            '<s>dropped</s> <span style="color:red" onclick="x()">plain</span></p>')
+    page = ana.post('/api/notes', json={'parent_id': _me(ana)['notebook'], 'title': 'Formatting',
+                                        'content': [{'type': 'text', 'html': html}]}).get_json()['note']
+    kept = ana.get(f"/api/notes/{page['id']}").get_json()['note']['content'][0]['html']
+    for part in ('<h1>Results</h1>', '<h2>Gels</h2>', '<span class="tc-red">failed</span>',
+                 '<mark class="hl-green">worked</mark>', '<s>dropped</s>'):
+        assert part in kept, kept
+    assert 'style=' not in kept and 'onclick' not in kept
+    _, _, got = _export(ana, page['id'], 'docx')
+    runs = {r.text: r for p in docx.Document(io.BytesIO(got.data)).paragraphs for r in p.runs}
+    assert str(runs['failed'].font.color.rgb) == 'C62828'
+    assert runs['worked'].font.highlight_color == docx.enum.text.WD_COLOR_INDEX.BRIGHT_GREEN
+    assert runs['checked'].font.highlight_color == docx.enum.text.WD_COLOR_INDEX.YELLOW
+    assert runs['dropped'].font.strike
+    assert runs['Results'].font.name == 'Georgia' and runs['Lane notes'].font.all_caps
+    _, status, pdf = _export(ana, page['id'], 'pdf')
+    assert pdf.data[:5] == b'%PDF-'
