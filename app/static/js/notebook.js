@@ -782,6 +782,19 @@ const Blocks = {
       }
       if (node.isConnected && node.tagName === 'SPAN' && !node.className) node.replaceWith(...node.childNodes);
     }
+    // Highlighting taken off part of a highlight: the highlight split around it, that part plain.
+    for (const none of area.querySelectorAll('mark.hl-none')) {
+      const outer = none.parentElement;
+      if (outer.tagName !== 'MARK' || outer.classList.contains('hl-none')) {
+        if (!outer.closest('mark:not(.hl-none)')) none.replaceWith(...none.childNodes);
+        continue;
+      }
+      const after = outer.cloneNode(false);
+      while (none.nextSibling) after.append(none.nextSibling);
+      const plain = [...none.childNodes];
+      none.remove();
+      outer.after(...plain, after);
+    }
     // Nothing left in it: gone.
     for (const node of area.querySelectorAll('mark, span[class^="tc-"]')) if (!node.textContent) node.remove();
   },
@@ -2416,7 +2429,24 @@ const App = {
           else { e.preventDefault(); Marker.on = true; }
           show();
         },
-      })));
+      })),
+      // No highlight: off the selection; else off the highlighted stretch the cursor is in. The marker goes off too.
+      el('button', { class: 'swatch none', title: 'No highlight', onmousedown: (e) => {
+        menu.hidden = true;
+        Marker.on = false;
+        show();
+        if (selected()) { cmd('hiliteColor', NO_COLOUR)(e); return; }
+        e.preventDefault();
+        const sel = window.getSelection();
+        const at = sel.rangeCount && area.contains(sel.anchorNode) ? sel.anchorNode : null;
+        const mark = (at?.nodeType === Node.ELEMENT_NODE ? at : at?.parentElement)?.closest('mark');
+        if (!mark || !area.contains(mark)) return;
+        const kept = Blocks.selectionOffsets(area);
+        mark.replaceWith(...mark.childNodes);
+        for (const inner of area.querySelectorAll('mark.hl-none')) if (!inner.parentElement.closest('mark')) inner.replaceWith(...inner.childNodes);
+        if (kept) Blocks.selectOffsets(area, kept);
+        sync();
+      } }, '⌀'));
     const more = el('button', { class: 'format-more', title: 'The marker\'s colour', onmousedown: (e) => {
       e.preventDefault();
       for (const m of bar.querySelectorAll('.format-swatches')) if (m !== menu) m.hidden = true;
