@@ -784,6 +784,10 @@ const Blocks = {
 
   steps(block, ctx) {
     const list = el('ol', { class: 'steps-list' });
+    // A long step wraps onto more lines, its box growing to show all of it.
+    const fit = (area) => { area.style.height = 'auto'; area.style.height = `${area.scrollHeight}px`; };
+    const fitAll = () => list.querySelectorAll('textarea.step-text').forEach(fit);
+    new ResizeObserver(fitAll).observe(list);
     const draw = () => put(list, ...block.items.map((item, i) => {
       const done = !!(item.by || item.done);
       const box = el('input', {
@@ -796,9 +800,14 @@ const Blocks = {
           ctx.changed();
         },
       });
+      // A step is one paragraph: Enter does not break it, and pasted lines join up.
       const text = ctx.editable
-        ? el('input', { type: 'text', class: 'step-text', value: item.text || '', placeholder: 'A step',
-          oninput: (e) => { item.text = e.target.value; ctx.changed(); } })
+        ? el('textarea', { class: 'step-text', rows: 1, placeholder: 'A step',
+          oninput: (e) => {
+            if (/[\r\n]/.test(e.target.value)) e.target.value = e.target.value.replace(/\s*[\r\n]+\s*/g, ' ');
+            item.text = e.target.value; fit(e.target); ctx.changed();
+          },
+          onkeydown: (e) => { if (e.key === 'Enter') e.preventDefault(); } }, item.text || '')
         : el('span', { class: 'step-text', text: item.text });
       const tick = el('span', { class: 'tick', 'data-tick': `${block.id}|${item.id}` }, done && item.by ? `✓ ${item.by} · ${localTime(item.at)}` : '');
       const li = el('li', { class: done ? 'done' : '' }, box, text, tick,

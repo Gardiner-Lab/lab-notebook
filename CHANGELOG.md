@@ -14,6 +14,10 @@ and the project uses [semantic versioning](https://semver.org/).
 - A table's column names are changed where they are: click a name in the header and type. Their kind, unit and
   formula are still set under ⚙ Columns.
 
+### Fixed
+- A long step wraps onto more lines, its box growing to show all of it; it used to run on out of sight in a
+  one-line box. A step stays one paragraph: Enter does not break it, and pasted lines join up.
+
 ## [0.17.0] - 2026-10-26
 
 ### Added

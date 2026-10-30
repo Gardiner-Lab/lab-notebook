@@ -149,7 +149,9 @@ input.block-title:focus { outline: none; border-bottom: 1px solid var(--border);
 .steps-list li > * { vertical-align: middle; }
 .steps-list li.done .step-text { text-decoration: line-through; color: var(--muted); }
 .step-text { font: inherit; border: 0; background: none; width: calc(100% - 15rem); padding: .1rem .3rem; }
-input.step-text:focus { outline: 1px solid var(--border); border-radius: .3rem; }
+textarea.step-text { display: inline-block; resize: none; overflow: hidden; line-height: 1.4; vertical-align: top; }
+.steps-list li > textarea.step-text { vertical-align: top; }
+textarea.step-text:focus { outline: 1px solid var(--border); border-radius: .3rem; }
 .tick { font-size: .75rem; color: var(--ok); margin-left: .4rem; white-space: nowrap; }
 
 .section-box { border-left: 4px solid var(--tt-brown); padding-left: .8rem; }
