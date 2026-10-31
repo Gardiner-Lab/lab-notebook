@@ -9,7 +9,7 @@
 </head>
 <body class="tt">
 <header class="tt-bar">
-    <a class="tt-home" href="{{ request.script_root }}/" title="All of Trellis Tools"><img src="{{ request.script_root }}/static/trellis/trellis.svg" alt=""><span>Trellis Tools</span></a>
+    <a class="tt-home" href="{{ links.suite_home }}" title="All of Trellis Tools"><img src="{{ request.script_root }}/static/trellis/trellis.svg" alt=""><span>Trellis Tools</span></a>
     <a class="tt-module" href="{{ request.script_root }}/"><img src="{{ request.script_root }}/static/trellis/notebook.svg" alt="">Lab Notebook</a><span class="tt-sub">About</span>
 </header>
 <main class="help">
@@ -129,5 +129,6 @@
            <a href="https://github.com/Gardiner-Lab/lab-notebook" rel="noopener">github.com/Gardiner-Lab/lab-notebook</a>.</p>
     </section>
 </main>
+<script src="{{ request.script_root }}/static/trellis/modules.js?v={{ version }}" defer></script>
 </body>
 </html>

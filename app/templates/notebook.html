@@ -17,8 +17,6 @@
         <a class="tt-tab view-tab" id="tabProtocols" href="#protocols">Protocols</a>
     </nav>
     <nav class="tt-links">
-        <a href="{{ links.editor }}/editor" target="_blank" rel="noopener">Plasmid Editor ↗</a>
-        <a href="{{ links.moclo }}/parts" target="_blank" rel="noopener">MoClo ↗</a>
         <a href="{{ request.script_root }}/help">Help</a>
         <a href="{{ request.script_root }}/about">About</a>
     </nav>
@@ -96,5 +94,6 @@
 <script src="{{ request.script_root }}/static/js/clip.js?v={{ version }}"></script>
 <script src="{{ request.script_root }}/static/js/markup.js?v={{ version }}"></script>
 <script src="{{ request.script_root }}/static/js/notebook.js?v={{ version }}"></script>
+<script src="{{ request.script_root }}/static/trellis/modules.js?v={{ version }}" defer></script>
 </body>
 </html>
