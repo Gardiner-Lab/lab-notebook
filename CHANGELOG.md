@@ -13,6 +13,8 @@ and the project uses [semantic versioning](https://semver.org/).
 - The bar is in two rows: the suite's on top — its tools, the dashboard, help, about and who is signed in —
   and this tool's own pages on the row under it, as the MoClo tool and Lab Stocks already read. A page with no
   pages of its own keeps a single row.
+- The pages no longer assume whose lab is running the suite: "the Gardiner Lab" and "the lab's own server"
+  are now "your lab" and "your own server", so they read correctly wherever it is deployed.
 
 ### Fixed
 - The bar's "Trellis Tools" link pointed back at the tool itself instead of the suite's own page.
