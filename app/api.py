@@ -296,7 +296,8 @@ def import_to_day(person):
 @signed_in
 def search(person):
     types = [t for t in request.args.get('types', '').split(',') if t]
-    return jsonify({'notes': notes.search(person, request.args.get('q', ''), types or None)})
+    return jsonify({'notes': notes.search(person, request.args.get('q', ''), types or None,
+                                          editable=request.args.get('editable') == '1')})
 
 
 @api.get('/protocols')
@@ -323,6 +324,14 @@ def add_favorite(person, note_id):
 def remove_favorite(person, note_id):
     notes.set_favorite(person, note_id, False)
     return jsonify({'favorites': notes.favorites(person)})
+
+
+@api.post('/protocols/<protocol_id>/use')
+@signed_in
+def use_protocol(person, protocol_id):
+    """Use a protocol as a new page under `parent_id`, or under today's page when none is given."""
+    parent = str(_body().get('parent_id') or '').strip() or None
+    return jsonify({'note': notes.get(person, notes.use_protocol(person, protocol_id, parent))}), 201
 
 
 @api.get('/protocols/<protocol_id>/snapshot')

@@ -184,6 +184,35 @@ function picker({ title, placeholder, search, describe }) {
   });
 }
 
+/**
+ * Move the item at `from` to the gap `slot` (0 = before the first, items.length = after the last), in
+ * place. Gives false, and changes nothing, when that would leave it where it is or the numbers are off.
+ */
+function moveItem(items, from, slot) {
+  if (!Number.isInteger(from) || !Number.isInteger(slot) || from < 0 || from >= items.length || slot < 0 || slot > items.length) return false;
+  const to = slot > from ? slot - 1 : slot;
+  if (to === from) return false;
+  items.splice(to, 0, ...items.splice(from, 1));
+  return true;
+}
+
+/**
+ * Choose where a protocol goes: "Add to today" at the top, then the pages and days you may add to (your own,
+ * or ones shared with you to work on), newest first, found by title. Gives {today: true} or that page.
+ */
+const pickProtocolTarget = () => picker({
+  title: 'Add this protocol to…', placeholder: 'Search your pages and days by title',
+  search: async (q) => {
+    const found = (await api('GET', `/search?q=${encodeURIComponent(q)}&types=page,day&editable=1`)).notes;
+    return q ? found : [{ today: true, title: 'Add to today' }, ...found];
+  },
+  describe: (n) => (n.today
+    ? [noteGlyph('day'), ' ', el('b', { text: n.title }), el('span', { class: 'hint' }, " · a page under today's day")]
+    : [noteGlyph(n.type), ' ', el('b', { text: n.title }),
+      n.where ? el('span', { class: 'hint' }, ` · ${n.where}`) : null,
+      n.owner && n.owner !== NB.person.username ? el('span', { class: 'hint' }, ` · ${n.owner}`) : null]),
+});
+
 const pickPlasmid = () => picker({
   title: 'Link a plasmid', placeholder: 'Search the plasmid library',
   search: async (q) => (await api('GET', `/plasmids?q=${encodeURIComponent(q)}`)).plasmids,
@@ -1091,6 +1120,18 @@ const Blocks = {
       return e.target.value;
     };
     const noEnter = (e) => { if (e.key === 'Enter') e.preventDefault(); };
+    // Steps are moved by dragging the handle at their left, or with Alt+↑ / Alt+↓ in a step; its
+    // ticks go with it, as they belong to the step and not to its place.
+    let dragging = null;
+    const clearMarks = () => list.querySelectorAll('.dragging, .drop-before, .drop-after')
+      .forEach((n) => n.classList.remove('dragging', 'drop-before', 'drop-after'));
+    const after = (e, li) => { const r = li.getBoundingClientRect(); return e.clientY > r.top + r.height / 2; };
+    const moved = (from, slot, focusAt) => {
+      if (!moveItem(block.items, from, slot)) return;
+      draw();
+      ctx.changed();
+      if (focusAt !== undefined) list.children[focusAt]?.querySelector('.step-text')?.focus();
+    };
     const draw = () => put(list, ...block.items.map((item, i) => {
       const done = !!(item.by || item.done);
       const box = el('input', {
@@ -1105,12 +1146,52 @@ const Blocks = {
       });
       const text = ctx.editable
         ? el('textarea', { class: 'step-text', rows: 1, placeholder: 'A step',
-          oninput: (e) => { item.text = oneLine(e); ctx.changed(); }, onkeydown: noEnter }, item.text || '')
+          oninput: (e) => { item.text = oneLine(e); ctx.changed(); },
+          onkeydown: (e) => {
+            noEnter(e);
+            if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+              e.preventDefault();
+              const up = e.key === 'ArrowUp';
+              moved(i, up ? i - 1 : i + 2, up ? i - 1 : i + 1);
+            }
+          } }, item.text || '')
         : el('span', { class: 'step-text', text: item.text });
+      const handle = ctx.editable ? el('span', {
+        class: 'step-handle', draggable: 'true', title: 'Drag to move this step (or Alt+↑ / Alt+↓ in it)',
+        onclick: (e) => e.stopPropagation(),
+        ondragstart: (e) => {
+          dragging = i;
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/x-step', String(i));
+          e.dataTransfer.setDragImage(li, 12, 12);
+          setTimeout(() => li.classList.add('dragging'), 0);
+        },
+        ondragend: () => { dragging = null; clearMarks(); },
+      }, '⋮⋮') : null;
       const tick = el('span', { class: 'tick', 'data-tick': `${block.id}|${item.id}` }, done && item.by ? `✓ ${item.by} · ${localTime(item.at)}` : '');
-      const li = el('li', { class: done ? 'done' : '' }, box, text, tick,
-        ctx.editable ? el('button', { class: 'icon-btn faint', title: 'Remove this step',
-          onclick: () => { block.items.splice(i, 1); draw(); ctx.changed(); } }, '✕') : null);
+      const li = el('li', { class: done ? 'done' : '',
+        // Only a step of this list being dragged is taken, not a file or another list's step.
+        ondragover: (e) => {
+          if (dragging === null) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          const below = after(e, li);
+          clearMarks();
+          list.children[dragging]?.classList.add('dragging');
+          li.classList.add(below ? 'drop-after' : 'drop-before');
+        },
+        ondragleave: (e) => { if (!li.contains(e.relatedTarget)) li.classList.remove('drop-before', 'drop-after'); },
+        ondrop: (e) => {
+          if (dragging === null) return;
+          e.preventDefault();
+          const from = dragging;
+          const slot = i + (after(e, li) ? 1 : 0);
+          dragging = null;
+          clearMarks();
+          moved(from, slot);
+        } }, handle, box, text, tick,
+      ctx.editable ? el('button', { class: 'icon-btn faint', title: 'Remove this step',
+        onclick: () => { block.items.splice(i, 1); draw(); ctx.changed(); } }, '✕') : null);
       return li;
     }));
     draw();
@@ -1692,9 +1773,10 @@ const App = {
           },
         }, note.favorite ? '★ Favourite' : '☆ Favourite') : null,
         note.space === 'notebook' || note.type !== 'protocol' ? null : el('button', {
-          class: 'btn btn-secondary btn-sm', title: "Put this protocol into today's page",
-          onclick: () => this.useToday(note.id),
-        }, '＋ Use today'),
+          class: 'btn btn-secondary btn-sm',
+          title: "Use this protocol: a page of its own under today's day, or under any page you choose",
+          onclick: () => this.addToPage(note.id),
+        }, '＋ Add to page…'),
         note.can_share ? el('button', {
           class: 'btn btn-secondary btn-sm',
           title: note.space === 'library' ? 'Share this protocol with other labs'
@@ -2212,12 +2294,16 @@ const App = {
           close();
           this.newNote(note.space === 'library' ? 'library' : 'mine', note.id, note.space === 'library' ? 'protocol' : 'page');
         } }, note.space === 'library' ? '＋ New protocol in this folder' : '＋ New page under this one') : null,
-        note.can_delete && !['day', 'month', 'year'].includes(note.type) ? el('button', { class: 'menu-item danger', onclick: () => {
+        note.can_delete ? el('button', { class: 'menu-item danger', onclick: () => {
           close();
+          const dated = ['day', 'month', 'year'].includes(note.type);
           modal({
             title: `Delete “${note.title}”?`,
-            build: (b) => b.append(el('p', {}, 'It and the pages under it go to Deleted, at the bottom of the left-hand side, ',
-              'where you (or an administrator) can bring them back.')),
+            build: (b) => b.append(el('p', {}, note.type === 'year' || note.type === 'month'
+              ? 'It, and every day and page under it, go to Deleted, at the bottom of the left-hand side, '
+              : 'It and the pages under it go to Deleted, at the bottom of the left-hand side, ',
+            'where you (or an administrator) can bring them back.'),
+            dated ? el('p', { class: 'hint' }, 'Starting that date again later makes a new page. The old one can only come back once the new one is gone.') : null),
             buttons: [{ label: 'Cancel', kind: 'secondary' }, {
               label: 'Delete', kind: 'danger',
               onClick: async () => {
@@ -2259,22 +2345,22 @@ const App = {
     } catch (err) { toast(err.message, 'error'); }
   },
 
-  /** Today's page, with this protocol put at its end. */
-  async useToday(protocolId) {
+  /**
+   * Use a protocol: ask where (today, at the top of the list, or any page you may add to), and make it a
+   * page of its own under that one, as it is now, to tick off there. Opens the new page.
+   */
+  async addToPage(protocolId) {
     await this.flush();
+    const target = await pickProtocolTarget();
+    if (!target) return;
     try {
-      const { section } = await api('GET', `/protocols/${protocolId}/snapshot`);
-      const { note: day } = await api('POST', '/days', {});
-      const { note: saved } = await api('PUT', `/notes/${day.id}`, {
-        content: [...day.content.filter((b) => b.type !== 'text' || (b.html || '').trim()), section],
-        base_version: day.version,
-      });
-      for (const step of saved.path.slice(0, -1)) Tree.expanded.add(step.id);
+      const { note } = await api('POST', `/protocols/${protocolId}/use`, target.today ? {} : { parent_id: target.id });
+      for (const step of note.path.slice(0, -1)) Tree.expanded.add(step.id);
       Tree.remember();
       await this.reloadTrees();
-      this.show(saved);
-      document.querySelector('.blocks')?.lastElementChild?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      toast(`Added to ${saved.title}`, 'success');
+      this.show(note);
+      const under = note.path[note.path.length - 2];
+      toast(`Added as a page under ${under ? under.title : 'your notebook'}`, 'success');
     } catch (err) { toast(err.message, 'error'); }
   },
 
@@ -2321,8 +2407,9 @@ const App = {
               !p.shared && p.shares ? el('span', { class: 'badge badge-shared', title: 'Shared with other labs' }, ` shared with ${p.shares} lab${p.shares > 1 ? 's' : ''}`) : null,
               !p.lab && !p.shared ? el('span', { class: 'hint' }, ' · every lab') : null)),
           el('td', { class: 'hint nowrap uses-cell' }, p.uses ? `used ${p.uses}×` : 'not used yet'),
-          el('td', { class: 'nowrap use-cell' }, el('button', { class: 'btn btn-secondary btn-sm', title: "Put it into today's page",
-            onclick: () => this.useToday(p.id) }, '＋ Use today'))))))))
+          el('td', { class: 'nowrap use-cell' }, el('button', { class: 'btn btn-secondary btn-sm',
+            title: "Use it: a page of its own under today's day, or under any page you choose",
+            onclick: () => this.addToPage(p.id) }, '＋ Add to page…'))))))))
         : el('p', { class: 'hint' }, query.value || onlyFav.checked ? 'No protocols match.' : 'No protocols yet: add the first.'));
     };
     let timer;

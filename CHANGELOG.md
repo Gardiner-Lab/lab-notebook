@@ -5,6 +5,32 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-04
+
+### Added
+- **Steps can be moved.** Drag the ⋮⋮ at the left of a step to where it should go (a line shows where it
+  lands), or press Alt+↑ / Alt+↓ in it. A step keeps its tick when it moves. Until now a step could only be
+  added at the bottom.
+- **A protocol can be added to any page, as a page of its own.** One **＋ Add to page…** button on a protocol
+  (and in the library list) replaces **Use today**. It offers **Add to today** first, then the pages and days
+  you may add to, newest first. The protocol becomes a new page named for it under the one chosen, holding the
+  protocol as it is now with fresh ticks, its version recorded and listed under the protocol's *Used on*,
+  instead of being added to the end of the day's own content. `POST /api/protocols/<id>/use` does it
+  (`parent_id`, or today's page when left out).
+
+### Fixed
+- The buttons at the top of a protocol (or any page) ran out of room in a narrower window and were squeezed,
+  their names breaking over two lines, so they no longer lined up with the page. They now keep their shape
+  and move to a second row when there is no room.
+- **A year, month or day can be deleted**, for one started by a typo (a year typed as 6, or 6202). It goes to
+  Deleted with the days under it, and can be brought back. A day, month or year with a booking on it is kept
+  until the booking is cancelled in Booking, because the notebook would only make its page again.
+- `GET /api/search` takes `editable=1`, to list only the pages the person may change.
+
+### Changed
+- A deleted day, month or year comes back only if there is no page for the same date by now. A new one made
+  since would stand beside it; delete the new one first, or copy over what is needed.
+
 ## [0.20.0] - 2026-10-31
 
 ### Added

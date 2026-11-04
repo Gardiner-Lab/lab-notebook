@@ -30,7 +30,7 @@ be restored, which is a revision too.
 import json
 import re
 from datetime import date
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from flask import g, has_app_context
 
@@ -710,18 +710,49 @@ def copy(person: Person, note_id: str) -> str:
     return new_id
 
 
+def _date_label(conn, note_id: str) -> Optional[Tuple[str, str]]:
+    """The label that dates a year, month or day page: (name, value), e.g. ('dateNote', '2026-10-30')."""
+    row = conn.execute("SELECT name, value FROM attributes WHERE note_id = ? "
+                       "AND name IN ('yearNote', 'monthNote', 'dateNote') LIMIT 1", (note_id,)).fetchone()
+    return (row['name'], row['value']) if row else None
+
+
+def _booked_inside(conn, row) -> Optional[str]:
+    """
+    A day with a booking on it (app/bookings.py) that this year, month or day page covers, as
+    day-first text, or None. The notebook gives every booked day a page, so deleting one would only
+    bring it back at the next visit.
+    """
+    if row['type'] not in ('year', 'month', 'day') or not row['owner']:
+        return None
+    label = _date_label(conn, row['id'])
+    if not label:
+        return None
+    for booked in bookings_mod.booked_days(row['owner']):
+        iso = booked.isoformat()
+        if iso == label[1] or (row['type'] != 'day' and iso.startswith(label[1] + '-')):
+            return '-'.join(reversed(iso.split('-')))
+    return None
+
+
 def delete(person: Person, note_id: str) -> None:
     """
     Move a note, and everything under it, to the deleted notes (kept, not
     erased). Only its owner's own notes under it go with it: someone else's
     page shown under it stays, in its own place. A page shared to work on
     together is deleted by its owner; those it is shared with may delete the
-    pages under it.
+    pages under it. A year, month or day goes the same way, with the days
+    under it, so one made by a slip of the keyboard can be put right; not one
+    with a booking on it, which the notebook would make again.
     """
     with connect() as conn:
         row = _row(conn, note_id)
         if row['type'] in ('notebook', 'library') or not can_edit(person, row):
             raise Forbidden('You cannot delete this note')
+        booked = _booked_inside(conn, row)
+        if booked:
+            raise ValueError(f'There is a booking on {booked}, so the notebook keeps its page: '
+                             'cancel the booking in Booking first')
         if row['owner'] != person.username and not person.is_admin and row['space'] == 'notebook' and any(
                 r == note_id for r, _ in _shared_with(person)['pages']):
             raise Forbidden('Only its owner can delete a page shared with you; you can delete the pages under it')
@@ -790,6 +821,17 @@ def undelete(person: Person, note_id: str) -> str:
         group = [r['id'] for r in conn.execute('SELECT id FROM notes WHERE deleted_root = ?', (note_id,))] or [note_id]
         if note_id not in group:
             group.append(note_id)
+        # A day, month or year made again since would stand beside the one coming back, and the
+        # notebook would find either: so it comes back only once the new one is gone.
+        for member in group:
+            n = conn.execute('SELECT id, title, type, owner FROM notes WHERE id = ?', (member,)).fetchone()
+            label = _date_label(conn, member) if n and n['type'] in ('year', 'month', 'day') else None
+            if label and conn.execute(
+                    'SELECT 1 FROM notes x JOIN attributes a ON a.note_id = x.id WHERE x.deleted_at IS NULL '
+                    'AND x.owner IS ? AND x.type = ? AND a.name = ? AND a.value = ? AND x.id != ?',
+                    (n['owner'], n['type'], label[0], label[1], member)).fetchone():
+                raise ValueError(f"There is a page for {n['title']} again, so this one cannot come back: "
+                                 'delete the new one first, or copy over what you need')
         conn.executemany('UPDATE notes SET deleted_at = NULL, deleted_by = NULL, deleted_root = NULL '
                          'WHERE id = ?', [(i,) for i in group])
         alive = [b for b in conn.execute('SELECT b.id, p.deleted_at FROM branches b JOIN notes p ON p.id = b.parent_id '
@@ -980,10 +1022,13 @@ def _snippet(text: str, words: List[str], width: int = 70) -> str:
     return ('…' if start else '') + text[start:at + width] + ('…' if at + width < len(text) else '')
 
 
-def search(person: Person, query: str, types: Optional[List[str]] = None, limit: int = 30) -> List[dict]:
+def search(person: Person, query: str, types: Optional[List[str]] = None, limit: int = 30,
+           editable: bool = False) -> List[dict]:
     """
     Notes this person may open, by the words in their title and content (all of
     them must appear): title matches first, then the most recently changed.
+    editable: only those they may change (to choose a page to put something on),
+    left out before the limit so the places in the list are not spent on others.
     "#name" or "#name=value" finds notes by label instead, as in Trilium.
     """
     query = (query or '').strip()
@@ -1005,7 +1050,8 @@ def search(person: Person, query: str, types: Optional[List[str]] = None, limit:
         args += types
     sql += ' ORDER BY updated_at DESC LIMIT 1000'
     with connect() as conn:
-        rows = [r for r in conn.execute(sql, args).fetchall() if can_view(person, r)]
+        rows = [r for r in conn.execute(sql, args).fetchall()
+                if can_view(person, r) and (not editable or can_edit(person, r))]
 
         def in_title(r):
             return all(w in r['title'].lower() for w in words)
@@ -1102,6 +1148,19 @@ def protocol_snapshot(person: Person, protocol_id: str) -> Dict[str, Any]:
     return {'type': 'section', 'title': row['title'],
             'source': {'kind': 'protocol', 'id': row['id'], 'version': row['revision'], 'name': row['title']},
             'blocks': blocks}
+
+
+def use_protocol(person: Person, protocol_id: str, parent_id: Optional[str] = None) -> str:
+    """
+    Use a protocol: a new page of its own, named for it, under a page (or under today's page when none is
+    given), holding the protocol as it is now with fresh ticks. It is a page rather than more content in
+    the day, so a day of several protocols stays readable, each is opened and ticked on its own, and the
+    page says which version it came from and is listed on the protocol's "Used on". The page it goes under
+    must be one they may add to.
+    """
+    section = protocol_snapshot(person, protocol_id)
+    parent = parent_id or day(person)
+    return create(person, parent, section['title'], 'page', [section])
 
 
 # --- sharing ---------------------------------------------------------------------
