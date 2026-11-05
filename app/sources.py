@@ -1,7 +1,7 @@
 """
 What the notebook takes from the other tools, read-only.
 
-    Plasmids        from the Plasmid Editor's library, to link to; a link opens
+    Plasmids        from the Sequence Editor's library, to link to; a link opens
                     the plasmid in the editor.
     MoClo reactions the assemblies people saved in the MoClo Library Tool, as
                     active tables that work out each DNA's volume the way MoClo
@@ -248,7 +248,7 @@ def howto_protocol() -> List[dict]:
              '<li>Add blocks with the <b>Add:</b> bar at the bottom: <b>¶ Text</b>, <b>▦ Table</b> and '
              '<b>Steps</b>. Hover over a block for ↑ ↓ to move it and ✕ to remove it.</li>'
              '<li>Text has a small bar for <b>bold</b>, <i>italic</i>, headings and lists. Type <b>@</b> to '
-             'link a plasmid, which opens in the Plasmid Editor, or another protocol or page.</li>'
+             'link a plasmid, which opens in the Sequence Editor, or another protocol or page.</li>'
              '<li>Everything saves as you go. <b>History</b> keeps every version, and can roll back to any of them.</li>'
              '</ul>'
              '<h3>2. Who can change it</h3>'

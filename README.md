@@ -23,7 +23,7 @@ Trellis Tools' digital lab notebook.
   in the MoClo Library Tool can be put into a page as reaction tables, with each DNA's volume worked
   out from its concentration.
 - **Plasmid links.** Type `@` in a page to link a plasmid from the editor's library. Clicking the link
-  opens the plasmid in the Plasmid Editor.
+  opens the plasmid in the Sequence Editor.
 - **Who sees what.** Your notebook is yours. Lab leads can read their lab's notebooks, and
   administrators can read all of them. Only the owner changes a notebook, and those its pages are
   shared with.
@@ -46,9 +46,9 @@ Trellis Tools' digital lab notebook.
 - **Gel photos.** ▥ Gel photo… puts in a gel photo: click the wells you loaded, and each gets a
   number on the photo (row by row, top to bottom, each left to right) and a row beside it to name
   its sample.
-  - **Virtual digests** come from the Plasmid Editor (📓 Add to notebook, under its virtual gel): the
+  - **Virtual digests** come from the Sequence Editor (📓 Add to notebook, under its virtual gel): the
     gel, its wells numbered and named, and a table of the fragments to tick off against the real gel.
-- **Figures from the other tools.** 📓 Add to notebook, in the Plasmid Editor (maps, cloning products,
+- **Figures from the other tools.** 📓 Add to notebook, in the Sequence Editor (maps, cloning products,
   PCRs, designed primers, sequencing reads) and the MoClo Library Tool (parts, plasmids, cassettes), puts a
   picture and what it shows at the end of a day's page, today's unless another is chosen.
 - **Numbered photos.** In the markup window, ① Number numbers plants (or anything) in the order you

@@ -147,12 +147,12 @@ const store = {
 // Sections other tools put into a day, by their source's kind: its glyph, and where they come from
 // (as content.IMPORTED_LABELS says on the server).
 const IMPORTED = {
-  'virtual-digest': ['cut', 'A virtual digest from the Plasmid Editor'],
-  'plasmid-map': ['plasmid', 'A plasmid map from the Plasmid Editor'],
-  'cloning-product': ['plasmid', 'A cloning product from the Plasmid Editor'],
-  pcr: ['stocks', 'A PCR from the Plasmid Editor'],
-  primers: ['primer', 'Primers designed in the Plasmid Editor'],
-  'sequencing-read': ['trace', 'A sequencing read from the Plasmid Editor'],
+  'virtual-digest': ['cut', 'A virtual digest from the Sequence Editor'],
+  'plasmid-map': ['plasmid', 'A plasmid map from the Sequence Editor'],
+  'cloning-product': ['plasmid', 'A cloning product from the Sequence Editor'],
+  pcr: ['stocks', 'A PCR from the Sequence Editor'],
+  primers: ['primer', 'Primers designed in the Sequence Editor'],
+  'sequencing-read': ['trace', 'A sequencing read from the Sequence Editor'],
   'moclo-plasmid': ['plasmid', 'A plasmid from the MoClo Library Tool'],
   'moclo-cassette': ['cassette', 'A cassette from the MoClo Library Tool'],
   'moclo-part': ['part', 'A part from the MoClo Library Tool'],
@@ -1093,7 +1093,7 @@ const Blocks = {
     for (const a of area.querySelectorAll('a[data-plasmid]')) {
       a.href = editorLink(a.dataset.plasmid);
       a.classList.add('plasmid-link');
-      a.title = 'Open in the Plasmid Editor';
+      a.title = 'Open in the Sequence Editor';
     }
     for (const a of area.querySelectorAll('a[data-note]')) {
       a.href = `#note=${a.dataset.note}`;
@@ -1970,7 +1970,7 @@ const App = {
           this.changed();
         } else add({ id: newId(), type: 'text', html: `<p>${html}</p>` });
       } }, glyph('stocks'), ' Stock…'),
-      el('button', { class: 'btn btn-secondary btn-sm', title: 'Add a link to a plasmid, which opens it in the Plasmid Editor', onclick: async () => {
+      el('button', { class: 'btn btn-secondary btn-sm', title: 'Add a link to a plasmid, which opens it in the Sequence Editor', onclick: async () => {
         const p = await pickPlasmid();
         if (!p) return;
         const link = `<a data-plasmid="${p.id}">${p.name.replace(/[<>&"]/g, (ch) => `&#${ch.charCodeAt(0)};`)}</a>`;

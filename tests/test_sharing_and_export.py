@@ -392,7 +392,7 @@ def test_someone_in_two_labs_sees_and_leads_in_each_as_their_role_there(as_user,
 
 
 def test_a_virtual_digest_goes_into_the_day(as_user):
-    """The Plasmid Editor puts a virtual digest - its gel and fragments - into a day's page."""
+    """The Sequence Editor puts a virtual digest - its gel and fragments - into a day's page."""
     import json
     ana, zoe = as_user('ana'), as_user('zoe')
     section = {
@@ -426,7 +426,7 @@ def test_a_virtual_digest_goes_into_the_day(as_user):
     assert ('plasmid', 'p1') in [(t, i) for t, i in __import__('app').content.links(day['content'])]
     assert day['id'] in [n['id'] for n in ana.get('/api/search?q=EcoRI').get_json()['notes']]
     history = ana.get(f"/api/notes/{day['id']}/revisions").get_json()['revisions']
-    assert history[0]['kind'] == 'imported' and 'from the Plasmid Editor' in history[0]['note']
+    assert history[0]['kind'] == 'imported' and 'from the Sequence Editor' in history[0]['note']
 
     # A second one goes after it, on the same day; what was written there stays.
     again = ana.post('/api/days/import', data=form(date='2026-03-04'), content_type='multipart/form-data').get_json()['note']

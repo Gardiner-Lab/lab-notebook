@@ -2,7 +2,7 @@
 Lab Notebook: Trellis Tools' digital lab notebook.
 
 Everyone keeps a notebook of days and pages; protocols are shared in a library
-anyone can use; plasmids link to the Plasmid Editor and MoClo reactions come
+anyone can use; plasmids link to the Sequence Editor and MoClo reactions come
 in as active tables. Its design follows Trilium (TriliumNext,
 https://github.com/TriliumNext/Trilium); see NOTICE.
 """
@@ -11,7 +11,7 @@ import os
 
 from flask import Flask, redirect, render_template, request
 
-APP_VERSION = '0.21.1'
+APP_VERSION = '0.21.2'
 
 
 class PrefixMiddleware:

@@ -509,12 +509,12 @@ def day(person: Person, when: Optional[date] = None) -> str:
 
 # Sections other tools put into a day, by kind: where each comes from.
 IMPORTED_KINDS = {
-    'virtual-digest': 'the Plasmid Editor',
-    'plasmid-map': 'the Plasmid Editor',
-    'cloning-product': 'the Plasmid Editor',
-    'pcr': 'the Plasmid Editor',
-    'primers': 'the Plasmid Editor',
-    'sequencing-read': 'the Plasmid Editor',
+    'virtual-digest': 'the Sequence Editor',
+    'plasmid-map': 'the Sequence Editor',
+    'cloning-product': 'the Sequence Editor',
+    'pcr': 'the Sequence Editor',
+    'primers': 'the Sequence Editor',
+    'sequencing-read': 'the Sequence Editor',
     'moclo-plasmid': 'the MoClo Library Tool',
     'moclo-cassette': 'the MoClo Library Tool',
     'moclo-part': 'the MoClo Library Tool',

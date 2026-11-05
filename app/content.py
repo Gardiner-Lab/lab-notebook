@@ -53,12 +53,12 @@ _LINK = re.compile(r'data-(note|plasmid|seed|stock)="([^"]{1,80})"')
 # What a section put into a day by another tool is, by its source's kind: shown
 # on its heading, on the page and in exports.
 IMPORTED_LABELS = {
-    'virtual-digest': 'A virtual digest from the Plasmid Editor',
-    'plasmid-map': 'A plasmid map from the Plasmid Editor',
-    'cloning-product': 'A cloning product from the Plasmid Editor',
-    'pcr': 'A PCR from the Plasmid Editor',
-    'primers': 'Primers designed in the Plasmid Editor',
-    'sequencing-read': 'A sequencing read from the Plasmid Editor',
+    'virtual-digest': 'A virtual digest from the Sequence Editor',
+    'plasmid-map': 'A plasmid map from the Sequence Editor',
+    'cloning-product': 'A cloning product from the Sequence Editor',
+    'pcr': 'A PCR from the Sequence Editor',
+    'primers': 'Primers designed in the Sequence Editor',
+    'sequencing-read': 'A sequencing read from the Sequence Editor',
     'moclo-plasmid': 'A plasmid from the MoClo Library Tool',
     'moclo-cassette': 'A cassette from the MoClo Library Tool',
     'moclo-part': 'A part from the MoClo Library Tool',
