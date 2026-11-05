@@ -493,3 +493,54 @@ def test_colours_markers_strike_through_and_headings_are_kept_and_exported(as_us
     assert runs['Results'].font.name == 'Georgia' and runs['Lane notes'].font.all_caps
     _, status, pdf = _export(ana, page['id'], 'pdf')
     assert pdf.data[:5] == b'%PDF-'
+
+
+def _two_leads(world):
+    """Zoe leads Gardiner Lab alongside 'lead', so there are two lab admins in one lab."""
+    import sqlite3
+    conn = sqlite3.connect(world['paths']['suite'])
+    conn.executescript("""
+        CREATE TABLE lab_members (username TEXT, lab_id INTEGER, role TEXT, lab_admin INTEGER DEFAULT 0,
+                                  joined_at TEXT, PRIMARY KEY (username, lab_id));
+        INSERT INTO lab_members (username, lab_id, role, joined_at) VALUES
+            ('ana', 1, 'member', '1'), ('ben', 1, 'member', '2'), ('lead', 1, 'lab_lead', '3'),
+            ('zoe', 1, 'lab_lead', '4'), ('olead', 2, 'lab_lead', '5');
+    """)
+    conn.commit()
+    return conn
+
+
+def test_a_lab_admins_notebook_is_their_own_even_from_another_lab_admin(as_user, world):
+    """A lab admin's notebook is not the lab's: not its members', and not the other lab admins'."""
+    _two_leads(world)
+    ana, lead, zoe, boss = (as_user(u) for u in ('ana', 'lead', 'zoe', 'boss'))
+    members_day = ana.post('/api/days', json={'date': '2026-10-15'}).get_json()['note']
+    leads_day = lead.post('/api/days', json={'date': '2026-10-16'}).get_json()['note']
+
+    # A member's day is still open to both lab admins: that is what leading a lab is for.
+    assert zoe.get(f"/api/notes/{members_day['id']}").status_code == 200
+    assert lead.get(f"/api/notes/{members_day['id']}").status_code == 200
+    # A lab admin's own day is not open to the other lab admin, nor to the lab.
+    assert zoe.get(f"/api/notes/{leads_day['id']}").status_code == 403
+    assert ana.get(f"/api/notes/{leads_day['id']}").status_code == 403
+    # An administrator of the suite still reads it.
+    assert boss.get(f"/api/notes/{leads_day['id']}").status_code == 200
+    # And it is not in the other lab admin's list of notebooks, nor may they share it.
+    assert 'lead' not in [n['owner'] for n in _me(zoe)['others']]
+    assert 'ana' in [n['owner'] for n in _me(zoe)['others']]
+    assert zoe.post(f"/api/notes/{leads_day['id']}/shares",
+                    json={'target_type': 'person', 'target': 'ben'}).status_code in (403, 404)
+
+
+def test_a_lab_admin_who_has_left_leaves_their_notebook_to_the_lab_admins(as_user, world):
+    """Otherwise their work would need a restore from backup to reach."""
+    conn = _two_leads(world)
+    lead, zoe = as_user('lead'), as_user('zoe')
+    day = lead.post('/api/days', json={'date': '2026-10-16'}).get_json()['note']
+    assert zoe.get(f"/api/notes/{day['id']}").status_code == 403
+
+    conn.executescript("CREATE TABLE archived (username TEXT PRIMARY KEY, archived_at TEXT, archived_by TEXT);"
+                       "INSERT INTO archived VALUES ('lead', '2026-11-05T10:00:00Z', 'boss');")
+    conn.commit()
+    assert zoe.get(f"/api/notes/{day['id']}").status_code == 200
+    assert [n['owner'] for n in _me(zoe)['others'] if n['owner'] == 'lead'] == ['lead']

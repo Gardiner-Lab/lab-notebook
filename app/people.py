@@ -68,13 +68,26 @@ class Person:
         return bool(self.lab_names() & _names(membership(username)))
 
     def oversees(self, username: Optional[str]) -> bool:
-        """May act for this person: themselves, an admin, or a lead of a lab they are in."""
+        """
+        May act for this person: themselves, an admin, or a lead of a lab they are in.
+
+        A lab lead (a lab admin) is not overseen by another: their notebook is their own, and
+        leading the same lab does not open it. Someone who has left is overseen again, so the
+        work of a lab admin who goes stays reachable by the lab's remaining ones rather than
+        only by a restore from backup. An administrator of the suite oversees everyone, as before.
+        """
         if not username:
             return False
         if username == self.username or self.is_admin:
             return True
+        member = membership(username)
         led = self.lab_names(led_only=True)
-        return bool(led and led & _names(membership(username)))
+        if not (led and led & _names(member)):
+            return False
+        # A lab admin anywhere, not only in the lab they share: a notebook is one thing, not one
+        # per lab, so leading any lab keeps it closed to another lead.
+        leads_a_lab = any(m.get('role') == 'lab_lead' for m in (member or {}).get('labs', []))
+        return not leads_a_lab or username in archived()
 
     def to_dict(self) -> dict:
         return {'username': self.username, 'role': self.role, 'lab': self.lab, 'lab_id': self.lab_id,

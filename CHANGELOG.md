@@ -5,6 +5,17 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-11-05
+
+### Changed
+- **A lab admin's notebook is their own.** Leading a lab opens the notebooks of its members, which is
+  what leading it is for, but it opened the notebooks of the lab's other lab admins too, each being a
+  member of the lab. One lab admin no longer reads another's notebook, and such a notebook is no longer
+  listed for them or shareable by them.
+- An **administrator of the suite** still reads every notebook, as before.
+- A lab admin **who has left** is read by the lab's remaining ones again, as anyone archived is, so that
+  their work stays reachable rather than needing a restore from backup.
+
 ## [0.21.2] - 2026-11-05
 
 ### Changed
