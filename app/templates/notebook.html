@@ -43,7 +43,12 @@
             </div>
             <div class="day-bar">
                 <button class="btn btn-primary" id="btnToday" title="Open today's page, starting it if needed"><img class="tt-glyph" src="{{ request.script_root }}/static/trellis/glyphs/calendar.svg" alt=""> Start today</button>
-                <input type="date" id="dayPicker" title="Open or start another day">
+                <span class="day-picker">
+                    <input type="text" id="dayPicker" placeholder="dd-mm-yyyy" inputmode="numeric" autocomplete="off"
+                           title="Open or start another day: type it as dd-mm-yyyy and press Enter">
+                    <button class="icon-btn" id="btnCalendar" type="button" title="Choose a day on a calendar"><img class="tt-glyph" src="{{ request.script_root }}/static/trellis/glyphs/calendar.svg" alt="Calendar"></button>
+                    <input type="date" id="dayCalendar" tabindex="-1" aria-hidden="true">
+                </span>
             </div>
             <div class="tree" id="treeMine"></div>
         </section>

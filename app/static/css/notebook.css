@@ -62,7 +62,12 @@ a { color: var(--primary); }
 }
 .day-bar { display: flex; gap: .4rem; padding: .3rem .4rem .5rem; }
 .day-bar .btn { flex: 1; }
-.day-bar input[type=date] { font: inherit; font-size: .8rem; border: 1px solid var(--border); border-radius: .4rem; padding: 0 .3rem; width: 7.5rem; }
+.day-picker { position: relative; display: flex; align-items: center; border: 1px solid var(--border); border-radius: .4rem; }
+.day-picker input[type=text] { font: inherit; font-size: .8rem; border: 0; background: transparent; color: inherit; padding: 0 .3rem; width: 6.2rem; }
+.day-picker input[type=text].bad { color: #c0392b; }
+.day-picker .icon-btn { padding: 0 .3rem; }
+/* The browser's own calendar, opened by the button; the box itself is never seen. */
+.day-picker input[type=date] { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; pointer-events: none; }
 .tree-list { list-style: none; margin: 0; padding: 0 0 0 .6rem; }
 .tree > .tree-list, .tree > div > .tree-node { padding-left: 0; }
 .tree-node { list-style: none; }

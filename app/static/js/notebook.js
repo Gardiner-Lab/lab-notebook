@@ -97,6 +97,27 @@ function modal({ title, build, buttons = [{ label: 'Close', kind: 'secondary' }]
   return { close, body };
 }
 
+/**
+ * A day typed as dd-mm-yyyy (or with / or . between, and one-figure days and months), as "YYYY-MM-DD";
+ * null if it is not a real day, or the year is not four figures (a year typed as 6 or 6202 is a typo).
+ */
+function isoFromDayMonthYear(text) {
+  const m = /^\s*(\d{1,2})[-./ ](\d{1,2})[-./ ](\d{4})\s*$/.exec(text || '');
+  if (!m) return null;
+  const [d, mo, y] = [+m[1], +m[2], +m[3]];
+  if (y < 1900 || y > 2200) return null;
+  const date = new Date(y, mo - 1, d);
+  if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d) return null;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${y}-${pad(mo)}-${pad(d)}`;
+}
+
+/** "YYYY-MM-DD" as dd-mm-yyyy. */
+function dayMonthYear(iso) {
+  const [y, m, d] = String(iso).split('-');
+  return `${d}-${m}-${y}`;
+}
+
 /** A time the server stored (UTC "YYYY-MM-DD HH:MM:SS"), in local time. */
 function localTime(stamp) {
   if (!stamp) return '';
@@ -775,8 +796,14 @@ const Blocks = {
       sync();
     });
     // Typing with the marker on marks what is typed; with it off, typing in or next to marked text is plain.
+    // A line begun with "- " becomes a bulleted list as the first character after it is typed.
     area.addEventListener('beforeinput', (e) => {
-      if (e.inputType === 'insertText' && e.data && Blocks.typeWithMarker(area, e.data)) { e.preventDefault(); sync(); }
+      if (e.inputType !== 'insertText' || !e.data) return;
+      if (Blocks.startBullet(area, e.data)) {
+        e.preventDefault();
+        if (!Blocks.typeWithMarker(area, e.data)) document.execCommand('insertText', false, e.data);
+        sync();
+      } else if (Blocks.typeWithMarker(area, e.data)) { e.preventDefault(); sync(); }
     });
     area.addEventListener('focus', () => App.showFormatBar(area, sync));
     return area;
@@ -961,6 +988,34 @@ const Blocks = {
    * outside marked text, the text goes in marked; with it off inside marked text, the marking is split there
    * and the text goes in between, plain. False when the browser can type it as usual.
    */
+  /**
+   * With the cursor just after a "- " that begins a line (not already in a list), and something other
+   * than a space being typed: takes the "- " away and makes the line a bulleted list item. True if it did.
+   */
+  startBullet(area, typed) {
+    if (/^\s/.test(typed)) return false;
+    const sel = window.getSelection();
+    if (!sel.rangeCount || !sel.isCollapsed) return false;
+    const { startContainer: node, startOffset: at } = sel.getRangeAt(0);
+    if (node.nodeType !== Node.TEXT_NODE || !area.contains(node)) return false;
+    if (!/^-[  ]$/.test(node.textContent.slice(0, at))) return false;
+    if (node.parentElement.closest('li, pre, code, td, th')) return false;
+    // The "- " must begin the line: nothing before it but the start of a block or a line break.
+    for (let n = node; n !== area; n = n.parentNode) {
+      const before = n.previousSibling;
+      if (before) { if (before.nodeName !== 'BR') return false; break; }
+      if (/^(DIV|P|H[1-6]|BLOCKQUOTE)$/.test(n.parentNode.nodeName)) break;
+    }
+    const dash = document.createRange();
+    dash.setStart(node, 0);
+    dash.setEnd(node, at);
+    sel.removeAllRanges();
+    sel.addRange(dash);
+    document.execCommand('delete');
+    document.execCommand('insertUnorderedList');
+    return true;
+  },
+
   typeWithMarker(area, text) {
     const sel = window.getSelection();
     if (!sel.rangeCount || !sel.isCollapsed || !area.contains(sel.anchorNode)) return false;
@@ -1532,7 +1587,31 @@ const App = {
       return;
     }
     document.getElementById('btnToday').addEventListener('click', () => this.startDay());
-    document.getElementById('dayPicker').addEventListener('change', (e) => { if (e.target.value) this.startDay(e.target.value); });
+    // Another day is typed as dd-mm-yyyy (the browser's own date box follows its language, often
+    // yyyy-mm-dd or mm/dd/yyyy), or chosen on the browser's calendar from the button beside it.
+    const dayBox = document.getElementById('dayPicker');
+    const calendar = document.getElementById('dayCalendar');
+    const goTo = () => {
+      if (!dayBox.value.trim()) return;
+      const iso = isoFromDayMonthYear(dayBox.value);
+      dayBox.classList.toggle('bad', !iso);
+      if (!iso) { toast('Type the day as dd-mm-yyyy, for example 05-11-2026', 'error'); return; }
+      dayBox.value = dayMonthYear(iso);
+      this.startDay(iso);
+    };
+    dayBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); goTo(); } });
+    dayBox.addEventListener('input', () => dayBox.classList.remove('bad'));
+    document.getElementById('btnCalendar').addEventListener('click', () => {
+      const iso = isoFromDayMonthYear(dayBox.value);
+      if (iso) calendar.value = iso;
+      try { calendar.showPicker(); } catch { calendar.focus(); calendar.click(); }
+    });
+    calendar.addEventListener('change', () => {
+      if (!calendar.value) return;
+      dayBox.value = dayMonthYear(calendar.value);
+      dayBox.classList.remove('bad');
+      this.startDay(calendar.value);
+    });
     document.getElementById('btnNewPage').addEventListener('click', () => this.newNote('mine', this.me.notebook));
     document.getElementById('btnExportMine').addEventListener('click', async () => {
       await this.flush();

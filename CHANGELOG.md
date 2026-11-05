@@ -5,6 +5,19 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-11-05
+
+### Added
+- **A line begun with "- " becomes a bulleted list.** Type a dash and a space at the start of a line, and the
+  next character typed turns the line into a list item, the dash taken away. A dash in the middle of a line,
+  or in a list, table cell or code, is left as it is.
+
+### Fixed
+- **Another day is typed as dd-mm-yyyy.** The box beside **Start today** was the browser's own date box, which
+  follows the browser's language and so often asked for yyyy-mm-dd or mm/dd/yyyy. It now takes the day as
+  dd-mm-yyyy (2-11-2026 and 02/11/2026 too) and Enter opens or starts it; the calendar button beside it picks a
+  day as before. A day that does not exist, or a year that is not four figures, is refused with a message.
+
 ## [0.21.0] - 2026-11-04
 
 ### Added
