@@ -2832,14 +2832,37 @@ const App = {
         if (!sel.rangeCount || !area.contains(sel.anchorNode)) return;
         Blocks.linkAt(area, sel.getRangeAt(0), sync);
       } }, '@'));
+    /**
+     * Just above the text being written in, and always in sight. A long section is taller than the
+     * window, so once it has scrolled the bar would sit above the top of the screen and out of
+     * reach - which is what kept headings and bullets from being used in a long one. It stops under
+     * the page's own bar instead, and never goes past the end of the section it belongs to.
+     */
     const place = () => {
       const r = area.getBoundingClientRect();
-      bar.style.top = `${Math.max(56, r.top + window.scrollY - 38)}px`;
-      bar.style.left = `${r.left + window.scrollX}px`;
+      const gap = (bar.offsetHeight || 34) + 4;
+      // Under the page's own bar, measured rather than assumed: it is sticky, it sits above this
+      // one, and it grows taller when its buttons wrap, so a fixed number hides the bar behind it.
+      const head = document.querySelector('header.tt-bar');
+      const under = (head ? head.getBoundingClientRect().bottom : 52) + 4;
+      const lowest = Math.max(r.bottom - gap, under);
+      bar.style.top = `${Math.min(Math.max(r.top - gap, under), lowest)}px`;
+      bar.style.left = `${r.left}px`;
     };
     place();
     bar.hidden = false;
-    const hide = () => { setTimeout(() => { if (!bar.matches(':hover') && document.activeElement !== area) bar.hidden = true; }, 150); };
+    // Scrolling the page or any pane it sits in, and resizing, keep it with the section.
+    const follow = () => { if (!bar.hidden) place(); };
+    window.addEventListener('scroll', follow, true);
+    window.addEventListener('resize', follow);
+    const hide = () => {
+      setTimeout(() => {
+        if (bar.matches(':hover') || document.activeElement === area) return;
+        bar.hidden = true;
+        window.removeEventListener('scroll', follow, true);
+        window.removeEventListener('resize', follow);
+      }, 150);
+    };
     area.addEventListener('blur', hide, { once: true });
   },
 };

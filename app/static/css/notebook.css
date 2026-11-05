@@ -219,8 +219,10 @@ textarea.step-text:focus { outline: 1px solid var(--border); border-radius: .3re
 .links-panel { margin-top: 1.5rem; padding-top: .8rem; border-top: 1px solid var(--border); font-size: .9rem; display: flex; flex-direction: column; gap: .3rem; }
 
 /* text formatting bar */
+/* Fixed, not absolute: a long text section scrolls under it, and the bar stays in sight (notebook.js
+   place()) instead of being left behind above the top of the section being written in. */
 .format-bar {
-    position: absolute; z-index: 30; display: flex; gap: .1rem; background: var(--tt-text); border-radius: .4rem; padding: .2rem;
+    position: fixed; z-index: 30; display: flex; gap: .1rem; background: var(--tt-text); border-radius: .4rem; padding: .2rem;
     box-shadow: 0 4px 12px rgba(0,0,0,.15);
 }
 .format-bar[hidden] { display: none; }

@@ -7,6 +7,12 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [0.22.0] - 2026-11-05
 
+### Fixed
+- **The formatting bar was out of reach in a long section.** It was placed once, just above the top of
+  the text, so in a section taller than the window it sat above the screen as soon as you scrolled down
+  to write - and headings and bullets could not be used there at all. It now stays in sight while you
+  write, below the page's own bar, and follows the section as it scrolls.
+
 ### Changed
 - **A lab admin's notebook is their own.** Leading a lab opens the notebooks of its members, which is
   what leading it is for, but it opened the notebooks of the lab's other lab admins too, each being a
