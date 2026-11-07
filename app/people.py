@@ -69,25 +69,37 @@ class Person:
 
     def oversees(self, username: Optional[str]) -> bool:
         """
-        May act for this person: themselves, an admin, or a lead of a lab they are in.
+        May open this person's notebook (beyond what is shared): who sees whose.
 
-        A lab lead (a lab admin) is not overseen by another: their notebook is their own, and
-        leading the same lab does not open it. Someone who has left is overseen again, so the
-        work of a lab admin who goes stays reachable by the lab's remaining ones rather than
-        only by a restore from backup. An administrator of the suite oversees everyone, as before.
+        - Themselves, and an administrator of the suite: always.
+        - A lab admin: everyone in a lab they are lab admin of, lab leads and other lab admins too.
+        - A lab lead: everyone in a lab they lead except a lab admin. A notebook is one thing, not
+          one per lab, so someone who is lab admin of any lab stays closed to lab leads.
+        - A member: only their own.
+
+        Someone who has left (archived) is open again to their labs' leads and lab admins, so the
+        work of a lab admin who goes stays reachable rather than only by a restore from backup.
         """
         if not username:
             return False
         if username == self.username or self.is_admin:
             return True
         member = membership(username)
-        led = self.lab_names(led_only=True)
-        if not (led and led & _names(member)):
+        if not member:
             return False
-        # A lab admin anywhere, not only in the lab they share: a notebook is one thing, not one
-        # per lab, so leading any lab keeps it closed to another lead.
-        leads_a_lab = any(m.get('role') == 'lab_lead' for m in (member or {}).get('labs', []))
-        return not leads_a_lab or username in archived()
+        theirs = {m['lab'].casefold() for m in member.get('labs', []) if m.get('lab')}
+        their_rank = max((rank(m) for m in member.get('labs', [])), default=0)
+        gone = username in archived()
+        mine = self.labs or ([{'lab': self.lab, 'role': self.lab_role}] if self.lab else [])
+        for lab in mine:
+            if not lab.get('lab') or lab['lab'].casefold() not in theirs:
+                continue
+            here = rank(lab)
+            if here == 2:
+                return True
+            if here == 1 and (their_rank < 2 or gone):
+                return True
+        return False
 
     def to_dict(self) -> dict:
         return {'username': self.username, 'role': self.role, 'lab': self.lab, 'lab_id': self.lab_id,
@@ -131,20 +143,33 @@ def memberships() -> Dict[str, dict]:
     """
     username -> {'lab', 'lab_id', 'role'} of their first lab, and 'labs': all
     of them, first joined first, each with their role there ('lab_lead' or
-    'member'; a lab admin is a lab lead). From the suite: lab_members, or the
+    'member') and 'admin': whether they are that lab's lab admin (a lab lead
+    with lab_admin set in the suite). From the suite: lab_members, or the
     members table of a suite from before people could be in several labs.
     """
-    rows = _read(suite_path(), 'SELECT m.username, labs.name AS lab, labs.id AS lab_id, m.role '
+    rows = _read(suite_path(), 'SELECT m.username, labs.name AS lab, labs.id AS lab_id, m.role, m.lab_admin '
                                'FROM lab_members m JOIN labs ON labs.id = m.lab_id ORDER BY m.joined_at, m.rowid')
     if not rows:
-        rows = _read(suite_path(), 'SELECT members.username, labs.name AS lab, labs.id AS lab_id, members.role '
-                                   'FROM members JOIN labs ON labs.id = members.lab_id')
+        # A suite from before lab admins were told apart from lab leads.
+        rows = _read(suite_path(), 'SELECT m.username, labs.name AS lab, labs.id AS lab_id, m.role, 0 AS lab_admin '
+                                   'FROM lab_members m JOIN labs ON labs.id = m.lab_id ORDER BY m.joined_at, m.rowid')
+    if not rows:
+        rows = _read(suite_path(), 'SELECT members.username, labs.name AS lab, labs.id AS lab_id, members.role, '
+                                   '0 AS lab_admin FROM members JOIN labs ON labs.id = members.lab_id')
     found: Dict[str, dict] = {}
     for r in rows:
+        role = r['role'] or 'member'
         lab = {'lab': r['lab'], 'lab_id': str(r['lab_id']) if r['lab_id'] is not None else None,
-               'role': r['role'] or 'member'}
+               'role': role, 'admin': role == 'lab_lead' and bool(r['lab_admin'])}
         found.setdefault(r['username'], {**lab, 'labs': []})['labs'].append(lab)
     return found
+
+
+def rank(lab: dict) -> int:
+    """Standing in one lab: 2 its lab admin, 1 a lab lead, 0 a member (the suite's RANK)."""
+    if lab.get('admin'):
+        return 2
+    return 1 if lab.get('role') == 'lab_lead' else 0
 
 
 def _names(member: Optional[dict]) -> set:

@@ -5,6 +5,34 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-07
+
+### Added
+- **Web links.**
+  - **🔗** in the formatting bar, or **Ctrl+K** while writing, adds a link to the selected text,
+    or changes or removes the one already there. It takes `https://…`, `www.…`, a bare domain or
+    an email address.
+  - **Pasting keeps links.** Copied from a web page, an email or another page, links stay links
+    (styles and scripts are still dropped). An address pasted on its own becomes a link, or links
+    the selected text, and addresses in pasted text are linked.
+  - Links open in a new tab when clicked, as before.
+- **"1. " starts a numbered list**, as "- " starts a bulleted one. The *1.* button does the same.
+
+### Changed
+- **Who sees whose notebook follows the lab roles**, unless something is shared:
+  - a **lab admin** sees every notebook in their lab, lab leads' and other lab admins' too;
+  - a **lab lead** sees every one but a lab admin's (so now other lab leads' as well);
+  - a **member** sees only their own.
+
+  Lab admins are told apart from lab leads by the suite's `lab_admin` flag, which the notebook now
+  reads. Someone who has left is open to their lab's leads again, as before.
+- Ctrl+K in a page's text makes a link. Elsewhere it still jumps to search.
+
+### Fixed
+- **Lines typed with Enter could run together when saved.** In text not already in a paragraph,
+  the browser starts a new line as a `<div>`, which the server does not keep, so the lines were
+  joined. New lines are now paragraphs, and a `<div>` line is saved as one.
+
 ## [0.22.0] - 2026-11-05
 
 ### Fixed

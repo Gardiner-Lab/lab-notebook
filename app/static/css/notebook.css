@@ -479,3 +479,14 @@ textarea.step-text:focus { outline: 1px solid var(--border); border-radius: .3re
 .faq dt { font-weight: 600; margin-top: .8rem; }
 .faq dd { margin: .2rem 0 0 1rem; }
 .help section { scroll-margin-top: 4rem; }
+
+/* The web-link box, dropped down under the formatting bar (🔗 or Ctrl+K). */
+.format-bar .link-box { position: absolute; top: calc(100% + .3rem); left: 0; display: flex; flex-wrap: wrap; gap: .35rem;
+    align-items: center; padding: .45rem; background: var(--tt-card); color: var(--tt-text); border: 1px solid var(--tt-border);
+    border-radius: .45rem; box-shadow: 0 6px 18px rgba(0,0,0,.16); min-width: 22rem; }
+.format-bar .link-box input { flex: 1 1 14rem; font: inherit; font-size: .88rem; padding: .3rem .5rem; border: 1px solid var(--tt-border); border-radius: .3rem; }
+.format-bar .link-box button { color: var(--tt-text); background: var(--tt-sunk); border: 1px solid var(--tt-border); font-size: .82rem; }
+.format-bar .link-box button:hover { background: var(--tt-hover); }
+.format-bar .link-box button.primary { background: var(--tt-green); border-color: var(--tt-green); color: #fff; }
+.format-bar .link-box .link-box-note { flex-basis: 100%; font-size: .8rem; color: var(--tt-danger); }
+.format-bar .link-box .link-box-note:empty { display: none; }

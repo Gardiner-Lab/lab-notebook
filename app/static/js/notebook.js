@@ -402,8 +402,10 @@ const Search = {
       if (e.key === 'Escape') { input.value = ''; this.run(''); }
       if (e.key === 'Enter') document.querySelector('.search-hit')?.click();
     });
-    // Ctrl+K (or /) jumps to search, from anywhere outside a text field.
+    // Ctrl+K (or /) jumps to search, from anywhere outside a text field. In a page's text Ctrl+K
+    // makes a web link instead (as in a word processor); that handler has taken the key by then.
     document.addEventListener('keydown', (e) => {
+      if (e.defaultPrevented) return;
       const typing = e.target.closest('input, textarea, [contenteditable="true"]');
       if ((e.key === 'k' && (e.ctrlKey || e.metaKey)) || (e.key === '/' && !typing)) {
         e.preventDefault();
@@ -754,7 +756,16 @@ const Blocks = {
       if (grid && (grid.length > 1 || grid[0].length > 1)) { App.pasteTable(block, area, grid); return; }
       const files = [...(e.clipboardData.files || [])];
       if (files.length) { App.attachHere(area, files, sync); return; }
+      // Web links survive: copied from a page or note, or an address pasted on its own.
+      if (this.pasteWithLinks(area, e.clipboardData)) { sync(); return; }
       document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+    });
+    // Ctrl+K (Cmd+K): a web link for the selected text.
+    area.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() !== 'k' || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      e.preventDefault();
+      const bar = document.getElementById('formatBar');
+      if (bar) this.webLinkBox(area, sync, bar);
     });
     // Photos and files dragged in are attached where they are dropped.
     area.addEventListener('dragover', (e) => {
@@ -796,7 +807,8 @@ const Blocks = {
       sync();
     });
     // Typing with the marker on marks what is typed; with it off, typing in or next to marked text is plain.
-    // A line begun with "- " becomes a bulleted list as the first character after it is typed.
+    // A line begun with "- " becomes a bulleted list, and one begun with "1. " a numbered list, as the
+    // first character after it is typed.
     area.addEventListener('beforeinput', (e) => {
       if (e.inputType !== 'insertText' || !e.data) return;
       if (Blocks.startBullet(area, e.data)) {
@@ -805,7 +817,11 @@ const Blocks = {
         sync();
       } else if (Blocks.typeWithMarker(area, e.data)) { e.preventDefault(); sync(); }
     });
-    area.addEventListener('focus', () => App.showFormatBar(area, sync));
+    area.addEventListener('focus', () => {
+      // New lines as paragraphs, which are kept, rather than the browser's <div>s.
+      document.execCommand('defaultParagraphSeparator', false, 'p');
+      App.showFormatBar(area, sync);
+    });
     return area;
   },
 
@@ -998,7 +1014,10 @@ const Blocks = {
     if (!sel.rangeCount || !sel.isCollapsed) return false;
     const { startContainer: node, startOffset: at } = sel.getRangeAt(0);
     if (node.nodeType !== Node.TEXT_NODE || !area.contains(node)) return false;
-    if (!/^-[  ]$/.test(node.textContent.slice(0, at))) return false;
+    // "- " starts a bulleted list, "1. " or "1) " a numbered one.
+    const begun = node.textContent.slice(0, at);
+    const numbered = /^1[.)][  ]$/.test(begun);
+    if (!numbered && !/^-[  ]$/.test(begun)) return false;
     if (node.parentElement.closest('li, pre, code, td, th')) return false;
     // The "- " must begin the line: nothing before it but the start of a block or a line break.
     for (let n = node; n !== area; n = n.parentNode) {
@@ -1012,8 +1031,158 @@ const Blocks = {
     sel.removeAllRanges();
     sel.addRange(dash);
     document.execCommand('delete');
-    document.execCommand('insertUnorderedList');
+    document.execCommand(numbered ? 'insertOrderedList' : 'insertUnorderedList');
     return true;
+  },
+
+  // --- Web links -------------------------------------------------------------
+
+  /** A typed or pasted address as a link target, or null: http(s), mailto, www. and bare emails. */
+  webAddress(text) {
+    const t = String(text || '').trim();
+    if (!t || /\s/.test(t)) return null;
+    if (/^https?:\/\/[^\s<>"]+$/i.test(t)) return t;
+    if (/^mailto:[^\s@<>"]+@[^\s@<>"]+$/i.test(t)) return t;
+    if (/^www\.[^\s<>"]+\.[^\s<>"]+$/i.test(t)) return 'https://' + t;
+    if (/^[^\s@<>"/:]+@[^\s@<>"/]+\.[a-z]{2,}$/i.test(t)) return 'mailto:' + t;
+    // A bare domain typed into the link box: example.org/path
+    if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/[^\s<>"]*)?$/i.test(t)) return 'https://' + t;
+    return null;
+  },
+
+  escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  },
+
+  /** Plain text with each web address in it made a link, as HTML; null when it has none. */
+  linkifiedHtml(text) {
+    const pattern = /\b(https?:\/\/[^\s<>"]+|www\.[^\s<>"]+\.[^\s<>"]+|[^\s@<>"()]+@[^\s@<>"()]+\.[a-z]{2,})/gi;
+    let found = false;
+    const html = String(text).split(/\r?\n/).map((line) => {
+      let out = '';
+      let from = 0;
+      line.replace(pattern, (match, _m, at) => {
+        // A full stop or bracket just after an address is the sentence's, not the address's.
+        const core = match.replace(/[.,;:!?)\]]+$/, '');
+        const href = this.webAddress(core);
+        if (!href) return match;
+        found = true;
+        out += this.escapeHtml(line.slice(from, at)) + `<a href="${this.escapeHtml(href)}">${this.escapeHtml(core)}</a>`;
+        from = at + core.length;
+        return match;
+      });
+      return out + this.escapeHtml(line.slice(from));
+    }).join('<br>');
+    return found ? html : null;
+  },
+
+  /**
+   * HTML from the clipboard (a web page, an email, another note) reduced to its text and its web links,
+   * as HTML; null when it holds no link worth keeping. Styles, scripts and everything else are dropped,
+   * as with any paste; blocks become line breaks.
+   */
+  linksFromHtml(html) {
+    const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    let found = false;
+    const walk = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) return this.escapeHtml(node.textContent.replace(/\s+/g, ' '));
+      if (node.nodeType !== Node.ELEMENT_NODE) return '';
+      const tag = node.nodeName;
+      if (/^(SCRIPT|STYLE|HEAD|TITLE|META|LINK|TEMPLATE)$/.test(tag)) return '';
+      const inner = [...node.childNodes].map(walk).join('');
+      if (tag === 'A') {
+        const href = this.webAddress(node.getAttribute('href') || '');
+        if (href && inner.trim()) { found = true; return `<a href="${this.escapeHtml(href)}">${inner}</a>`; }
+        return inner;
+      }
+      if (tag === 'BR') return '<br>';
+      if (/^(P|DIV|LI|TR|H[1-6]|BLOCKQUOTE|PRE|SECTION|ARTICLE|UL|OL|TABLE)$/.test(tag)) return inner.trim() ? inner + '<br>' : inner;
+      return inner;
+    };
+    const out = walk(doc.body).replace(/(<br>\s*)+$/, '').replace(/^\s+/, '');
+    return found ? out : null;
+  },
+
+  /**
+   * Pastes text so that web links survive: links copied from a page or another note stay links, an
+   * address pasted alone becomes one (onto the selection, when text is selected), and an address in
+   * pasted text is made one. True when it pasted; false leaves the paste to the plain-text default.
+   */
+  pasteWithLinks(area, data) {
+    const text = data.getData('text/plain');
+    const sel = window.getSelection();
+    const href = this.webAddress(text);
+    if (href && sel.rangeCount && !sel.isCollapsed && area.contains(sel.anchorNode)) {
+      document.execCommand('createLink', false, href);
+      return true;
+    }
+    if (href) {
+      document.execCommand('insertHTML', false, `<a href="${this.escapeHtml(href)}">${this.escapeHtml(text.trim())}</a>`);
+      return true;
+    }
+    const fromHtml = this.linksFromHtml(data.getData('text/html'));
+    if (fromHtml) { document.execCommand('insertHTML', false, fromHtml); return true; }
+    const linked = this.linkifiedHtml(text);
+    if (linked) { document.execCommand('insertHTML', false, linked); return true; }
+    return false;
+  },
+
+  /**
+   * The link box under the formatting bar: an address for the selected text, which adds the link or,
+   * on text already linked, changes or removes it. Ctrl+K opens it too.
+   */
+  webLinkBox(area, sync, bar) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount || !area.contains(sel.anchorNode)) return;
+    const range = sel.getRangeAt(0).cloneRange();
+    const inside = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement;
+    const existing = inside.closest('a[href]');
+    const linkedHere = existing && area.contains(existing) && !existing.dataset.note && !existing.dataset.plasmid
+      && !existing.dataset.seed && !existing.dataset.stock && !existing.dataset.attachment ? existing : null;
+    bar.querySelector('.link-box')?.remove();
+    const input = el('input', { type: 'text', placeholder: 'https://… or an email address', value: linkedHere ? linkedHere.getAttribute('href') : '',
+                                'aria-label': 'Web address', spellcheck: 'false' });
+    const note = el('span', { class: 'link-box-note' });
+    const restore = () => { sel.removeAllRanges(); sel.addRange(range); };
+    const close = () => { box.remove(); area.focus({ preventScroll: true }); restore(); };
+    const apply = () => {
+      const href = this.webAddress(input.value);
+      if (!href) { note.textContent = 'Not a web or email address.'; input.focus(); return; }
+      area.focus({ preventScroll: true });
+      restore();
+      if (linkedHere) {
+        linkedHere.setAttribute('href', href);
+      } else if (range.collapsed) {
+        document.execCommand('insertHTML', false, `<a href="${this.escapeHtml(href)}">${this.escapeHtml(input.value.trim())}</a>`);
+      } else {
+        document.execCommand('createLink', false, href);
+      }
+      box.remove();
+      sync();
+    };
+    const unlink = () => {
+      area.focus({ preventScroll: true });
+      if (linkedHere) {
+        const r = document.createRange();
+        r.selectNodeContents(linkedHere);
+        sel.removeAllRanges();
+        sel.addRange(r);
+      } else restore();
+      document.execCommand('unlink');
+      box.remove();
+      sync();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); apply(); }
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+    });
+    const box = el('div', { class: 'link-box' }, input,
+      el('button', { type: 'button', class: 'primary', onmousedown: (e) => { e.preventDefault(); apply(); } }, linkedHere ? 'Change' : 'Link'),
+      linkedHere ? el('button', { type: 'button', onmousedown: (e) => { e.preventDefault(); unlink(); } }, 'Remove link') : null,
+      el('button', { type: 'button', onmousedown: (e) => { e.preventDefault(); close(); } }, 'Cancel'), note);
+    bar.append(box);
+    input.focus();
+    input.select();
   },
 
   typeWithMarker(area, text) {
@@ -1057,6 +1226,13 @@ const Blocks = {
   /** The text as kept: links by what they point at, not by this page's address for it. */
   storable(area) {
     const copy = area.cloneNode(true);
+    // A line the browser started as a <div> (Enter, in text that is not in a paragraph) is a
+    // paragraph: the server keeps <p> but not <div>, which used to run such lines together.
+    for (const div of [...copy.querySelectorAll('div')].reverse()) {
+      const p = document.createElement('p');
+      p.append(...div.childNodes);
+      div.replaceWith(p);
+    }
     this.tidyNodes(copy);
     for (const a of copy.querySelectorAll('a[data-plasmid], a[data-note], a[data-seed], a[data-stock], a[data-attachment]')) {
       for (const attr of ['href', 'class', 'title']) a.removeAttribute(attr);
@@ -2825,7 +3001,11 @@ const App = {
       el('button', { title: 'Heading 3', onmousedown: cmd('formatBlock', 'h3') }, 'H3'),
       el('button', { title: 'Paragraph', onmousedown: cmd('formatBlock', 'p') }, '¶'),
       el('button', { title: 'Bulleted list', onmousedown: cmd('insertUnorderedList') }, '•'),
-      el('button', { title: 'Numbered list', onmousedown: cmd('insertOrderedList') }, '1.'),
+      el('button', { title: 'Numbered list (or type "1. " at the start of a line)', onmousedown: cmd('insertOrderedList') }, '1.'),
+      el('button', { title: 'Web link: add, change or remove one on the selected text (Ctrl+K)', onmousedown: (e) => {
+        e.preventDefault();
+        Blocks.webLinkBox(area, sync, bar);
+      } }, '🔗'),
       el('button', { title: 'Link a plasmid or note (or type @)', onmousedown: (e) => {
         e.preventDefault();
         const sel = window.getSelection();
