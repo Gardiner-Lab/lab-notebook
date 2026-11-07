@@ -34,4 +34,34 @@ const big = Clip.tsv(Array.from({ length: 600 }, () => Array(45).fill('1').join(
 assert.ok(big.cut && big.length === 500 && big[0].length === 40);
 assert.ok(!Clip.tsv('a\tb').cut);
 
+// A bulleted or numbered list copied from Word or a web page has a tab after each bullet: a list,
+// not a table of two columns.
+const wordBullets = '•\tExtract DNA\r\no\tGrind leaves\r\no\tAdd buffer\r\n•\tRun PCR\r\n';
+assert.strictEqual(Clip.grid(data(wordBullets)), null, 'bullets are not a table');
+assert.deepStrictEqual(Clip.lists(wordBullets), [{ type: 'list', ordered: false, items: [
+  { level: 0, ordered: false, text: 'Extract DNA' }, { level: 1, ordered: false, text: 'Grind leaves' },
+  { level: 1, ordered: false, text: 'Add buffer' }, { level: 0, ordered: false, text: 'Run PCR' }] }]);
+const numbered = '1.\tSow seeds\n2.\tWater\n3.\tWait two weeks\n';
+assert.strictEqual(Clip.grid(data(numbered)), null, 'a numbered list is not a table');
+assert.strictEqual(Clip.lists(numbered)[0].ordered, true);
+assert.deepStrictEqual(Clip.lists(numbered)[0].items.map((i) => i.text), ['Sow seeds', 'Water', 'Wait two weeks']);
+// Text around the list stays text.
+const mixed = 'Plan for Monday:\n•\tbuy tips\n•\tbook the confocal\nThanks';
+assert.deepStrictEqual(Clip.lists(mixed).map((b) => b.type), ['text', 'list', 'text']);
+assert.strictEqual(Clip.grid(data(mixed)), null);
+// Dashes and numbers with a space, as typed in an email.
+assert.strictEqual(Clip.lists('- one\n- two').length, 1);
+assert.strictEqual(Clip.lists('1. one\n2. two')[0].ordered, true);
+// Indentation kept in the copy gives the level.
+assert.deepStrictEqual(Clip.lists('- top\n\t- under').length && Clip.lists('- top\n\t- under')[0].items.map((i) => i.level), [0, 1]);
+// Still tables: real cells, a table in the copied HTML, a line of cells beside a bullet line.
+assert.deepStrictEqual(Clip.grid(data('Sample\tOD600\nA\t0.61')), [['Sample', 'OD600'], ['A', '0.61']]);
+assert.ok(Clip.grid(data('•\ta\n•\tb', '<table><tr><td>•</td><td>a</td></tr><tr><td>•</td><td>b</td></tr></table>')),
+  'a copy that says it is a table is one');
+assert.ok(Clip.grid(data('•\ta\nx\ty')), 'a row of cells among bullets makes it a table');
+// Not lists: a sentence, one dashed line, "o" without a tab.
+assert.strictEqual(Clip.lists('just a sentence'), null);
+assert.strictEqual(Clip.lists('- only one'), null);
+assert.strictEqual(Clip.lists('o well\no dear'), null);
+
 console.log('clip: all passed');

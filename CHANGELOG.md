@@ -5,6 +5,16 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-11-07
+
+### Fixed
+- **Pasted bullet points became a table.** Word, web pages and emails copy a list as each bullet, a tab,
+  then the item, and any pasted text with a tab in it was taken for spreadsheet cells. A paste whose
+  tabs only follow list markers (`•`, `o`, `▪`, `-`, `*`, `1.`, `a)`, `ii.`…) is now a list: a bulleted or
+  numbered one, nested where Word's markers or the indentation say so, with the lines around it kept as
+  text and web addresses in it made links. Spreadsheet cells, and a copy whose HTML is a table, are
+  still pasted as a table.
+
 ## [0.23.0] - 2026-11-07
 
 ### Added

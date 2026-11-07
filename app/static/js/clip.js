@@ -13,9 +13,68 @@
     /** The copied table, or null when what was copied is not one. */
     grid(data) {
       const text = data.getData('text/plain') || '';
-      if (text.includes('\t')) return this.tsv(text);
       const html = data.getData('text/html') || '';
+      // A bulleted or numbered list copied from Word or a web page puts a tab after each bullet: that
+      // is a list, not a table of two columns, unless the copy says itself that it is a table.
+      if (text.includes('\t') && !/<table/i.test(html) && this.lists(text)) return null;
+      if (text.includes('\t')) return this.tsv(text);
       return /<table/i.test(html) ? this.html(html) : null;
+    },
+
+    // A list item's marker at the start of a line: a bullet, or a number or letter with . or ).
+    // The marker kinds Word uses for its levels (•, then o, then ▪ or §) give the level when the copied
+    // text has lost its indentation.
+    BULLETS: { '•': 0, '●': 0, '∙': 0, '·': 0, '-': 0, '–': 0, '—': 0, '*': 0, '‣': 0, '⁃': 0,
+               'o': 1, '◦': 1, '○': 1, '▪': 2, '▫': 2, '■': 2, '□': 2, '§': 2 },
+
+    /** One line as a list item, {level, ordered, text}, or null when it is not one. */
+    listItem(line) {
+      const m = /^([ \t ]*)(\S+?)(\t|[  ]+)(.*)$/.exec(line);
+      if (!m) return null;
+      const [, indent, marker, gap, text] = m;
+      const tabbed = gap.includes('\t');
+      let level;
+      let ordered = false;
+      if (marker in this.BULLETS) {
+        // "o" and the rarer bullets count only before a tab: "o well" is a sentence.
+        if (!tabbed && !/^[•●∙·\-–—*‣⁃]$/.test(marker)) return null;
+        level = this.BULLETS[marker];
+      } else if (/^\d{1,3}[.)]$/.test(marker) || /^\(\d{1,3}\)$/.test(marker)) {
+        ordered = true; level = 0;
+      } else if (tabbed && (/^[a-z][.)]$/i.test(marker) || /^[ivx]{1,5}[.)]$/i.test(marker))) {
+        ordered = true; level = /^[ivx]{1,5}[.)]$/.test(marker) && marker.length > 2 ? 2 : 1;
+      } else return null;
+      if (!text.trim()) return null;
+      // Indentation, when the copy kept it, says the level: a tab or four spaces a step.
+      const steps = (indent.match(/\t/g) || []).length + Math.floor(indent.replace(/\t/g, '').length / 4);
+      return { level: steps || level, ordered, text: text.trim() };
+    },
+
+    /**
+     * Copied text holding a list, as blocks in order: {type: 'text', text} for ordinary lines and
+     * {type: 'list', ordered, items: [{level, text}]} for a run of list items. Null when it holds no
+     * list, or when it is a table after all: a line with a tab that is not a list item.
+     */
+    lists(text) {
+      const lines = String(text).replace(/\r\n?/g, '\n').split('\n');
+      while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+      const blocks = [];
+      let found = 0;
+      for (const line of lines) {
+        const item = line.trim() ? this.listItem(line) : null;
+        if (!item) {
+          if (line.includes('\t')) return null;       // a row of cells
+          blocks.push({ type: 'text', text: line });
+          continue;
+        }
+        found++;
+        const last = blocks[blocks.length - 1];
+        if (last && last.type === 'list' && (last.ordered === item.ordered || item.level > 0)) last.items.push(item);
+        else blocks.push({ type: 'list', ordered: item.ordered, items: [item] });
+      }
+      // One "- " line alone is as likely a sentence as a list; a tab after the marker is a list.
+      if (!found || (found < 2 && !/\t/.test(text))) return null;
+      return blocks;
     },
 
     /** A table, or else lines of text taken as one column (to paste down a table's column). */

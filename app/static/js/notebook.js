@@ -756,6 +756,9 @@ const Blocks = {
       if (grid && (grid.length > 1 || grid[0].length > 1)) { App.pasteTable(block, area, grid); return; }
       const files = [...(e.clipboardData.files || [])];
       if (files.length) { App.attachHere(area, files, sync); return; }
+      // A copied bulleted or numbered list (from Word, a web page, an email) is pasted as a list.
+      const listed = Clip.lists(e.clipboardData.getData('text/plain'));
+      if (listed) { document.execCommand('insertHTML', false, this.listHtml(listed)); sync(); return; }
       // Web links survive: copied from a page or note, or an address pasted on its own.
       if (this.pasteWithLinks(area, e.clipboardData)) { sync(); return; }
       document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
@@ -1052,6 +1055,36 @@ const Blocks = {
 
   escapeHtml(text) {
     return String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  },
+
+  /**
+   * Pasted text with lists in it (Clip.lists) as HTML: each run of items a bulleted or numbered list,
+   * nested by level, ordinary lines as paragraphs, and web addresses in either made links.
+   */
+  listHtml(blocks) {
+    const inline = (text) => this.linkifiedHtml(text) || this.escapeHtml(text);
+    let html = '';
+    for (const block of blocks) {
+      if (block.type === 'text') {
+        html += block.text.trim() ? `<p>${inline(block.text)}</p>` : '';
+        continue;
+      }
+      // A stack of open lists, one per level; a deeper item opens a list inside the item before it.
+      const open = [];
+      for (const item of block.items) {
+        const level = Math.min(item.level, open.length);   // never skip a level
+        while (open.length > level + 1) html += `</li></${open.pop()}>`;
+        if (open.length === level + 1) html += '</li>';
+        else {
+          const tag = (level === 0 ? block.ordered : item.ordered) ? 'ol' : 'ul';
+          html += `<${tag}>`;
+          open.push(tag);
+        }
+        html += `<li>${inline(item.text)}`;
+      }
+      while (open.length) html += `</li></${open.pop()}>`;
+    }
+    return html;
   },
 
   /** Plain text with each web address in it made a link, as HTML; null when it has none. */
