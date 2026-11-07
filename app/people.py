@@ -36,6 +36,16 @@ class Person:
         return {m['lab_id'] for m in self.labs if m.get('lab_id')} or ({self.lab_id} if self.lab_id else set())
 
     @property
+    def in_demo(self) -> bool:
+        """In the suite's teaching demo: every lab of theirs is one of the demo's (demo_lab_ids)."""
+        cached = self.__dict__.get('_in_demo')
+        if cached is None:
+            mine = self.lab_ids
+            cached = not self.is_admin and bool(mine) and mine <= demo_lab_ids()
+            self.__dict__['_in_demo'] = cached
+        return cached
+
+    @property
     def led_lab_ids(self) -> set:
         return {m['lab_id'] for m in self.labs if m.get('lab_id') and m['role'] == 'lab_lead'}
 
@@ -214,6 +224,43 @@ def colleagues(username: str) -> List[str]:
     gone = archived()
     return sorted(u for u, m in memberships().items()
                   if u != username and u not in gone and labs & {x['lab_id'] for x in m.get('labs', []) if x.get('lab_id')})
+
+
+def demo_lab_ids() -> set:
+    """
+    The teaching demo's labs: those in the chair group the suite records as the demo's (suite.db
+    settings 'demo.chair_group', set by the suite's demo/accounts.py). Its people see the demo's
+    notebooks and protocols only: not every lab's protocols, nor what a real lab shares with them.
+    """
+    rows = _read(suite_path(), "SELECT value FROM settings WHERE key = 'demo.chair_group'")
+    group = rows[0]['value'] if rows else None
+    if not group:
+        return set()
+    return {str(r['id']) for r in _read(suite_path(), 'SELECT id FROM labs WHERE chair_group_id = ?', (group,))}
+
+
+def demo_people() -> set:
+    demo = demo_lab_ids()
+    return {u for u, m in memberships().items()
+            if demo and any(x.get('lab_id') in demo for x in m.get('labs', []))} if demo else set()
+
+
+def people_for(person: 'Person') -> List[str]:
+    """people(), but only the demo's for someone in the demo."""
+    found = people()
+    if person is not None and person.in_demo:
+        demo = demo_people()
+        found = [u for u in found if u in demo]
+    return found
+
+
+def labs_for(person: 'Person') -> List[dict]:
+    """labs(), but only the demo's for someone in the demo."""
+    found = labs()
+    if person is not None and person.in_demo:
+        demo = demo_lab_ids()
+        found = [lab for lab in found if lab['id'] in demo]
+    return found
 
 
 def lab_name(lab_id: Optional[str]) -> Optional[str]:

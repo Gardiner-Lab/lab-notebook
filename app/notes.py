@@ -151,7 +151,24 @@ def _forget_shares() -> None:
             delattr(g, key)
 
 
+def _demo_sees(person: Person, note) -> bool:
+    """
+    The suite's teaching demo sees the demo's own: its labs' protocols, the ones supplied with the
+    notebook, and its people's notebooks; not a protocol a real lab or an administrator gave every
+    lab, nor anything a real lab or person shares with it.
+    """
+    seen = person.__dict__.get('_demo_seen')
+    if seen is None:
+        seen = person.__dict__['_demo_seen'] = (people_mod.demo_lab_ids(), people_mod.demo_people())
+    if note['space'] == 'library':
+        shipped = not note['lab'] and not note['created_by']     # supplied with the notebook
+        return note['type'] == 'library' or shipped or note_lab(note) in seen[0]
+    return note['owner'] in seen[1]
+
+
 def can_view(person: Person, note) -> bool:
+    if getattr(person, 'in_demo', False) and not _demo_sees(person, note):
+        return False
     if note['space'] == 'library':
         if note['type'] == 'library' or person.is_admin:
             return True
@@ -1242,8 +1259,8 @@ def shares(person: Person, note_id: str) -> dict:
         allowed = can_share(person, row)
         listed = conn.execute('SELECT * FROM shares WHERE note_id = ? ORDER BY created_at, rowid',
                               (note_id,)).fetchall() if allowed else []
-    labs = people_mod.labs()
-    names = {lab['id']: lab['name'] for lab in labs}
+    labs = people_mod.labs_for(person)
+    names = {lab['id']: lab['name'] for lab in people_mod.labs()}
     out = {'can_share': allowed,
            'shares': [{'id': s['id'], 'target_type': s['target_type'], 'target': s['target'],
                        'label': names.get(s['target'], f"Lab {s['target']}") if s['target_type'] == 'lab' else s['target'],
@@ -1252,12 +1269,12 @@ def shares(person: Person, note_id: str) -> dict:
         # A page goes to people and labs of its owner's chair group, its own lab too.
         within = _page_labs(row)
         out['labs'] = [lab for lab in labs if lab['id'] in within]
-        out['people'] = people_mod.colleagues(row['owner'])
+        out['people'] = [u for u in people_mod.colleagues(row['owner']) if u in people_mod.people_for(person)]
     elif allowed:
         home = _home_lab(row)
         out['labs'] = [lab for lab in labs if lab['id'] != home]
         # Notebooks go to people as well as labs; protocols to labs.
-        out['people'] = [u for u in people_mod.people() if u != row['owner']] if row['type'] == 'notebook' else []
+        out['people'] = [u for u in people_mod.people_for(person) if u != row['owner']] if row['type'] == 'notebook' else []
     return out
 
 
@@ -1277,12 +1294,12 @@ def share(person: Person, note_id: str, target_type: str, target: str) -> dict:
             else:
                 raise ValueError('A page is shared with people or labs')
         elif target_type == 'lab':
-            if target not in {lab['id'] for lab in people_mod.labs()}:
+            if target not in {lab['id'] for lab in people_mod.labs_for(person)}:
                 raise ValueError('Choose a lab of the suite')
             if target == _home_lab(row):
                 raise ValueError('Its own lab sees it already')
         elif target_type == 'person' and row['type'] == 'notebook':
-            if target not in people_mod.people():
+            if target not in people_mod.people_for(person):
                 raise ValueError('No one has that username')
             if target == row['owner']:
                 raise ValueError('It is their own notebook')

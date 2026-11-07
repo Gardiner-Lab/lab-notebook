@@ -568,3 +568,35 @@ def test_a_lab_admin_who_has_left_leaves_their_notebook_to_the_lab_leads(as_user
     conn.commit()
     assert zoe.get(f"/api/notes/{day['id']}").status_code == 200
     assert [n['owner'] for n in _me(zoe)['others'] if n['owner'] == 'lead'] == ['lead']
+
+
+def test_the_demo_sees_only_the_demos(as_user, world):
+    """Other Lab as the suite's teaching demo: nothing a real lab shares reaches it."""
+    import sqlite3
+    ana, lead, zoe, olead = (as_user(u) for u in ('ana', 'lead', 'zoe', 'olead'))
+    library = _me(ana)['library']
+    proto = _protocol(ana, library, 'Miniprep')
+    ana.post(f"/api/notes/{proto['id']}/shares", json={'target_type': 'lab', 'target': '2'})
+    assert zoe.get(f"/api/notes/{proto['id']}").status_code == 200
+    conn = sqlite3.connect(world['paths']['suite'])
+    conn.executescript("""
+        CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT);
+        CREATE TABLE chair_groups (id TEXT PRIMARY KEY, name TEXT);
+        ALTER TABLE labs ADD COLUMN chair_group_id TEXT;
+        INSERT INTO chair_groups VALUES ('demo', 'Demo Chair Group');
+        UPDATE labs SET chair_group_id = 'demo' WHERE id = 2;
+        INSERT INTO settings VALUES ('demo.chair_group', 'demo');
+    """)
+    conn.commit()
+    conn.close()
+    assert zoe.get(f"/api/notes/{proto['id']}").status_code == 403
+    titles = [p['title'] for p in zoe.get('/api/protocols').get_json()['protocols']]
+    assert 'Miniprep' not in titles and 'MoClo Golden Gate assembly' in titles     # the supplied ones stay
+    own = _protocol(zoe, library, 'Demo protocol')
+    assert zoe.get(f"/api/notes/{own['id']}").status_code == 200
+    # A real notebook shared with the demo's lead does not reach them either.
+    ana_book = _me(ana)['notebook'] if 'notebook' in _me(ana) else None
+    offer = olead.get(f"/api/notes/{own['id']}/shares").get_json()
+    assert [lab['name'] for lab in offer.get('labs', [])] in ([], ['Other Lab'])
+    assert olead.post(f"/api/notes/{own['id']}/shares", json={'target_type': 'lab', 'target': '1'}).status_code == 400
+    assert ana_book is None or zoe.get(f"/api/notes/{ana_book}").status_code == 403

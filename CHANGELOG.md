@@ -5,6 +5,11 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-11-08
+
+### Demo
+- **The teaching demo sees only the demo's.** Someone in the suite's demo sees the demo's notebooks and protocols and the protocols supplied with the notebook; not a protocol a real lab or an administrator gave every lab, nor anything a real lab or person shares with them. Their share forms list only the demo's labs and people.
+
 ## [0.23.1] - 2026-11-07
 
 ### Fixed
