@@ -351,6 +351,7 @@ class _Writer:
             url = (ctx.plasmid_link(attrs['data-plasmid']) if attrs.get('data-plasmid') else
                    ctx.seed_link(attrs['data-seed']) if attrs.get('data-seed') else
                    ctx.stock_link(attrs['data-stock']) if attrs.get('data-stock') else
+                   ctx.track_link(attrs['data-track']) if attrs.get('data-track') else
                    attrs.get('href') if (attrs.get('href') or '').startswith(('http://', 'https://', 'mailto:')) else None)
             if url and url.startswith(('http://', 'https://', 'mailto:')):
                 self.link(p, text, url=url)

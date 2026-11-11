@@ -219,6 +219,7 @@ class _Builder:
                         self.ctx.plasmid_link(attrs['data-plasmid']) if attrs.get('data-plasmid') else
                         self.ctx.seed_link(attrs['data-seed']) if attrs.get('data-seed') else
                         self.ctx.stock_link(attrs['data-stock']) if attrs.get('data-stock') else
+                        self.ctx.track_link(attrs['data-track']) if attrs.get('data-track') else
                         attrs.get('href') if (attrs.get('href') or '').startswith(('http://', 'https://', 'mailto:')) else None)
                 node.attrs = {'href': href} if href else {}
             else:

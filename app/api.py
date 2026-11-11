@@ -346,6 +346,13 @@ def find_plasmids(person):
     return jsonify({'plasmids': sources.plasmids(person, request.args.get('q', ''))})
 
 
+@api.get('/mentions')
+@signed_in
+def find_mentions(person):
+    """The notes linking to another tool's record (?type=track&id=...) that this person may open."""
+    return jsonify({'notes': notes.linked_to(person, request.args.get('type', ''), request.args.get('id', ''))})
+
+
 @api.get('/moclo/reactions')
 @signed_in
 def moclo_reactions(person):

@@ -167,6 +167,8 @@ const SEED_KINDS = { L: 'line', S: 'lot', P: 'plant' };
 const STOCK_KINDS = { G: 'glycerol', O: 'primer', C: 'chemical', A: 'antibody', M: 'material' };
 const stockLink = (code) => `${NB.stocks}/#${STOCK_KINDS[code.split('-').slice(-2, -1)[0]] || 'glycerol'}=${encodeURIComponent(code)}`;
 const seedLink = (code) => `${NB.seeds}/#${SEED_KINDS[code.split('-').slice(-2, -1)[0]] || 'line'}=${encodeURIComponent(code)}`;
+// A Genome Browser track, by its id: the browser opens its genome with it on.
+const trackLink = (id) => `${NB.genome}/?track=${encodeURIComponent(id)}`;
 
 /* --- pickers ------------------------------------------------------------------ */
 
@@ -282,6 +284,18 @@ const pickStock = () => picker({
   },
   describe: (r) => [glyph({ glycerol: 'stocks', primer: 'primer', chemical: 'protocol', antibody: 'antibody', material: 'leaf' }[r.kind] || 'stocks'), ' ', el('b', { text: r.code }), ` ${r.label.slice(r.code.length)}`,
     el('span', { class: 'hint' }, ` · ${{ glycerol: 'glycerol stock', material: 'plant material' }[r.kind] || r.kind}`)],
+});
+
+/** Choose a track in the Genome Browser, among those this person sees there. */
+const pickTrack = () => picker({
+  title: 'Link a genome track', placeholder: 'Search the Genome Browser by track, experiment or genome',
+  search: async (q) => {
+    const res = await fetch(`${NB.genome}/api/tracks?q=${encodeURIComponent(q)}`, { credentials: 'same-origin' });
+    if (!res.ok) throw new Error(res.status === 404 ? 'The Genome Browser is not part of this suite' : `Genome Browser: ${res.status}`);
+    return (await res.json()).tracks;
+  },
+  describe: (t) => [glyph('trace'), ' ', el('b', { text: t.name }),
+    el('span', { class: 'hint' }, ` · ${t.genome}${t.experiment ? ` · ${t.experiment}` : ''}`)],
 });
 
 async function pickMocloReaction() {
@@ -724,6 +738,7 @@ const Blocks = {
       if (link.dataset.attachment) { if (!(plainClick(e) && Viewer.open(link.dataset.attachment))) window.open(viewUrl(link.dataset.attachment), '_blank', 'noopener'); }
       else if (link.dataset.seed) window.open(seedLink(link.dataset.seed), '_blank', 'noopener');
       else if (link.dataset.stock) window.open(stockLink(link.dataset.stock), '_blank', 'noopener');
+      else if (link.dataset.track) window.open(trackLink(link.dataset.track), '_blank', 'noopener');
       else if (link.dataset.plasmid) window.open(editorLink(link.dataset.plasmid), '_blank', 'noopener');
       else if (link.dataset.note) App.open(link.dataset.note);
       else if (/^https?:/.test(link.getAttribute('href') || '')) window.open(link.href, '_blank', 'noopener');
@@ -1171,7 +1186,7 @@ const Blocks = {
     const inside = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement;
     const existing = inside.closest('a[href]');
     const linkedHere = existing && area.contains(existing) && !existing.dataset.note && !existing.dataset.plasmid
-      && !existing.dataset.seed && !existing.dataset.stock && !existing.dataset.attachment ? existing : null;
+      && !existing.dataset.seed && !existing.dataset.stock && !existing.dataset.track && !existing.dataset.attachment ? existing : null;
     bar.querySelector('.link-box')?.remove();
     const input = el('input', { type: 'text', placeholder: 'https://… or an email address', value: linkedHere ? linkedHere.getAttribute('href') : '',
                                 'aria-label': 'Web address', spellcheck: 'false' });
@@ -1267,7 +1282,7 @@ const Blocks = {
       div.replaceWith(p);
     }
     this.tidyNodes(copy);
-    for (const a of copy.querySelectorAll('a[data-plasmid], a[data-note], a[data-seed], a[data-stock], a[data-attachment]')) {
+    for (const a of copy.querySelectorAll('a[data-plasmid], a[data-note], a[data-seed], a[data-stock], a[data-track], a[data-attachment]')) {
       for (const attr of ['href', 'class', 'title']) a.removeAttribute(attr);
     }
     for (const img of copy.querySelectorAll('img[data-attachment]')) {
@@ -1318,6 +1333,11 @@ const Blocks = {
       a.classList.add('seed-link');
       a.title = 'Open in the Seed Bank';
     }
+    for (const a of area.querySelectorAll('a[data-track]')) {
+      a.href = trackLink(a.dataset.track);
+      a.classList.add('track-link');
+      a.title = 'Open in the Genome Browser';
+    }
     for (const img of area.querySelectorAll('img[data-attachment]')) {
       img.src = attachmentUrl(img.dataset.attachment);
       img.loading = 'lazy';
@@ -1341,6 +1361,7 @@ const Blocks = {
           el('button', { class: 'btn btn-primary', onclick: () => { choice = 'plasmid'; close(); } }, glyph('plasmid'), ' A plasmid'),
           el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'seed'; close(); } }, glyph('plant'), ' A seed lot, plant or line'),
           el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'stock'; close(); } }, glyph('stocks'), ' A stock, primer, chemical, antibody or plant material'),
+          el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'track'; close(); } }, glyph('trace'), ' A genome track'),
           el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'note'; close(); } }, glyph('text'), ' A page or protocol'))),
         buttons: [{ label: 'Just type @', kind: 'secondary' }],
       });
@@ -1349,12 +1370,13 @@ const Blocks = {
     let target;
     try {
       target = kind === 'plasmid' ? await pickPlasmid() : kind === 'seed' ? await pickSeed()
-        : kind === 'stock' ? await pickStock() : await pickNote([], 'Link to a page or protocol');
+        : kind === 'stock' ? await pickStock() : kind === 'track' ? await pickTrack()
+          : await pickNote([], 'Link to a page or protocol');
     } catch (err) { toast(err.message, 'error'); return; }
     if (!target) return;
     const link = el('a', kind === 'plasmid' ? { 'data-plasmid': target.id } : kind === 'seed' ? { 'data-seed': target.code }
-      : kind === 'stock' ? { 'data-stock': target.code } : { 'data-note': target.id },
-    kind === 'plasmid' ? target.name : kind === 'seed' || kind === 'stock' ? target.label : target.title);
+      : kind === 'stock' ? { 'data-stock': target.code } : kind === 'track' ? { 'data-track': target.id } : { 'data-note': target.id },
+    kind === 'plasmid' || kind === 'track' ? target.name : kind === 'seed' || kind === 'stock' ? target.label : target.title);
     range.deleteContents();
     range.insertNode(link);
     link.after(document.createTextNode(' '));

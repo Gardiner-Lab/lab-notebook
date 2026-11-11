@@ -5,6 +5,15 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-11-11
+
+### Added
+- **Links to genome tracks.** Type `@` and choose *A genome track* to link a page to a track in the Genome Browser,
+  found by its name, experiment or genome. The link opens the track's genome with it on, and goes into PDF and Word
+  exports as a link there.
+- **Which pages link to a record.** `GET /api/mentions?type=track&id=…` lists the pages linking to a track (or a
+  plasmid, seed or stock) that the asker may open: the Genome Browser shows them under a track's Details.
+
 ## [0.24.0] - 2026-11-08
 
 ### Demo

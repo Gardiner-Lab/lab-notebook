@@ -117,6 +117,10 @@ class Context:
         kind = kinds.get(parts[-2] if len(parts) > 1 else '', 'line')
         return self.absolute(f"{os.environ.get('SEEDS_URL', '/seeds').rstrip('/')}/#{kind}={code}")
 
+    def track_link(self, track_id: str) -> str:
+        genome = os.environ.get('GENOME_URL', '/genome').rstrip('/')
+        return self.absolute(f'{genome}/?track={track_id}')
+
     def stock_link(self, code: str) -> str:
         parts = code.split('-')
         kind = {'O': 'primer', 'C': 'chemical', 'A': 'antibody', 'M': 'material'}.get(parts[-2], 'glycerol') if len(parts) > 1 else 'glycerol'

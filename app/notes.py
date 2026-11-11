@@ -299,6 +299,26 @@ def get(person: Person, note_id: str) -> dict:
     return note
 
 
+# What another tool's records may be linked as, and so asked about by that tool.
+LINKED_TYPES = ('plasmid', 'seed', 'stock', 'track')
+
+
+def linked_to(person: Person, target_type: str, target_id: str) -> list:
+    """
+    The notes linking to another tool's record that this person may open,
+    newest first: what the Genome Browser shows under a track as "In the Lab
+    Notebook". An unknown kind of record has none.
+    """
+    if target_type not in LINKED_TYPES or not target_id:
+        return []
+    with connect() as conn:
+        rows = conn.execute(
+            'SELECT n.* FROM links l JOIN notes n ON n.id = l.note_id '
+            'WHERE l.target_type = ? AND l.target_id = ? AND n.deleted_at IS NULL '
+            'ORDER BY n.updated_at DESC LIMIT 200', (target_type, target_id)).fetchall()
+    return [summary(r) for r in rows if can_view(person, r)][:100]
+
+
 def day_of(note) -> Optional[str]:
     """A day's date (YYYY-MM-DD), from its dateNote label; None for any other note."""
     if note['type'] != 'day':

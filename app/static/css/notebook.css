@@ -151,8 +151,11 @@ mark.hl-none { background: none; padding: 0; }
 .stock-link:hover { background: color-mix(in srgb, var(--tt-stocks) 18%, white); }
 .seed-link { background: color-mix(in srgb, var(--tt-seeds) 11%, white); color: color-mix(in srgb, var(--tt-seeds) 80%, black); border-radius: .3rem; padding: 0 .3rem; text-decoration: none; font-weight: 500; cursor: pointer; }
 .seed-link::before { background-image: url("../trellis/glyphs/plant.svg"); }
+.track-link { background: color-mix(in srgb, var(--tt-green) 11%, white); color: var(--tt-green-ink); border-radius: .3rem; padding: 0 .3rem; text-decoration: none; font-weight: 500; cursor: pointer; }
+.track-link::before { background-image: url("../trellis/glyphs/trace.svg"); }
+.track-link:hover { background: color-mix(in srgb, var(--tt-green) 18%, white); }
 /* Links in text, and attachments that are not photos, carry a glyph before them. */
-:is(.plasmid-link, .stock-link, .seed-link, a[data-attachment])::before { content: ""; display: inline-block; width: 1.05em; height: 1.05em;
+:is(.plasmid-link, .stock-link, .seed-link, .track-link, a[data-attachment])::before { content: ""; display: inline-block; width: 1.05em; height: 1.05em;
     margin-right: .25em; vertical-align: -.18em; background-position: center; background-size: contain; background-repeat: no-repeat; }
 a[data-attachment]::before { background-image: url("../trellis/glyphs/attach.svg"); }
 .seed-link:hover { background: color-mix(in srgb, var(--tt-seeds) 20%, white); }
