@@ -5,6 +5,20 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-11-12
+
+### Added
+- **A week's to-do list.** On a day page, **＋ Week's to-do** makes one list for that week (Monday to Sunday), a
+  page of its own shown under every day page of the week, and under any started later. A task is a line of text
+  in which `@` tags a plasmid, stock, seed lot, track or page, as in any text; ticked by whom and when. **→ Next
+  week** moves a task still to do on to next week's list: it stays on this week's, marked as moved, and is on next
+  week's as soon as that list is made, saying where it came from. **Bring back** undoes it while it is not ticked
+  there. Deleting a day takes the list only when no other day of the week shows it. Lists print in PDF and Word
+  exports.
+
+### Changed
+- **Start today** is now **Today**.
+
 ## [0.25.0] - 2026-11-11
 
 ### Added
