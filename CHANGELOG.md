@@ -5,6 +5,12 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.26.1] - 2026-11-12
+
+### Fixed
+- **A to-do list's block buttons no longer cover its first task.** The list leaves room above it for the
+  block's ↑ ↓ ✕, which sat on top of the first task's **→ Next week**.
+
 ## [0.26.0] - 2026-11-12
 
 ### Added
