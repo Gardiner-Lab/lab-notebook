@@ -511,3 +511,6 @@ textarea.step-text:focus { outline: 1px solid var(--border); border-radius: .3re
 .task-actions { display: flex; gap: .25rem; flex: none; opacity: .55; }
 .task-list li.task:hover .task-actions, .task-actions:focus-within { opacity: 1; }
 .task-add { margin-top: .1rem; }
+/* A to-do list has no title row for the block's ↑ ↓ ✕ to sit in: make room above the first task,
+   so they do not cover its own buttons. */
+.block-tasks:has(> .block-gutter) { padding-top: 2.1rem; }
