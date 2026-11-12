@@ -295,6 +295,9 @@ def get(person: Person, note_id: str) -> dict:
         iso = day_of(note)
         if iso and row['owner']:
             note['bookings'] = bookings_mod.on_day(conn, note_id, row['owner'], date.fromisoformat(iso))
+            # And its week's to-do list, if made (app/todos.py).
+            from app import todos
+            note['todo'] = todos.find(conn, row['owner'], todos.monday(date.fromisoformat(iso)))
     note['backlinks'] = [summary(b) for b in backlinks if can_view(person, b)]
     return note
 
@@ -541,6 +544,9 @@ def day(person: Person, when: Optional[date] = None) -> str:
                              space='notebook', owner=person.username, by=person.username, parent_id=month_id,
                              content=[{'id': content_mod.new_id(), 'type': 'text', 'html': ''}])
             _label(conn, day_id, 'dateNote', iso)
+            # Its week's to-do list, if that week has one (app/todos.py).
+            from app import todos
+            todos.place_on_day(conn, person.username, when, day_id)
         return day_id
 
 
@@ -676,8 +682,8 @@ def save(person: Person, note_id: str, title: Optional[str] = None, content: Opt
     if base_version is not None and int(base_version) != row['version']:
         raise Stale(get(person, note_id))
     new_title = (title.strip()[:200] or 'Untitled') if isinstance(title, str) else row['title']
-    if row['type'] in ('year', 'month', 'day'):
-        new_title = row['title']          # a day is named by its date
+    if row['type'] in ('year', 'month', 'day', 'todo'):
+        new_title = row['title']          # a day is named by its date, a to-do list by its week
     previous = json.loads(row['content'] or '[]')
     blocks = previous if content is None else content_mod.clean_blocks(content, previous, person.username)
     body = json.dumps(blocks)
@@ -793,7 +799,14 @@ def delete(person: Person, note_id: str) -> None:
         if row['owner'] != person.username and not person.is_admin and row['space'] == 'notebook' and any(
                 r == note_id for r, _ in _shared_with(person)['pages']):
             raise Forbidden('Only its owner can delete a page shared with you; you can delete the pages under it')
-        for nid in _owned_subtree(conn, note_id, row['owner']):
+        going = _owned_subtree(conn, note_id, row['owner'])
+        for nid in going:
+            # A week's to-do list stays while another day of the week, not going, still shows it.
+            if nid != note_id and conn.execute(
+                    "SELECT 1 FROM notes n JOIN branches b ON b.note_id = n.id JOIN notes p ON p.id = b.parent_id "
+                    "WHERE n.id = ? AND n.type = 'todo' AND p.deleted_at IS NULL AND p.id NOT IN ({})".format(
+                        ','.join('?' * len(going))), (nid, *going)).fetchone():
+                continue
             # Notes already deleted on their own stay their own deletion.
             conn.execute('UPDATE notes SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ?, deleted_root = ? '
                          'WHERE id = ? AND deleted_at IS NULL', (person.username, note_id, nid))
@@ -999,7 +1012,7 @@ def remove_attribute(person: Person, attr_id: str) -> None:
             raise Forbidden('You cannot change this note')
         # 'seed' marks a protocol supplied with the notebook: without it, the next
         # start would supply it again.
-        if attr['name'] in ('dateNote', 'monthNote', 'yearNote', 'notebookRoot', 'protocolLibrary', 'seed'):
+        if attr['name'] in ('dateNote', 'monthNote', 'yearNote', 'weekNote', 'notebookRoot', 'protocolLibrary', 'seed'):
             raise ValueError('This label keeps the notebook in order and cannot be removed')
         conn.execute('DELETE FROM attributes WHERE id = ?', (attr_id,))
 

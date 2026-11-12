@@ -493,3 +493,21 @@ textarea.step-text:focus { outline: 1px solid var(--border); border-radius: .3re
 .format-bar .link-box button.primary { background: var(--tt-green); border-color: var(--tt-green); color: #fff; }
 .format-bar .link-box .link-box-note { flex-basis: 100%; font-size: .8rem; color: var(--tt-danger); }
 .format-bar .link-box .link-box-note:empty { display: none; }
+
+/* A week's to-do list (Blocks.tasks): a line of text per task, a tick box, and moving on to next week. */
+.badge-todo { background: var(--accent-soft); color: var(--tt-ok, #2f6f4f); }
+.tasks { margin: 0 0 .75rem; }
+.task-list { list-style: none; margin: 0 0 .5rem; padding: 0; }
+.task-list li.task { display: flex; align-items: flex-start; gap: .5rem; padding: .3rem 0; border-bottom: 1px solid var(--border, #e5e5e5); }
+.task-list li.task > input[type=checkbox] { margin-top: .3rem; flex: none; }
+.task-body { flex: 1; min-width: 0; }
+.task-text { min-height: 1.4em; outline: none; padding: .05rem .2rem; border-radius: .25rem; overflow-wrap: anywhere; }
+.task-text[contenteditable=true]:focus { background: var(--accent-soft); }
+.task-text:empty::before { content: attr(data-placeholder); color: var(--muted); }
+.task-marks { font-size: .8rem; }
+.task-marks .tick { color: var(--tt-ok, #2f6f4f); }
+.task-list li.done .task-text { text-decoration: line-through; color: var(--muted); }
+.task-list li.moved .task-text { color: var(--muted); font-style: italic; }
+.task-actions { display: flex; gap: .25rem; flex: none; opacity: .55; }
+.task-list li.task:hover .task-actions, .task-actions:focus-within { opacity: 1; }
+.task-add { margin-top: .1rem; }

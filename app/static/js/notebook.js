@@ -157,7 +157,7 @@ const IMPORTED = {
   'moclo-cassette': ['cassette', 'A cassette from the MoClo Library Tool'],
   'moclo-part': ['part', 'A part from the MoClo Library Tool'],
 };
-const ICONS = { notebook: 'notebook', library: 'library', year: 'calendar', month: 'calendar', day: 'calendar', page: 'text', folder: 'folder', protocol: 'protocol' };   // glyphs
+const ICONS = { notebook: 'notebook', library: 'library', year: 'calendar', month: 'calendar', day: 'calendar', page: 'text', folder: 'folder', protocol: 'protocol', todo: 'steps' };   // glyphs
 const noteGlyph = (type) => glyph(ICONS[type] || 'text');
 const editorLink = (id) => `${NB.editor}/editor?open=${encodeURIComponent(id)}`;
 const SEED_KINDS = { L: 'line', S: 'lot', P: 'plant' };
@@ -592,15 +592,148 @@ const Blocks = {
     return box;
   },
 
+  /** A click on a link in text: open what it points at, in its tool or here. */
+  followLink(e) {
+    const link = e.target.closest('a');
+    if (!link) return;
+    e.preventDefault();
+    if (link.dataset.attachment) { if (!(plainClick(e) && Viewer.open(link.dataset.attachment))) window.open(viewUrl(link.dataset.attachment), '_blank', 'noopener'); }
+    else if (link.dataset.seed) window.open(seedLink(link.dataset.seed), '_blank', 'noopener');
+    else if (link.dataset.stock) window.open(stockLink(link.dataset.stock), '_blank', 'noopener');
+    else if (link.dataset.track) window.open(trackLink(link.dataset.track), '_blank', 'noopener');
+    else if (link.dataset.plasmid) window.open(editorLink(link.dataset.plasmid), '_blank', 'noopener');
+    else if (link.dataset.note) App.open(link.dataset.note);
+    else if (/^https?:/.test(link.getAttribute('href') || '')) window.open(link.href, '_blank', 'noopener');
+  },
+
   render(block, ctx) {
     switch (block.type) {
       case 'text': return this.text(block, ctx);
+      case 'tasks': return this.tasks(block, ctx);
       case 'table': return this.table(block, ctx);
       case 'steps': return this.steps(block, ctx);
       case 'section': return this.section(block, ctx);
       case 'gel': return this.gel(block, ctx);
       default: return el('div', { class: 'hint' }, `(${block.type})`);
     }
+  },
+
+  /* tasks: a week's to-do list ------------------------------------------------- */
+
+  /**
+   * A to-do list (app/todos.py): a line of text per task, in which @ links a plasmid, stock, seed
+   * lot, track or page as in text; ticked by whom and when. Enter starts the next task, Backspace in
+   * an empty one removes it. "→ Next week" moves a task on to next week's list; it stays here,
+   * marked, and can be brought back while not done there.
+   */
+  tasks(block, ctx) {
+    const list = el('ul', { class: 'task-list' });
+    const wrap = el('div', { class: 'tasks' }, list);
+    const dmy = (iso) => String(iso || '').split('-').reverse().join('-');
+    const focusEnd = (area) => {
+      if (!area) return;
+      area.focus();
+      const r = document.createRange();
+      r.selectNodeContents(area);
+      r.collapse(false);
+      const s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+    };
+    const add = (at) => {
+      block.items.splice(at, 0, { id: newId(), html: '' });
+      draw();
+      ctx.changed();
+      focusEnd(list.children[at]?.querySelector('.task-text'));
+    };
+    // Moving on and back are done by the notebook, on what is saved: save first, then show the list as it is.
+    const act = async (item, how) => {
+      const note = App.note;
+      await App.flush();
+      try {
+        const { note: fresh } = await api('POST', `/notes/${note.id}/tasks/${item.id}/${how}`);
+        App.show(fresh);
+        toast(how === 'move' ? "Moved on to next week's list" : 'Back on this week\'s list', 'success', 2500);
+      } catch (err) { toast(err.message, 'error', 6000); }
+    };
+    const draw = () => put(list, ...block.items.map((item, i) => {
+      const done = !!(item.by || item.done);
+      const moved = !!item.moved;
+      const editable = ctx.editable && !moved;
+      const tick = el('span', { class: 'tick', 'data-tick': `${block.id}|${item.id}` },
+        done && item.by ? `✓ ${item.by} · ${localTime(item.at)}` : '');
+      const box = el('input', {
+        type: 'checkbox', checked: done, disabled: !editable, title: moved ? 'Moved on to next week' : '',
+        onchange: () => {
+          item.done = box.checked;
+          if (!box.checked) { item.by = null; item.at = null; }
+          li.classList.toggle('done', box.checked);
+          tick.textContent = box.checked ? (item.by ? `✓ ${item.by} · ${localTime(item.at)}` : '✓ saving…') : '';
+          // A task done does not move on: its "→ Next week" goes, and comes back when unticked.
+          if (moveBtn) moveBtn.hidden = box.checked;
+          ctx.changed();
+        },
+      });
+      const area = el('div', {
+        class: 'task-text', contenteditable: editable ? 'true' : 'false',
+        'data-placeholder': editable ? 'A task. Type @ to link a plasmid, stock, seed lot or page.' : '',
+      });
+      area.innerHTML = item.html || '';          // cleaned by the server
+      this.decorateLinks(area);
+      area.addEventListener('click', (e) => this.followLink(e));
+      if (editable) {
+        const sync = () => { item.html = this.storable(area); ctx.changed(); };
+        area.addEventListener('input', () => {
+          sync();
+          const sel = window.getSelection();
+          if (!sel.rangeCount) return;
+          const range = sel.getRangeAt(0);
+          const node = range.startContainer;
+          if (node.nodeType === Node.TEXT_NODE && range.startOffset > 0 && node.textContent[range.startOffset - 1] === '@') {
+            const at = document.createRange();
+            at.setStart(node, range.startOffset - 1);
+            at.setEnd(node, range.startOffset);
+            this.linkAt(area, at, sync);
+          }
+        });
+        area.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); add(i + 1); return; }
+          if (e.key === 'Backspace' && !area.textContent.trim() && !area.querySelector('a, img') && block.items.length > 1) {
+            e.preventDefault();
+            block.items.splice(i, 1);
+            draw();
+            ctx.changed();
+            focusEnd(list.children[Math.max(0, i - 1)]?.querySelector('.task-text'));
+          }
+        });
+        // A task is one line: pasted text comes in as plain text, its lines joined.
+        area.addEventListener('paste', (e) => {
+          e.preventDefault();
+          document.execCommand('insertText', false, e.clipboardData.getData('text/plain').replace(/\s*[\r\n]+\s*/g, ' '));
+        });
+      }
+      const moveBtn = moved || !ctx.editable ? null : el('button', { class: 'btn btn-sm btn-secondary', hidden: done || null,
+        title: "Move this task on to next week's to-do list", onclick: () => act(item, 'move') }, '→ Next week');
+      const marks = el('div', { class: 'task-marks' }, tick,
+        item.from_week ? el('span', { class: 'hint' }, ` from the week of ${dmy(item.from_week)}`) : null,
+        moved ? el('span', { class: 'hint' }, `→ moved on to the week of ${dmy(item.moved)}`) : null);
+      const actions = !ctx.editable ? null : el('span', { class: 'task-actions' },
+        moved ? el('button', { class: 'btn btn-sm btn-secondary', title: "Put it back on this week's list, and take it off next week's",
+          onclick: () => act(item, 'back') }, 'Bring back')
+          : moveBtn,
+        moved ? null : el('button', { class: 'icon-btn', title: 'Remove this task', onclick: () => {
+          block.items.splice(i, 1);
+          draw();
+          ctx.changed();
+        } }, '✕'));
+      const li = el('li', { class: ['task', done ? 'done' : '', moved ? 'moved' : ''].filter(Boolean).join(' ') },
+        box, el('div', { class: 'task-body' }, area, marks), actions);
+      return li;
+    }));
+    draw();
+    if (ctx.editable) wrap.append(el('button', { class: 'btn btn-sm btn-secondary task-add', onclick: () => add(block.items.length) }, '＋ Task'));
+    else if (!block.items.length) list.append(el('li', { class: 'hint' }, 'No tasks yet.'));
+    return wrap;
   },
 
   /* gels ---------------------------------------------------------------------- */
@@ -732,16 +865,7 @@ const Blocks = {
       const photo = e.target.closest('img[data-attachment]');
       if (photo && ctx.editable) { App.photoMenu(photo); return; }
       if (photo) { if (!Viewer.open(photo.dataset.attachment)) window.open(attachmentUrl(photo.dataset.attachment), '_blank', 'noopener'); return; }
-      const link = e.target.closest('a');
-      if (!link) return;
-      e.preventDefault();
-      if (link.dataset.attachment) { if (!(plainClick(e) && Viewer.open(link.dataset.attachment))) window.open(viewUrl(link.dataset.attachment), '_blank', 'noopener'); }
-      else if (link.dataset.seed) window.open(seedLink(link.dataset.seed), '_blank', 'noopener');
-      else if (link.dataset.stock) window.open(stockLink(link.dataset.stock), '_blank', 'noopener');
-      else if (link.dataset.track) window.open(trackLink(link.dataset.track), '_blank', 'noopener');
-      else if (link.dataset.plasmid) window.open(editorLink(link.dataset.plasmid), '_blank', 'noopener');
-      else if (link.dataset.note) App.open(link.dataset.note);
-      else if (/^https?:/.test(link.getAttribute('href') || '')) window.open(link.href, '_blank', 'noopener');
+      this.followLink(e);
     });
     if (!ctx.editable) return area;
 
@@ -2050,7 +2174,7 @@ const App = {
         if (p.type !== 'notebook') this.open(p.id);
       } }, p.title)]));
 
-    const fixedTitle = !editable || ['day', 'month', 'year'].includes(note.type);
+    const fixedTitle = !editable || ['day', 'month', 'year', 'todo'].includes(note.type);
     const title = fixedTitle
       ? el('h1', { class: 'note-title', text: note.title })
       : el('input', { type: 'text', class: 'note-title', value: note.title,
@@ -2087,6 +2211,20 @@ const App = {
           title: "Use this protocol: a page of its own under today's day, or under any page you choose",
           onclick: () => this.addToPage(note.id),
         }, '＋ Add to page…'),
+        note.type === 'day' && (note.todo || editable) ? el('button', {
+          class: 'btn btn-sm btn-secondary',
+          title: note.todo ? "This week's to-do list, under every day of the week"
+            : "Make this week's to-do list: one list under every day of the week, with the tasks moved on from last week",
+          onclick: async () => {
+            if (note.todo) { this.open(note.todo); return; }
+            await this.flush();
+            try {
+              const { note: todo } = await api('POST', `/notes/${note.id}/todo`);
+              await this.reloadTrees();
+              this.show(todo);
+            } catch (err) { toast(err.message, 'error'); }
+          },
+        }, glyph('steps'), note.todo ? " Week's to-do" : " ＋ Week's to-do") : null,
         note.can_share ? el('button', {
           class: 'btn btn-secondary btn-sm',
           title: note.space === 'library' ? 'Share this protocol with other labs'
@@ -2451,13 +2589,13 @@ const App = {
     const bar = el('div', { class: 'attributes' });
     for (const a of note.attributes) {
       // A day's or month's own label shown day-first (30-10-2026, 10-2026); it is kept as it is (2026-10-30).
-      const shown = ['dateNote', 'monthNote'].includes(a.name) && /^\d{4}-\d\d(-\d\d)?$/.test(a.value || '')
+      const shown = ['dateNote', 'monthNote', 'weekNote'].includes(a.name) && /^\d{4}-\d\d(-\d\d)?$/.test(a.value || '')
         ? a.value.split('-').reverse().join('-') : a.value;
       const text = a.type === 'label' ? `#${a.name}${shown ? `=${shown}` : ''}` : `~${a.name}=`;
       bar.append(el('span', { class: `attr attr-${a.type}` }, text,
         a.type === 'relation' ? el('a', { href: `#note=${a.value}`, onclick: (e) => { e.preventDefault(); this.open(a.value); } },
           a.target_title || 'a deleted note') : null,
-        note.can_edit && !['dateNote', 'monthNote', 'yearNote', 'notebookRoot', 'protocolLibrary', 'seed'].includes(a.name)
+        note.can_edit && !['dateNote', 'monthNote', 'yearNote', 'weekNote', 'notebookRoot', 'protocolLibrary', 'seed'].includes(a.name)
           ? el('button', { class: 'attr-x', title: 'Remove', onclick: async () => {
             try { await api('DELETE', `/attributes/${a.id}`); note.attributes = note.attributes.filter((x) => x !== a); bar.replaceWith(this.attributeBar(note)); } catch (err) { toast(err.message, 'error'); }
           } }, '×') : null));
@@ -2892,7 +3030,7 @@ const App = {
     const walk = (blocks) => {
       for (const b of blocks || []) {
         if (b.type === 'section') walk(b.blocks);
-        if (b.type === 'steps') for (const i of b.items) if (i.by) stamps.set(`${b.id}|${i.id}`, i);
+        if (b.type === 'steps' || b.type === 'tasks') for (const i of b.items) if (i.by) stamps.set(`${b.id}|${i.id}`, i);
         if (b.type === 'table') {
           for (const row of b.rows) row.cells.forEach((cell, c) => { if (cell && cell.by) stamps.set(`${b.id}|${row.id}|${c}`, cell); });
         }
@@ -2902,7 +3040,7 @@ const App = {
     const apply = (blocks) => {
       for (const b of blocks || []) {
         if (b.type === 'section') apply(b.blocks);
-        if (b.type === 'steps') {
+        if (b.type === 'steps' || b.type === 'tasks') {
           for (const i of b.items) {
             const s = stamps.get(`${b.id}|${i.id}`);
             if (s && (i.done || i.by)) { i.by = s.by; i.at = s.at; }

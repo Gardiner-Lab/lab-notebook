@@ -387,6 +387,28 @@ class _Writer:
                 run.font.size = self.Pt(8)
                 run.font.color.rgb = self.RGBColor(*GREEN)
 
+    def tasks(self, block: dict) -> None:
+        doc = self.doc
+        if block.get('title'):
+            doc.add_paragraph().add_run(block['title']).bold = True
+        for item in block.get('items') or []:
+            box = '☑' if item.get('by') else ('→' if item.get('moved') else '☐')
+            marker = len(doc.paragraphs)
+            self.text({'html': item.get('html') or ''})
+            if len(doc.paragraphs) == marker:
+                doc.add_paragraph()
+            p = doc.paragraphs[marker]
+            p.paragraph_format.left_indent = self.Inches(0.25)
+            p.runs[0].text = f'{box} {p.runs[0].text}' if p.runs else ''
+            if not p.runs:
+                p.add_run(box)
+            note = (f'   ✓ {item["by"]} · {self.ctx.when(item.get("at"))}' if item.get('by')
+                    else f'   moved on to the week of {_dmy(item["moved"])}' if item.get('moved') else '')
+            if note:
+                run = p.add_run(note)
+                run.font.size = self.Pt(8)
+                run.font.color.rgb = self.RGBColor(*GREEN)
+
     def table(self, block: dict) -> None:
         doc = self.doc
         columns = block.get('columns') or []
@@ -493,6 +515,8 @@ class _Writer:
             self.text(block)
         elif kind == 'steps':
             self.steps(block)
+        elif kind == 'tasks':
+            self.tasks(block)
         elif kind == 'table':
             self.table(block)
         elif kind == 'section':
@@ -592,3 +616,8 @@ def render(ctx: Context, step: Callable) -> Tuple[bytes, str, str]:
         z.writestr('README.txt', f'{ctx.title}\r\n\r\nOpen {name}. The files it links to are in the files folder: '
                                  'keep the two together (unzip the whole of it) so the links work.\r\n')
     return bundle.getvalue(), 'zip', 'application/zip'
+
+
+def _dmy(iso: str) -> str:
+    """A stored date (2026-11-16) as the lab writes it: 16-11-2026."""
+    return '-'.join(reversed(str(iso or '').split('-')))

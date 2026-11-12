@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from flask import Blueprint, Response, jsonify, request, send_file
 
-from app import attachments, exporting, notes, people, sources, viewer
+from app import attachments, exporting, notes, people, sources, todos, viewer
 
 api = Blueprint('api', __name__)
 
@@ -65,6 +65,29 @@ def booking_note(person, note_id, booking_id):
     """What was done with a booking on this day."""
     notes.write_booking_note(person, note_id, booking_id, str(_body().get('text') or ''))
     return jsonify({'ok': True})
+
+
+@api.post('/notes/<day_id>/todo')
+@signed_in
+def week_todo(person, day_id):
+    """The to-do list of this day's week: made if there is none, under every day of the week."""
+    return jsonify({'note': notes.get(person, todos.make(person, day_id))})
+
+
+@api.post('/notes/<todo_id>/tasks/<item_id>/move')
+@signed_in
+def move_task(person, todo_id, item_id):
+    """A task moved on to next week's to-do list."""
+    next_id = todos.move_on(person, todo_id, item_id)
+    return jsonify({'note': notes.get(person, todo_id), 'next': next_id})
+
+
+@api.post('/notes/<todo_id>/tasks/<item_id>/back')
+@signed_in
+def bring_task_back(person, todo_id, item_id):
+    """A task moved on, back on this week's list."""
+    todos.bring_back(person, todo_id, item_id)
+    return jsonify({'note': notes.get(person, todo_id)})
 
 
 @api.get('/notes/<note_id>/children')

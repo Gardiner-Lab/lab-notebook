@@ -130,7 +130,7 @@ def _ticks(blocks: List[dict]) -> Dict[Tuple, dict]:
             continue
         if block.get('type') == 'section':
             found.update(_ticks(block.get('blocks')))
-        elif block.get('type') == 'steps':
+        elif block.get('type') in ('steps', 'tasks'):
             for item in block.get('items') or []:
                 if isinstance(item, dict) and item.get('by'):
                     found[(block.get('id'), item.get('id'), None)] = item
@@ -144,9 +144,27 @@ def _ticks(blocks: List[dict]) -> Dict[Tuple, dict]:
     return found
 
 
+def _task_marks(blocks: List[dict]) -> Dict[str, dict]:
+    """
+    What only the notebook sets on a task, by its id: the week it was moved on to (``moved``), and
+    the task and week it was carried over from (``from_item``, ``from_week``). An edit keeps them.
+    """
+    found: Dict[str, dict] = {}
+    for block in blocks or []:
+        if isinstance(block, dict) and block.get('type') == 'tasks':
+            for item in block.get('items') or []:
+                if isinstance(item, dict) and item.get('id'):
+                    found[item['id']] = {k: item.get(k) for k in TASK_MARKS}
+    return found
+
+
+TASK_MARKS = ('moved', 'from_item', 'from_week')
+
+
 class _Cleaner:
     def __init__(self, previous: Optional[List[dict]], username: str):
         self.before = _ticks(previous or [])
+        self.marks = _task_marks(previous or [])
         self.username = username
         self.stamp = now()
         self.seen_ids = set()
@@ -183,6 +201,20 @@ class _Cleaner:
                 items.append({'id': iid, 'text': _text(item.get('text'), MAX_CELL),
                               'by': tick['by'] if tick else None, 'at': tick['at'] if tick else None})
             return {'id': bid, 'type': 'steps', 'title': _text(block.get('title')), 'items': items}
+        if kind == 'tasks':
+            # A to-do list: each task a line of text that may link (@) a plasmid, stock, seed lot,
+            # track or page; ticked by whom and when, as steps are.
+            items = []
+            for item in (block.get('items') or [])[:MAX_ITEMS]:
+                if not isinstance(item, dict):
+                    continue
+                iid = _text(item.get('id'), 40) or new_id()
+                marks = self.marks.get(iid, {})
+                tick = self._tick((bid, iid, None), bool(item.get('done') or item.get('by')))
+                items.append({'id': iid, 'html': clean_html(item.get('html'))[:MAX_CELL * 4],
+                              'by': tick['by'] if tick else None, 'at': tick['at'] if tick else None,
+                              **{k: marks.get(k) for k in TASK_MARKS}})
+            return {'id': bid, 'type': 'tasks', 'title': _text(block.get('title')), 'items': items}
         if kind == 'table':
             return self.table(block, bid)
         if kind == 'gel':
@@ -267,6 +299,8 @@ def plain_text(blocks: List[dict]) -> str:
                 words.append(html.unescape(_TAG.sub(' ', block.get('html') or '')))
             elif kind == 'steps':
                 words.extend(str(i.get('text') or '') for i in block.get('items') or [])
+            elif kind == 'tasks':
+                words.extend(html.unescape(_TAG.sub(' ', i.get('html') or '')) for i in block.get('items') or [])
             elif kind == 'table':
                 words.extend(str(c.get('name') or '') for c in block.get('columns') or [])
                 for row in block.get('rows') or []:
@@ -288,6 +322,9 @@ def links(blocks: List[dict]) -> List[Tuple[str, str]]:
         for block in items or []:
             if block.get('type') == 'text':
                 found.update(_LINK.findall(block.get('html') or ''))
+            elif block.get('type') == 'tasks':
+                for item in block.get('items') or []:
+                    found.update(_LINK.findall(item.get('html') or ''))
             elif block.get('type') == 'section':
                 walk(block.get('blocks'))
                 if block.get('source', {}).get('kind') == 'protocol' and block['source'].get('id'):

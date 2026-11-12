@@ -238,6 +238,17 @@ class _Builder:
         title = f'<div class="block-title">{esc(block["title"])}</div>' if block.get('title') else ''
         return f'<div class="steps">{title}<ol>{items}</ol></div>'
 
+    def tasks(self, block: dict) -> str:
+        rows = []
+        for i in block.get('items') or []:
+            box = '☑' if i.get('by') else ('→' if i.get('moved') else '☐')
+            text = self.text({'html': i.get('html') or ''})
+            note = (f'<span class="tick">✓ {esc(i["by"])} · {esc(self.ctx.when(i.get("at")))}</span>' if i.get('by')
+                    else f'<span class="tick">moved on to the week of {esc(_dmy(i["moved"]))}</span>' if i.get('moved') else '')
+            rows.append(f'<li><span class="box">{box}</span> {text}{note}</li>')
+        title = f'<div class="block-title">{esc(block["title"])}</div>' if block.get('title') else ''
+        return f'<div class="steps tasks">{title}<ul>{"".join(rows)}</ul></div>'
+
     def table(self, block: dict) -> str:
         columns = block.get('columns') or []
         rows = block.get('rows') or []
@@ -309,6 +320,8 @@ class _Builder:
             return self.text(block)
         if kind == 'steps':
             return self.steps(block)
+        if kind == 'tasks':
+            return self.tasks(block)
         if kind == 'table':
             return self.table(block)
         if kind == 'section':
@@ -451,3 +464,8 @@ def _place_pages(data: bytes, builder: _Builder, where: Dict[str, int]) -> bytes
     out = io.BytesIO()
     writer.write(out)
     return out.getvalue()
+
+
+def _dmy(iso: str) -> str:
+    """A stored date (2026-11-16) as the lab writes it: 16-11-2026."""
+    return '-'.join(reversed(str(iso or '').split('-')))

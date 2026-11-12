@@ -147,6 +147,20 @@ CREATE TABLE IF NOT EXISTS booking_notes (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (note_id, booking_id)
 );
+
+-- Tasks moved on to a week whose to-do page is not made yet (app/todos.py): they
+-- go onto it when it is. week is that week's Monday (YYYY-MM-DD).
+CREATE TABLE IF NOT EXISTS todo_pending (
+    owner TEXT NOT NULL,
+    week TEXT NOT NULL,
+    html TEXT NOT NULL,
+    from_note TEXT NOT NULL,
+    from_item TEXT NOT NULL,
+    from_week TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (from_note, from_item)
+);
+CREATE INDEX IF NOT EXISTS idx_todo_pending_week ON todo_pending(owner, week);
 """
 
 
