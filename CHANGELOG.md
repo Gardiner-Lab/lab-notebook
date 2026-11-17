@@ -5,6 +5,15 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-11-17
+
+### Added
+- **A waste disposal box at the foot of a page.** Linking a chemical from Lab Stocks (with @, **Stock…** or in a
+  table) adds a line to it: the chemical and how and where to get rid of it, as Lab Stocks has it. Each chemical
+  is listed once, and the box can be edited. A protocol brings its box along when it is used on a page.
+- **Links in table cells.** @ in a text or fill-in cell links a plasmid, seed, stock, track or page, shown as a
+  link while the cell is not being changed; exports show its label.
+
 ## [0.26.1] - 2026-11-12
 
 ### Fixed
