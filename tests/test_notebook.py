@@ -765,3 +765,21 @@ def test_every_page_reaches_the_suite_and_its_other_tools():
             continue
         assert 'class="tt-home" href="{{ links.suite_home }}"' in html, f'{page.name}: home link is not the suite'
         assert 'trellis/modules.js' in html, f'{page.name}: the other tools are not linked'
+
+
+def test_a_pages_waste_disposal_box_is_kept_as_written(as_user):
+    """The box the page keeps at its foot for the chemicals linked on it (notebook.js App.noteDisposal)."""
+    ana = as_user('ana')
+    day = ana.post('/api/days', json={'date': '2026-11-17'}).get_json()['note']
+    box = {'type': 'section', 'title': 'Waste disposal', 'source': {'kind': 'disposal', 'id': '', 'version': None, 'name': ''},
+           'blocks': [{'type': 'text', 'html': '<p><a data-stock="GARD-C-0001">GARD-C-0001 Chloroform (CAS 67-66-3)</a>: '
+                                               'Halogenated organic waste, yellow can <script>x</script></p>'}]}
+    content = [{'type': 'text', 'html': '<p>Extracted with <a data-stock="GARD-C-0001">GARD-C-0001 Chloroform</a></p>'}, box]
+    saved = ana.put(f"/api/notes/{day['id']}", json={'content': content, 'base_version': day['version']}).get_json()['note']
+    kept = saved['content'][-1]
+    assert kept['type'] == 'section' and kept['source']['kind'] == 'disposal' and kept['title'] == 'Waste disposal'
+    html = kept['blocks'][0]['html']
+    assert 'data-stock="GARD-C-0001"' in html and 'yellow can' in html and '<script>' not in html
+    from app import content as content_mod
+    assert 'Halogenated organic waste' in content_mod.plain_text(saved['content'])
+    assert content_mod.IMPORTED_LABELS['disposal'].startswith('How and where')

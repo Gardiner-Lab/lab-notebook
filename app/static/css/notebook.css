@@ -514,3 +514,10 @@ textarea.step-text:focus { outline: 1px solid var(--border); border-radius: .3re
 /* A to-do list has no title row for the block's ↑ ↓ ✕ to sit in: make room above the first task,
    so they do not cover its own buttons. */
 .block-tasks:has(> .block-gutter) { padding-top: 2.1rem; }
+
+/* A table cell holding links put in with @: the links over the cell while it is not being changed. */
+.sheet td.cell-linkable { position: relative; }
+.sheet .cell.has-links { color: transparent; }
+.sheet .cell-view { position: absolute; inset: 0; padding: .3rem .4rem; overflow: hidden; white-space: nowrap;
+  text-overflow: ellipsis; cursor: text; }
+.sheet .cell-view a { color: var(--accent, #2563eb); text-decoration: underline; cursor: pointer; }

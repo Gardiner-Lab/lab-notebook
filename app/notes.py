@@ -1194,10 +1194,25 @@ def protocol_snapshot(person: Person, protocol_id: str) -> Dict[str, Any]:
                             for r in copy.get('rows') or []]
         return copy
 
-    blocks = [fresh(b) for b in json.loads(row['content'] or '[]') if b.get('type') != 'section']
-    return {'type': 'section', 'title': row['title'],
-            'source': {'kind': 'protocol', 'id': row['id'], 'version': row['revision'], 'name': row['title']},
-            'blocks': blocks}
+    content = json.loads(row['content'] or '[]')
+    blocks = [fresh(b) for b in content if b.get('type') != 'section']
+    out = {'type': 'section', 'title': row['title'],
+           'source': {'kind': 'protocol', 'id': row['id'], 'version': row['revision'], 'name': row['title']},
+           'blocks': blocks}
+    # The protocol's waste disposal box (the chemicals it links, and how to get rid of them) cannot sit
+    # inside the section: it goes along beside it, for the page to keep at its foot.
+    box = next((b for b in content if b.get('type') == 'section'
+                and (b.get('source') or {}).get('kind') == DISPOSAL), None)
+    if box:
+        out['disposal'] = {'id': content_mod.new_id(), 'type': 'section', 'title': box.get('title') or 'Waste disposal',
+                           'source': {'kind': DISPOSAL, 'id': '', 'version': None, 'name': ''},
+                           'blocks': [dict(b, id=content_mod.new_id()) for b in box.get('blocks') or []
+                                      if b.get('type') == 'text']}
+    return out
+
+
+# A page's waste disposal box: a section of this source kind (notebook.js App.noteDisposal).
+DISPOSAL = 'disposal'
 
 
 def use_protocol(person: Person, protocol_id: str, parent_id: Optional[str] = None) -> str:
@@ -1209,8 +1224,9 @@ def use_protocol(person: Person, protocol_id: str, parent_id: Optional[str] = No
     must be one they may add to.
     """
     section = protocol_snapshot(person, protocol_id)
+    disposal = section.pop('disposal', None)
     parent = parent_id or day(person)
-    return create(person, parent, section['title'], 'page', [section])
+    return create(person, parent, section['title'], 'page', [section] + ([disposal] if disposal else []))
 
 
 # --- sharing ---------------------------------------------------------------------

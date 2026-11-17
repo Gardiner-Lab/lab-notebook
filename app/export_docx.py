@@ -449,6 +449,7 @@ class _Writer:
                     continue
                 shown = computed[r][c]
                 text = raw if col.get('kind') == 'text' and not str(raw or '').startswith('=') else shown['display']
+                text = content.cell_text(text)   # @ links as their labels
                 run = p.add_run(str(text or ''))
                 run.font.size = self.Pt(9)
                 if shown.get('error'):

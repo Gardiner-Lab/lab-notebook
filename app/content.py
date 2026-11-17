@@ -49,6 +49,13 @@ _ATTACHMENT_ID = re.compile(r'^[0-9a-f]{12,48}$')
 # Lab Stocks' glycerol stocks, primers, chemicals, antibodies and plant material (by code),
 # and to the Genome Browser's tracks (by id).
 _LINK = re.compile(r'data-(note|plasmid|seed|stock|track)="([^"]{1,80})"')
+# A link in a table cell, put there with @: [label](stock:GL-C-0003), as notebook.js CELL_LINK writes it.
+CELL_LINK = re.compile(r'\[[^\]\n]{0,300}\]\((note|plasmid|seed|stock|track):([^)\s"]{1,80})\)')
+
+
+def cell_text(value: Any) -> str:
+    """A table cell as people read it: its links ([label](stock:GL-C-0003)) as their labels, for exports."""
+    return CELL_LINK.sub(lambda m: m.group(0)[1:m.group(0).rindex('](')], '' if value is None else str(value))
 
 
 # What a section put into a day by another tool is, by its source's kind: shown
@@ -63,6 +70,8 @@ IMPORTED_LABELS = {
     'moclo-plasmid': 'A plasmid from the MoClo Library Tool',
     'moclo-cassette': 'A cassette from the MoClo Library Tool',
     'moclo-part': 'A part from the MoClo Library Tool',
+    # Kept up by the page itself: how to get rid of the chemicals linked on it, from Lab Stocks.
+    'disposal': 'How and where to get rid of the chemicals on this page, from Lab Stocks',
 }
 
 
@@ -325,6 +334,11 @@ def links(blocks: List[dict]) -> List[Tuple[str, str]]:
             elif block.get('type') == 'tasks':
                 for item in block.get('items') or []:
                     found.update(_LINK.findall(item.get('html') or ''))
+            elif block.get('type') == 'table':
+                for row in block.get('rows') or []:
+                    for cell in row.get('cells') or []:
+                        if isinstance(cell, str):
+                            found.update(CELL_LINK.findall(cell))
             elif block.get('type') == 'section':
                 walk(block.get('blocks'))
                 if block.get('source', {}).get('kind') == 'protocol' and block['source'].get('id'):

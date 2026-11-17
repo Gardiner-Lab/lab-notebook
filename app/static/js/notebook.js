@@ -156,7 +156,11 @@ const IMPORTED = {
   'moclo-plasmid': ['plasmid', 'A plasmid from the MoClo Library Tool'],
   'moclo-cassette': ['cassette', 'A cassette from the MoClo Library Tool'],
   'moclo-part': ['part', 'A part from the MoClo Library Tool'],
+  // Not imported, but kept up by the page: how to get rid of the chemicals linked on it (App.noteDisposal).
+  disposal: ['hazard', 'How and where to get rid of the chemicals on this page, from Lab Stocks'],
 };
+/** The waste disposal box at the foot of a page that links chemicals. */
+const isDisposalBox = (b) => !!b && b.type === 'section' && b.source?.kind === 'disposal';
 const ICONS = { notebook: 'notebook', library: 'library', year: 'calendar', month: 'calendar', day: 'calendar', page: 'text', folder: 'folder', protocol: 'protocol', todo: 'steps' };   // glyphs
 const noteGlyph = (type) => glyph(ICONS[type] || 'text');
 const editorLink = (id) => `${NB.editor}/editor?open=${encodeURIComponent(id)}`;
@@ -165,6 +169,24 @@ const SEED_KINDS = { L: 'line', S: 'lot', P: 'plant' };
 // GL-G-0042 a glycerol stock, GL-O-0007 a primer, GL-C-0003 a chemical, GL-A-0005 an antibody, GL-M-0001 plant
 // material, in Lab Stocks.
 const STOCK_KINDS = { G: 'glycerol', O: 'primer', C: 'chemical', A: 'antibody', M: 'material' };
+// A link in a table cell, put there with @ (app/content.py CELL_LINK): [label](stock:GL-C-0003).
+const CELL_LINK = /\[([^\]\n]{0,300})\]\((note|plasmid|seed|stock|track):([^)\s"]{1,80})\)/g;
+const cellToken = (kind, id, label) => `[${String(label).replace(/[[\]\n]/g, ' ')}](${kind}:${id})`;
+/** A cell's text with its links as links, for showing it; null when it has none. */
+function cellLinks(text) {
+  const s = String(text ?? '');
+  const out = [];
+  let last = 0;
+  CELL_LINK.lastIndex = 0;
+  for (let m = CELL_LINK.exec(s); m; m = CELL_LINK.exec(s)) {
+    if (m.index > last) out.push(s.slice(last, m.index));
+    out.push(el('a', { [`data-${m[2]}`]: m[3], href: '#', title: 'Open it (click the cell around it to change the cell)' }, m[1]));
+    last = m.index + m[0].length;
+  }
+  if (!out.length) return null;
+  if (last < s.length) out.push(s.slice(last));
+  return out;
+}
 const stockLink = (code) => `${NB.stocks}/#${STOCK_KINDS[code.split('-').slice(-2, -1)[0]] || 'glycerol'}=${encodeURIComponent(code)}`;
 const seedLink = (code) => `${NB.seeds}/#${SEED_KINDS[code.split('-').slice(-2, -1)[0]] || 'line'}=${encodeURIComponent(code)}`;
 // A Genome Browser track, by its id: the browser opens its genome with it on.
@@ -1476,6 +1498,30 @@ const Blocks = {
 
   /** Ask which plasmid or note "@" means, and put a link to it in place of `range`. */
   async linkAt(area, range, sync) {
+    const chosen = await this.chooseLink();
+    if (!chosen) return;
+    const { kind, target, label } = chosen;
+    const link = el('a', { [`data-${kind}`]: kind === 'plasmid' || kind === 'track' || kind === 'note' ? target.id : target.code }, label);
+    range.deleteContents();
+    range.insertNode(link);
+    link.after(document.createTextNode(' '));
+    this.decorateLinks(area);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    const after = document.createRange();
+    after.setStartAfter(link.nextSibling);
+    sel.addRange(after);
+    area.focus();
+    sync();
+    // A chemical: how and where to get rid of it goes in the box at the foot of the page.
+    if (kind === 'stock') App.noteDisposal(target, true);
+  },
+
+  /**
+   * What "@" means: a plasmid, seed, stock, track or page, chosen in two steps. Gives {kind, target, label}
+   * (kind as in data-<kind> links), or null for "just type @".
+   */
+  async chooseLink() {
     const kind = await new Promise((resolve) => {
       let choice = null;
       modal({
@@ -1490,28 +1536,32 @@ const Blocks = {
         buttons: [{ label: 'Just type @', kind: 'secondary' }],
       });
     });
-    if (!kind) return;
+    if (!kind) return null;
     let target;
     try {
       target = kind === 'plasmid' ? await pickPlasmid() : kind === 'seed' ? await pickSeed()
         : kind === 'stock' ? await pickStock() : kind === 'track' ? await pickTrack()
           : await pickNote([], 'Link to a page or protocol');
-    } catch (err) { toast(err.message, 'error'); return; }
-    if (!target) return;
-    const link = el('a', kind === 'plasmid' ? { 'data-plasmid': target.id } : kind === 'seed' ? { 'data-seed': target.code }
-      : kind === 'stock' ? { 'data-stock': target.code } : kind === 'track' ? { 'data-track': target.id } : { 'data-note': target.id },
-    kind === 'plasmid' || kind === 'track' ? target.name : kind === 'seed' || kind === 'stock' ? target.label : target.title);
-    range.deleteContents();
-    range.insertNode(link);
-    link.after(document.createTextNode(' '));
-    this.decorateLinks(area);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    const after = document.createRange();
-    after.setStartAfter(link.nextSibling);
-    sel.addRange(after);
-    area.focus();
-    sync();
+    } catch (err) { toast(err.message, 'error'); return null; }
+    if (!target) return null;
+    return { kind, target,
+      label: kind === 'plasmid' || kind === 'track' ? target.name : kind === 'seed' || kind === 'stock' ? target.label : target.title };
+  },
+
+  /**
+   * "@" typed in a table cell: choose what it links to, and put [label](kind:id) in place of the @
+   * (at `pos`, just after it). A chemical also goes in the page's waste disposal box.
+   */
+  async linkCell(row, c, pos, input, changed) {
+    const chosen = await this.chooseLink();
+    if (!chosen) { input.focus(); return; }
+    const { kind, target, label } = chosen;
+    const token = cellToken(kind, kind === 'plasmid' || kind === 'track' || kind === 'note' ? target.id : target.code, label);
+    const value = String(row.cells[c] ?? '');
+    row.cells[c] = value[pos - 1] === '@' ? `${value.slice(0, pos - 1)}${token} ${value.slice(pos)}` : `${value} ${token}`;
+    if (document.activeElement === input) input.blur();
+    changed();
+    if (kind === 'stock') App.noteDisposal(target, true);
   },
 
   /* steps -------------------------------------------------------------------- */
@@ -1646,7 +1696,7 @@ const Blocks = {
   table(block, ctx) {
     const wrap = el('div', { class: 'table-block' });
     let design = !!block._design && ctx.editable;
-    const cells = [];             // {input, r, c}
+    const cells = [];             // {input, r, c, view}
 
     const update = () => {
       const computed = Sheet.compute(block);
@@ -1656,6 +1706,13 @@ const Blocks = {
         const raw = block.rows[cell.r].cells[cell.c] ?? '';
         const shown = computed[cell.r][cell.c];
         cell.input.value = (kind === 'text' && !String(raw).startsWith('=')) ? raw : shown.display;
+        // Links put in with @ show as links over the cell while it is not being changed.
+        const parts = cell.view ? cellLinks(raw) : null;
+        if (cell.view) {
+          if (parts) put(cell.view, ...parts);
+          cell.view.hidden = !parts;
+          cell.input.classList.toggle('has-links', !!parts);
+        }
         cell.input.classList.toggle('computed', !!shown.formula || kind === 'scaled');
         cell.input.classList.toggle('error', !!shown.error);
         cell.input.title = shown.error ? `Cannot work this out: ${shown.error}` : (shown.formula
@@ -1700,12 +1757,18 @@ const Blocks = {
             value && value.by ? `${value.by} · ${localTime(value.at)}` : '');
           return el('td', { class: 'cell-check' }, box, label);
         }
+        // Text and fill-in cells take links with @, as text does: a chemical in a protocol's table, say.
+        const linkable = col.kind === 'text' || col.kind === 'fill';
         const input = el('input', {
           type: 'text', class: `cell kind-${col.kind}`, readonly: !ctx.editable,
           placeholder: col.kind === 'fill' ? (App.note?.space === 'library' ? 'on the day' : 'fill in') : '',
-          onfocus: () => { input.value = row.cells[c] ?? ''; input.select(); },
+          onfocus: () => { input.value = row.cells[c] ?? ''; if (view) view.hidden = true; input.classList.remove('has-links'); input.select(); },
           onblur: () => update(),
-          oninput: () => { row.cells[c] = input.value; changed(); },
+          oninput: (e) => {
+            row.cells[c] = input.value;
+            changed();
+            if (linkable && ctx.editable && e.data === '@') this.linkCell(row, c, input.selectionStart, input, changed);
+          },
           // Cells copied from a spreadsheet fill the table from here, right and down, with rows and columns added as needed.
           onpaste: (e) => {
             if (!ctx.editable) return;
@@ -1721,8 +1784,12 @@ const Blocks = {
             if (e.key === 'Enter') { e.preventDefault(); cells.find((x) => x.r === r + 1 && x.c === c)?.input.focus(); }
           },
         });
-        cells.push({ input, r, c });
-        return el('td', {}, input);
+        const view = linkable ? el('div', { class: 'cell-view', hidden: true, onclick: (e) => {
+          if (e.target.closest('a')) { this.followLink(e); return; }
+          if (ctx.editable) input.focus();
+        } }) : null;
+        cells.push({ input, r, c, view });
+        return el('td', { class: linkable ? 'cell-linkable' : null }, input, view);
       }), ctx.editable ? el('td', { class: 'row-tools' }, el('button', {
         class: 'icon-btn faint', title: 'Remove this row',
         onclick: () => { block.rows.splice(r, 1); draw(); changed(); },
@@ -2269,13 +2336,73 @@ const App = {
     return el('section', { class: 'children-panel' }, head, grid);
   },
 
+  /**
+   * A chemical linked on the page: how and where to get rid of it, as Lab Stocks has it, in a box at the
+   * foot of the page (a section marked source.kind 'disposal'), a line per chemical, which people may edit.
+   * Each chemical is listed once. keepCaret: linked from inside a text block (@), so only the box is drawn
+   * again and the caret stays where it is.
+   */
+  noteDisposal(stock, keepCaret = false) {
+    if (!stock || stock.kind !== 'chemical') return;
+    const esc = (t) => String(t).replace(/[<>&"]/g, (ch) => `&#${ch.charCodeAt(0)};`);
+    const how = stock.disposal ? esc(stock.disposal)
+      : '<em>not recorded in Lab Stocks yet: ask your lab admin, or see section 13 of its safety data sheet</em>';
+    this.addDisposalLines([{ code: stock.code, html: `<p><a data-stock="${esc(stock.code)}">${esc(stock.label)}</a>: ${how}</p>` }], keepCaret);
+  },
+
+  /** A protocol put into the page brings its waste disposal box: its lines join the page's own. */
+  mergeDisposal(box) {
+    const lines = [];
+    for (const b of box?.blocks || []) {
+      const doc = new DOMParser().parseFromString(b.html || '', 'text/html');
+      for (const p of doc.body.querySelectorAll('p')) {
+        const code = p.querySelector('a[data-stock]')?.dataset.stock;
+        if (code) lines.push({ code, html: p.outerHTML });
+      }
+    }
+    this.addDisposalLines(lines);
+  },
+
+  /** Lines [{code, html}] into the box at the foot of the page, made when there is none; one per chemical. */
+  addDisposalLines(lines, keepCaret = false) {
+    const note = this.note;
+    if (!note || !lines.length || !this._blocks || !this._blocks.ctx.editable) return;
+    if (note.type === 'todo') return;       // a week's to-do list is no place for it
+    let box = note.content.find(isDisposalBox);
+    const fresh = !box;
+    if (fresh) {
+      box = { id: newId(), type: 'section', title: 'Waste disposal',
+        source: { kind: 'disposal', id: '', version: null, name: '' }, blocks: [] };
+    }
+    let text = box.blocks.find((b) => b.type === 'text');
+    if (!text) { text = { id: newId(), type: 'text', html: '' }; box.blocks.push(text); }
+    const added = lines.filter((l) => !(text.html || '').includes(`data-stock="${l.code}"`));
+    if (!added.length) return;
+    text.html = `${text.html || ''}${added.map((l) => l.html).join('')}`;
+    const { blocks, ctx } = this._blocks;
+    const index = fresh ? note.content.push(box) - 1 : note.content.indexOf(box);
+    const shown = blocks.querySelector(`[data-block="${box.id}"]`);
+    if (keepCaret) {
+      // Only the box: the rest of the page, and the caret in it, stay as they are.
+      const drawn = Blocks.wrap(box, index, note.content, blocks, ctx);
+      if (shown) shown.replaceWith(drawn); else blocks.append(drawn);
+    } else {
+      Blocks.renderList(note.content, blocks, ctx);
+    }
+    this.changed();
+    if (fresh) toast('Added a waste disposal box at the foot of the page', 'success', 3000);
+  },
+
   insertBar(note, blocks, ctx) {
     const add = (block) => {
-      note.content.push(block);
+      // Above the waste disposal box, which stays at the foot of the page.
+      const foot = note.content.findIndex(isDisposalBox);
+      if (foot >= 0) note.content.splice(foot, 0, block); else note.content.push(block);
       Blocks.renderList(note.content, blocks, ctx);
       this.changed();
-      blocks.lastElementChild?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      blocks.lastElementChild?.querySelector('.text-block, input')?.focus();
+      const added = blocks.querySelector(`[data-block="${block.id}"]`);
+      added?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      added?.querySelector('.text-block, input')?.focus();
     };
     return el('div', { class: 'insert-bar' },
       el('span', { class: 'hint' }, 'Add:'),
@@ -2292,7 +2419,14 @@ const App = {
       note.space === 'notebook' ? el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
         const protocol = await pickProtocol();
         if (!protocol) return;
-        try { add((await api('GET', `/protocols/${protocol.id}/snapshot`)).section); } catch (err) { toast(err.message, 'error'); }
+        try {
+          const { section } = await api('GET', `/protocols/${protocol.id}/snapshot`);
+          const disposal = section.disposal;
+          delete section.disposal;
+          add(section);
+          // The chemicals it uses, and how to get rid of them, join the page's waste disposal box.
+          if (disposal) this.mergeDisposal(disposal);
+        } catch (err) { toast(err.message, 'error'); }
       } }, glyph('protocol'), ' Protocol…') : null,
       el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
         try { const section = await pickMocloReaction(); if (section) add(section); } catch (err) { toast(err.message, 'error'); }
@@ -2332,12 +2466,14 @@ const App = {
         try { s = await pickStock(); } catch (err) { toast(err.message, 'error'); return; }
         if (!s) return;
         const html = `<a data-stock="${s.code}">${s.label.replace(/[<>&"]/g, (ch) => `&#${ch.charCodeAt(0)};`)}</a>`;
-        const last = note.content[note.content.length - 1];
+        const last = note.content.filter((b) => !isDisposalBox(b)).pop();
         if (last && last.type === 'text') {
           last.html = `${last.html || ''}${/<\/p>\s*$/.test(last.html || '') ? `<p>${html}</p>` : ` ${html}`}`;
           Blocks.renderList(note.content, blocks, ctx);
           this.changed();
         } else add({ id: newId(), type: 'text', html: `<p>${html}</p>` });
+        // A chemical: how and where to get rid of it goes in the box at the foot of the page.
+        this.noteDisposal(s);
       } }, glyph('stocks'), ' Stock…'),
       el('button', { class: 'btn btn-secondary btn-sm', title: 'Add a link to a plasmid, which opens it in the Sequence Editor', onclick: async () => {
         const p = await pickPlasmid();

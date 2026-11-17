@@ -271,6 +271,7 @@ class _Builder:
                         if isinstance(raw, dict) and raw.get('by') else '') + '</td>' if raw else '<td><span class="box">☐</span></td>')
                     continue
                 text = raw if col.get('kind') == 'text' and not str(raw or '').startswith('=') else shown['display']
+                text = content.cell_text(text)   # @ links as their labels
                 css = 'error' if shown.get('error') else ('num' if sheet._is_num(shown.get('value')) else '')
                 cells.append(f'<td class="{css}">{esc(str(text or ""))}</td>')
             body.append('<tr>' + ''.join(cells) + '</tr>')
