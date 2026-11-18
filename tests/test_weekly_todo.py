@@ -102,6 +102,43 @@ def test_a_task_moved_on_waits_for_next_weeks_list_and_can_come_back(as_user):
     assert ana.post(f"/api/notes/{todo['id']}/tasks/t1/back").status_code == 400
 
 
+def test_tasks_have_a_priority_and_the_list_is_grouped_by_it(as_user):
+    ana = as_user('ana')
+    todo = _save_tasks(ana, _make(ana, _day(ana, MONDAY)['id']), [
+        {'id': 'a', 'html': 'Tidy box 4', 'priority': 'low'},
+        {'id': 'b', 'html': 'Write up'},                                  # none given: normal
+        {'id': 'c', 'html': 'Transform', 'priority': 'high'},
+        {'id': 'd', 'html': 'Book confocal', 'priority': 'urgent!!'},     # not a level: normal
+        {'id': 'e', 'html': 'Order primers', 'priority': 'high'},
+        {'id': 'f', 'html': 'Genotype', 'priority': 'medium'}])
+    # High first, then medium, normal and low; within a level, in the order they were put.
+    assert [(t['id'], t['priority']) for t in _tasks(todo)] == [
+        ('c', 'high'), ('e', 'high'), ('f', 'medium'), ('b', 'normal'), ('d', 'normal'), ('a', 'low')]
+    # Reordered within a level, the order is kept.
+    todo = _save_tasks(ana, todo, [dict(t) for t in reversed(_tasks(todo))])
+    assert [t['id'] for t in _tasks(todo)] == ['e', 'c', 'f', 'd', 'b', 'a']
+
+
+def test_a_task_moved_on_keeps_its_priority(as_user):
+    ana = as_user('ana')
+    todo = _save_tasks(ana, _make(ana, _day(ana, MONDAY)['id']), [
+        {'id': 't1', 'html': 'Genotype', 'priority': 'high'}, {'id': 't2', 'html': 'Tidy', 'priority': 'low'},
+        {'id': 't3', 'html': 'Write up'}, {'id': 't4', 'html': 'Book', 'priority': 'medium'}])
+    # Waiting for next week's list: in order of priority when it is made.
+    for t in ('t3', 't2', 't4', 't1'):
+        ana.post(f"/api/notes/{todo['id']}/tasks/{t}/move")
+    later = _make(ana, _day(ana, MONDAY + timedelta(days=7))['id'])
+    assert [(t['from_item'], t['priority']) for t in _tasks(later)] == [
+        ('t1', 'high'), ('t4', 'medium'), ('t3', 'normal'), ('t2', 'low')]
+    # Onto a list already made: last of its level there, not at the end.
+    for t in ('t1', 't2'):
+        ana.post(f"/api/notes/{todo['id']}/tasks/{t}/back")
+    later = _save_tasks(ana, _get(ana, later['id']), _tasks(_get(ana, later['id'])) + [
+        {'id': 'n1', 'html': 'New high', 'priority': 'high'}, {'id': 'n2', 'html': 'New low', 'priority': 'low'}])
+    ana.post(f"/api/notes/{todo['id']}/tasks/t1/move")
+    assert [t.get('from_item') or t['id'] for t in _tasks(_get(ana, later['id']))] == ['n1', 't1', 't4', 't3', 'n2']
+
+
 def test_only_who_may_change_the_day_changes_the_list(as_user):
     ana, lead = as_user('ana'), as_user('lead')
     day = _day(ana, MONDAY)

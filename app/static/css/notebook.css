@@ -511,6 +511,27 @@ textarea.step-text:focus { outline: 1px solid var(--border); border-radius: .3re
 .task-actions { display: flex; gap: .25rem; flex: none; opacity: .55; }
 .task-list li.task:hover .task-actions, .task-actions:focus-within { opacity: 1; }
 .task-add { margin-top: .1rem; }
+/* Priority: a marker at each task's left (high, normal, low), the list grouped by it; a handle to put tasks in order. */
+.task-priority { flex: none; width: 4.4rem; margin-top: .1rem; padding: 0 .3rem; border: 1px solid transparent;
+    border-radius: .25rem; background: none; font: inherit; font-size: .72rem; font-weight: 700; line-height: 1.5;
+    text-transform: uppercase; letter-spacing: .03em; text-align: center; color: var(--muted); cursor: pointer; }
+span.task-priority { cursor: default; }
+.task-priority.priority-high { color: #b42318; border-color: #f0b4ae; background: #fdecea; }
+/* Traffic-light colours: high red, medium yellow, low green. */
+.task-priority.priority-medium { color: #854d0e; border-color: #facc15; background: #fef9c3; }
+.task-list li.task.priority-medium { box-shadow: inset 3px 0 0 #eab308; }
+.task-priority.priority-low { color: #166534; border-color: #86efac; background: #f0fdf4; }
+.task-list li.task.priority-low { box-shadow: inset 3px 0 0 #22c55e; }
+.task-priority.priority-normal { opacity: .45; font-size: 1rem; line-height: 1.1; }
+.task-list li.task:hover .task-priority.priority-normal, .task-priority:focus-visible { opacity: 1; }
+.task-list li.task.priority-high { box-shadow: inset 3px 0 0 #d92d20; }
+.task-handle { flex: none; width: 1.1rem; margin-top: .15rem; text-align: center; color: var(--muted); cursor: grab;
+    user-select: none; letter-spacing: -.15em; opacity: .35; }
+.task-list li.task:hover .task-handle { opacity: 1; }
+.task-handle:active { cursor: grabbing; }
+.task-list li.dragging { opacity: .4; }
+.task-list li.drop-before { box-shadow: 0 -2px 0 var(--accent, #2f6f4f); }
+.task-list li.drop-after { box-shadow: 0 2px 0 var(--accent, #2f6f4f); }
 /* A to-do list has no title row for the block's ↑ ↓ ✕ to sit in: make room above the first task,
    so they do not cover its own buttons. */
 .block-tasks:has(> .block-gutter) { padding-top: 2.1rem; }

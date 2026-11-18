@@ -10,6 +10,9 @@ plasmid, stock, seed lot, track or page, as text can.
 A task can be moved on to next week's list: it stays on this week's, marked as moved, and a copy
 goes onto next week's, or waits (``todo_pending``) until next week's list is made. It can be
 brought back while its copy is not ticked.
+
+Each task is high, medium, normal or low priority (app/content.py PRIORITIES); the list is kept grouped
+high first, in its person's order within each group. A task moved on keeps its priority.
 """
 
 import json
@@ -83,11 +86,13 @@ def _pending(conn, owner: str, week: date) -> List[dict]:
     rows = conn.execute('SELECT * FROM todo_pending WHERE owner = ? AND week = ? ORDER BY created_at, rowid',
                         (owner, week.isoformat())).fetchall()
     conn.execute('DELETE FROM todo_pending WHERE owner = ? AND week = ?', (owner, week.isoformat()))
-    return [_carried(r['html'], r['from_item'], r['from_week']) for r in rows]
+    return content_mod.sort_tasks([_carried(r['html'], r['from_item'], r['from_week'], r['priority']) for r in rows])
 
 
-def _carried(html: str, from_item: str, from_week: str) -> dict:
+def _carried(html: str, from_item: str, from_week: str, priority: Optional[str] = None) -> dict:
+    """A task moved on, as it lands on the next week's list: with its priority."""
     return {'id': content_mod.new_id(), 'html': html, 'by': None, 'at': None,
+            'priority': content_mod.task_priority(priority),
             'moved': None, 'from_item': from_item, 'from_week': from_week}
 
 
@@ -172,12 +177,16 @@ def move_on(person: Person, todo_id: str, item_id: str) -> Optional[str]:
         next_id = find(conn, row['owner'], following)
         if next_id:
             later = json.loads(notes._row(conn, next_id)['content'] or '[]')
-            _tasks_block(later)['items'].append(_carried(item['html'], item_id, week.isoformat()))
+            # Last of its priority there: a high task goes after next week's high ones, before the rest.
+            items = _tasks_block(later)['items']
+            items.append(_carried(item['html'], item_id, week.isoformat(), item.get('priority')))
+            content_mod.sort_tasks(items)
             _write(conn, person, next_id, later, 'edited')
         else:
-            conn.execute('INSERT OR REPLACE INTO todo_pending (owner, week, html, from_note, from_item, from_week) '
-                         'VALUES (?, ?, ?, ?, ?, ?)',
-                         (row['owner'], following.isoformat(), item['html'], todo_id, item_id, week.isoformat()))
+            conn.execute('INSERT OR REPLACE INTO todo_pending (owner, week, html, from_note, from_item, from_week, '
+                         'priority) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                         (row['owner'], following.isoformat(), item['html'], todo_id, item_id, week.isoformat(),
+                          content_mod.task_priority(item.get('priority'))))
     return next_id
 
 

@@ -169,6 +169,21 @@ def _task_marks(blocks: List[dict]) -> Dict[str, dict]:
 
 TASK_MARKS = ('moved', 'from_item', 'from_week')
 
+# A task's priority. A list is kept in this order, high first; within a level, in the order its
+# person put the tasks.
+PRIORITIES = ('high', 'medium', 'normal', 'low')
+
+
+def task_priority(value: Any) -> str:
+    """A priority as stored: one of PRIORITIES, 'normal' for anything else (and for older tasks)."""
+    return value if value in PRIORITIES else 'normal'
+
+
+def sort_tasks(items: List[dict]) -> List[dict]:
+    """The tasks grouped high, normal, low, each group in its own order (a stable sort), in place."""
+    items.sort(key=lambda item: PRIORITIES.index(task_priority(item.get('priority'))))
+    return items
+
 
 class _Cleaner:
     def __init__(self, previous: Optional[List[dict]], username: str):
@@ -212,7 +227,8 @@ class _Cleaner:
             return {'id': bid, 'type': 'steps', 'title': _text(block.get('title')), 'items': items}
         if kind == 'tasks':
             # A to-do list: each task a line of text that may link (@) a plasmid, stock, seed lot,
-            # track or page; ticked by whom and when, as steps are.
+            # track or page; ticked by whom and when, as steps are; high, normal or low priority,
+            # the list kept grouped by it.
             items = []
             for item in (block.get('items') or [])[:MAX_ITEMS]:
                 if not isinstance(item, dict):
@@ -222,8 +238,9 @@ class _Cleaner:
                 tick = self._tick((bid, iid, None), bool(item.get('done') or item.get('by')))
                 items.append({'id': iid, 'html': clean_html(item.get('html'))[:MAX_CELL * 4],
                               'by': tick['by'] if tick else None, 'at': tick['at'] if tick else None,
+                              'priority': task_priority(item.get('priority')),
                               **{k: marks.get(k) for k in TASK_MARKS}})
-            return {'id': bid, 'type': 'tasks', 'title': _text(block.get('title')), 'items': items}
+            return {'id': bid, 'type': 'tasks', 'title': _text(block.get('title')), 'items': sort_tasks(items)}
         if kind == 'table':
             return self.table(block, bid)
         if kind == 'gel':

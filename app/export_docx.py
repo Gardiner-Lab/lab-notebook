@@ -393,6 +393,8 @@ class _Writer:
             doc.add_paragraph().add_run(block['title']).bold = True
         for item in block.get('items') or []:
             box = '☑' if item.get('by') else ('→' if item.get('moved') else '☐')
+            if item.get('priority') in ('high', 'medium', 'low'):
+                box += f" [{item['priority'].capitalize()}]"
             marker = len(doc.paragraphs)
             self.text({'html': item.get('html') or ''})
             if len(doc.paragraphs) == marker:

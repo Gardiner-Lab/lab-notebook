@@ -81,6 +81,10 @@ blockquote { border-left: 2pt solid #d1d5db; margin-left: 0; padding-left: 3mm; 
 .steps li { margin: 0.6mm 0; }
 .box { font-family: "DejaVu Sans"; }
 .tick { color: #047857; font-size: 7.5pt; margin-left: 2mm; }
+.priority { font-family: inherit; font-size: 7pt; font-weight: bold; text-transform: uppercase; padding: 0 1mm; border-radius: 1mm; }
+.priority-high { color: #b91c1c; border: .3pt solid #b91c1c; }
+.priority-medium { color: #854d0e; border: .3pt solid #eab308; background: #fef9c3; }
+.priority-low { color: #166534; border: .3pt solid #22c55e; background: #f0fdf4; }
 .scale { font-size: 8.5pt; color: #374151; margin-bottom: 1mm; }
 table.sheet { border-collapse: collapse; width: 100%; font-size: 8.5pt; margin-bottom: 2mm; }
 table.sheet th, table.sheet td { border: 0.6pt solid #d1d5db; padding: 1mm 1.5mm; vertical-align: top; }
@@ -242,6 +246,9 @@ class _Builder:
         rows = []
         for i in block.get('items') or []:
             box = '☑' if i.get('by') else ('→' if i.get('moved') else '☐')
+            level = i.get('priority')
+            if level in ('high', 'medium', 'low'):
+                box += f' <span class="priority priority-{level}">{level.capitalize()}</span>'
             text = self.text({'html': i.get('html') or ''})
             note = (f'<span class="tick">✓ {esc(i["by"])} · {esc(self.ctx.when(i.get("at")))}</span>' if i.get('by')
                     else f'<span class="tick">moved on to the week of {esc(_dmy(i["moved"]))}</span>' if i.get('moved') else '')

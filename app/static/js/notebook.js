@@ -647,11 +647,28 @@ const Blocks = {
    * lot, track or page as in text; ticked by whom and when. Enter starts the next task, Backspace in
    * an empty one removes it. "→ Next week" moves a task on to next week's list; it stays here,
    * marked, and can be brought back while not done there.
+   *
+   * Each task is high, medium, normal or low priority (app/content.py PRIORITIES), changed with the marker
+   * at its left; the list is kept grouped high first. Within a level, tasks are put in order by
+   * dragging the handle or with Alt+↑ / Alt+↓; dragged or stepped into another level, a task takes
+   * that level.
    */
   tasks(block, ctx) {
     const list = el('ul', { class: 'task-list' });
     const wrap = el('div', { class: 'tasks' }, list);
     const dmy = (iso) => String(iso || '').split('-').reverse().join('-');
+    const RANK = { high: 0, medium: 1, normal: 2, low: 3 };
+    // Clicked, the marker goes up a level, from high on to low, and from low back to normal.
+    const NEXT_LEVEL = { normal: 'medium', medium: 'high', high: 'low', low: 'normal' };
+    const LEVEL_NAME = { high: 'High', medium: 'Medium', normal: 'Normal', low: 'Low' };
+    const level = (item) => (item && item.priority in RANK ? item.priority : 'normal');
+    // Grouped high, normal, low; each group in its own order, as the server keeps it.
+    const regroup = () => {
+      const sorted = block.items.map((item, n) => [item, n])
+        .sort((a, b) => RANK[level(a[0])] - RANK[level(b[0])] || a[1] - b[1]).map(([item]) => item);
+      block.items.splice(0, block.items.length, ...sorted);
+    };
+    regroup();
     const focusEnd = (area) => {
       if (!area) return;
       area.focus();
@@ -662,12 +679,32 @@ const Blocks = {
       s.removeAllRanges();
       s.addRange(r);
     };
-    const add = (at) => {
-      block.items.splice(at, 0, { id: newId(), html: '' });
+    const focusTask = (id) => focusEnd(list.children[block.items.findIndex((t) => t.id === id)]?.querySelector('.task-text'));
+    const changedOrder = (focusId) => {
+      regroup();
       draw();
       ctx.changed();
-      focusEnd(list.children[at]?.querySelector('.task-text'));
+      if (focusId) focusTask(focusId);
     };
+    // A new task: of the level asked, at the end of that level unless placed within it.
+    const add = (at, priority = 'normal') => {
+      const item = { id: newId(), html: '', priority };
+      block.items.splice(at, 0, item);
+      changedOrder(item.id);
+    };
+    // Alt+↑ / Alt+↓: one place up or down; at the edge of its level, into the next level instead.
+    const step = (i, dir) => {
+      const item = block.items[i];
+      const other = block.items[i + dir];
+      if (!other) return;
+      if (level(other) !== level(item)) item.priority = level(other);
+      else moveItem(block.items, i, dir < 0 ? i - 1 : i + 2);
+      changedOrder(item.id);
+    };
+    let dragging = null;
+    const clearMarks = () => list.querySelectorAll('.dragging, .drop-before, .drop-after')
+      .forEach((n) => n.classList.remove('dragging', 'drop-before', 'drop-after'));
+    const below = (e, li) => { const r = li.getBoundingClientRect(); return e.clientY > r.top + r.height / 2; };
     // Moving on and back are done by the notebook, on what is saved: save first, then show the list as it is.
     const act = async (item, how) => {
       const note = App.note;
@@ -719,7 +756,13 @@ const Blocks = {
           }
         });
         area.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); add(i + 1); return; }
+          // The next task is of this one's level, just below it.
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); add(i + 1, level(item)); return; }
+          if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+            e.preventDefault();
+            step(i, e.key === 'ArrowUp' ? -1 : 1);
+            return;
+          }
           if (e.key === 'Backspace' && !area.textContent.trim() && !area.querySelector('a, img') && block.items.length > 1) {
             e.preventDefault();
             block.items.splice(i, 1);
@@ -748,8 +791,59 @@ const Blocks = {
           draw();
           ctx.changed();
         } }, '✕'));
-      const li = el('li', { class: ['task', done ? 'done' : '', moved ? 'moved' : ''].filter(Boolean).join(' ') },
-        box, el('div', { class: 'task-body' }, area, marks), actions);
+      // Its priority: a marker that, clicked, goes Normal → Medium → High → Low → Normal.
+      const lvl = level(item);
+      const priority = editable
+        ? el('button', {
+          type: 'button', class: `task-priority priority-${lvl}`,
+          title: `${LEVEL_NAME[lvl]} priority: click for ${LEVEL_NAME[NEXT_LEVEL[lvl]].toLowerCase()}`,
+          'aria-label': `${LEVEL_NAME[lvl]} priority`,
+          onclick: () => { item.priority = NEXT_LEVEL[lvl]; changedOrder(); },
+        }, lvl === 'normal' ? '•' : LEVEL_NAME[lvl])
+        : (lvl === 'normal' ? null
+          : el('span', { class: `task-priority priority-${lvl}`, title: `${LEVEL_NAME[lvl]} priority` }, LEVEL_NAME[lvl]));
+      const handle = editable ? el('span', {
+        class: 'task-handle', draggable: 'true',
+        title: 'Drag to put this task in order (or Alt+↑ / Alt+↓ in it); dropped among another level\'s tasks, it takes that level',
+        onclick: (e) => e.stopPropagation(),
+        ondragstart: (e) => {
+          dragging = i;
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/x-task', String(i));
+          e.dataTransfer.setDragImage(li, 12, 12);
+          setTimeout(() => li.classList.add('dragging'), 0);
+        },
+        ondragend: () => { dragging = null; clearMarks(); },
+      }, '⋮⋮') : null;
+      const li = el('li', {
+        class: ['task', `priority-${lvl}`, done ? 'done' : '', moved ? 'moved' : ''].filter(Boolean).join(' '),
+        // Only a task of this list being dragged is taken, not a file or another list's task.
+        ondragover: (e) => {
+          if (dragging === null) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          const after = below(e, li);
+          clearMarks();
+          list.children[dragging]?.classList.add('dragging');
+          li.classList.add(after ? 'drop-after' : 'drop-before');
+        },
+        ondragleave: (e) => { if (!li.contains(e.relatedTarget)) li.classList.remove('drop-before', 'drop-after'); },
+        ondrop: (e) => {
+          if (dragging === null) return;
+          e.preventDefault();
+          const from = dragging;
+          const slot = i + (below(e, li) ? 1 : 0);
+          dragging = null;
+          clearMarks();
+          const moving = block.items[from];
+          if (!moving) return;
+          const levelBefore = level(moving);
+          // Dropped by a task of another level: it takes that level.
+          moving.priority = level(item);
+          if (!moveItem(block.items, from, slot) && levelBefore === level(moving)) return;
+          changedOrder();
+        },
+      }, handle, box, priority, el('div', { class: 'task-body' }, area, marks), actions);
       return li;
     }));
     draw();

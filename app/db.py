@@ -187,6 +187,12 @@ _ADDED_ATTACHMENT_COLUMNS = [
 ]
 
 
+# Columns added to todo_pending: a task moved on keeps its priority (app/content.py PRIORITIES).
+_ADDED_TODO_PENDING_COLUMNS = [
+    ('priority', "TEXT NOT NULL DEFAULT 'normal'"),
+]
+
+
 def set_path(path: str) -> None:
     global _path
     _path = path
@@ -261,7 +267,8 @@ def initialize(db_path: Optional[str] = None) -> None:
         # database made by 0.1.0.
         conn.execute('PRAGMA journal_mode = DELETE')
         conn.executescript(SCHEMA)
-        for table, added in (('notes', _ADDED_COLUMNS), ('attachments', _ADDED_ATTACHMENT_COLUMNS)):
+        for table, added in (('notes', _ADDED_COLUMNS), ('attachments', _ADDED_ATTACHMENT_COLUMNS),
+                             ('todo_pending', _ADDED_TODO_PENDING_COLUMNS)):
             columns = {r['name'] for r in conn.execute(f'PRAGMA table_info({table})')}
             for name, decl in added:
                 if name not in columns:
