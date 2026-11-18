@@ -5,6 +5,16 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-11-18
+
+### Added
+- **Priorities on the week's to-do list.** Each task is **High**, **Medium**, normal or **Low**: click the marker
+  at its left to change it (normal → medium → high → low → normal). The list keeps high tasks first, then medium,
+  normal and low, in traffic-light colours (high red, medium yellow, low green). Within a level, put tasks in order by dragging
+  the handle (⋮⋮) or with Alt+↑ / Alt+↓; a task dragged or stepped among another level's tasks takes that level.
+  Enter starts a task of the same level. A task moved on to next week keeps its priority and lands last of its
+  level there. PDF and Word exports mark high, medium and low tasks.
+
 ## [0.27.0] - 2026-11-17
 
 ### Added
