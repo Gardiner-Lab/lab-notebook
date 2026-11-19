@@ -10,8 +10,9 @@ and the project uses [semantic versioning](https://semver.org/).
 ### Changed
 - **Lab admins no longer read each other's notebooks.** Someone who is lab admin of any lab is now closed to
   the other lab admins as well as to lab leads, unless they share a page or their notebook; a lab admin still
-  reads the notebooks of their lab's members and lab leads. A lab admin who has left is open again to their
-  labs' leads and lab admins.
+  reads the notebooks of their lab's members and lab leads.
+- **A lab admin who has left** is open again only to the leads and lab admins of the lab they were lab admin
+  of, not of labs they were only a member of.
 
 ## [0.28.0] - 2026-11-18
 

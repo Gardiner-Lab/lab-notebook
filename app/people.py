@@ -89,8 +89,9 @@ class Person:
           other lab admins.
         - A member: only their own.
 
-        Someone who has left (archived) is open again to their labs' leads and lab admins, so the
-        work of a lab admin who goes stays reachable rather than only by a restore from backup.
+        A lab admin who has left (archived) is open again to the leads and lab admins of the labs
+        they were lab admin of, not of labs they were only a member or lab lead of, so their work
+        stays reachable by their own lab rather than only by a restore from backup.
         """
         if not username:
             return False
@@ -99,15 +100,22 @@ class Person:
         member = membership(username)
         if not member:
             return False
-        theirs = {m['lab'].casefold() for m in member.get('labs', []) if m.get('lab')}
-        their_rank = max((rank(m) for m in member.get('labs', [])), default=0)
+        theirs = {}
+        for m in member.get('labs', []):
+            if m.get('lab'):
+                key = m['lab'].casefold()
+                theirs[key] = max(theirs.get(key, 0), rank(m))
+        their_rank = max(theirs.values(), default=0)
         gone = username in archived()
         mine = self.labs or ([{'lab': self.lab, 'role': self.lab_role}] if self.lab else [])
         for lab in mine:
-            if not lab.get('lab') or lab['lab'].casefold() not in theirs:
+            if not lab.get('lab') or lab['lab'].casefold() not in theirs or rank(lab) < 1:
                 continue
-            # Lab leads and lab admins alike: not someone who is lab admin of any lab.
-            if rank(lab) >= 1 and (their_rank < 2 or gone):
+            # Lab leads and lab admins alike: not someone who is lab admin of any lab ...
+            if their_rank < 2:
+                return True
+            # ... unless they have left, and only in a lab they were lab admin of.
+            if gone and theirs[lab['lab'].casefold()] == 2:
                 return True
         return False
 

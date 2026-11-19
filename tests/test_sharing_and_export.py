@@ -588,6 +588,23 @@ def test_a_lab_admin_who_has_left_leaves_their_notebook_to_the_lab_leads(as_user
     assert [n['owner'] for n in _me(zoe)['others'] if n['owner'] == 'lead'] == ['lead']
 
 
+
+def test_a_lab_admin_who_has_left_stays_closed_to_labs_they_were_only_a_member_of(as_user, world):
+    """olead was lab admin of Other Lab and a member of the Gardiner Lab."""
+    conn = _two_leads(world)
+    conn.execute("INSERT INTO lab_members (username, lab_id, role, lab_admin, joined_at) "
+                 "VALUES ('olead', 1, 'member', 0, '7'), ('oz', 2, 'lab_lead', 0, '8')")
+    conn.executescript("CREATE TABLE archived (username TEXT PRIMARY KEY, archived_at TEXT, archived_by TEXT);"
+                       "INSERT INTO archived VALUES ('olead', '2026-11-05T10:00:00Z', 'boss');")
+    conn.commit()
+    olead = as_user('olead')
+    day = olead.post('/api/days', json={'date': '2026-10-16'}).get_json()['note']
+    # Other Lab, where they were lab admin: open to its lead.
+    assert as_user('oz').get(f"/api/notes/{day['id']}").status_code == 200
+    # The Gardiner Lab, where they were a member: still closed to its lab admin and leads.
+    assert as_user('lead').get(f"/api/notes/{day['id']}").status_code == 403
+    assert as_user('zoe').get(f"/api/notes/{day['id']}").status_code == 403
+
 def test_the_demo_sees_only_the_demos(as_user, world):
     """Other Lab as the suite's teaching demo: nothing a real lab shares reaches it."""
     import sqlite3
