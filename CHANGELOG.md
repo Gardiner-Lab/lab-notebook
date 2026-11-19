@@ -5,6 +5,15 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-11-19
+
+### Changed
+- **People are shown by their display names.** The name someone set on the suite's dashboard (or an
+  administrator or lab admin set for them) now shows wherever the notebook named them by username: a notebook's
+  title ("Ana Silva's notebook"), the list of the lab's notebooks, the signed-in name at the top, who saved or
+  ticked something, who it is shared with, bookings, attachments, protocols, search, and PDF and Word exports.
+  Someone without a display name is still shown by their username.
+
 ## [0.29.0] - 2026-11-19
 
 ### Changed

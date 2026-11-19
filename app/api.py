@@ -44,6 +44,8 @@ def me(person):
     # Each day they have a booking on gets its page, before the notebook is shown.
     notes.pages_for_bookings(person)
     return jsonify({'person': person.to_dict(),
+                    # How people are shown: username -> display name, for those who set one.
+                    'names': people.display_names(),
                     'notebook': notebook,
                     # A lab lead shares their notebook; anyone exports it.
                     'can_share_notebook': person.is_admin or person.is_lab_lead,

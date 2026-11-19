@@ -11,7 +11,7 @@ import os
 
 from flask import Flask, redirect, render_template, request
 
-APP_VERSION = '0.29.0'
+APP_VERSION = '0.30.0'
 
 
 class PrefixMiddleware:
@@ -59,7 +59,8 @@ def create_app() -> Flask:
         if person is None:
             login = os.environ.get('SUITE_LOGIN_URL', '/account/login')
             return redirect(f'{login}?next={request.script_root}/')
-        return render_template('notebook.html', version=APP_VERSION, person=person, links=links())
+        return render_template('notebook.html', version=APP_VERSION, person=person, links=links(),
+                               names=people.display_names())
 
     @app.route('/help')
     def help_page():

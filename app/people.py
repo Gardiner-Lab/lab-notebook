@@ -225,6 +225,22 @@ def archived() -> Dict[str, str]:
     return {r['username']: r['archived_at'] for r in _read(suite_path(), 'SELECT username, archived_at FROM archived')}
 
 
+def display_names() -> Dict[str, str]:
+    """
+    username -> the name they go by, set on the suite's dashboard (suite.db: display_names).
+    Only people who have one; a suite from before display names has none.
+    """
+    return {r['username']: r['name'] for r in _read(suite_path(), 'SELECT username, name FROM display_names')
+            if r['name']}
+
+
+def shown(username: Optional[str], names: Optional[Dict[str, str]] = None) -> Optional[str]:
+    """How a person is shown: their display name, or their username without one."""
+    if not username:
+        return username
+    return (display_names() if names is None else names).get(username) or username
+
+
 def colleagues(username: str) -> List[str]:
     """Everyone in a lab of this person's chair group(s) (their own labs included), but them and those who left, by name."""
     member = membership(username) or {}

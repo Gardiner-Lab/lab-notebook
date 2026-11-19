@@ -118,6 +118,11 @@ function dayMonthYear(iso) {
   return `${d}-${m}-${y}`;
 }
 
+/** A person as they are shown: the name they set on the suite's dashboard, or their username. */
+function who(username) {
+  return (username && NB.names && NB.names[username]) || username;
+}
+
 /** A time the server stored (UTC "YYYY-MM-DD HH:MM:SS"), in local time. */
 function localTime(stamp) {
   if (!stamp) return '';
@@ -255,14 +260,14 @@ const pickProtocolTarget = () => picker({
     ? [noteGlyph('day'), ' ', el('b', { text: n.title }), el('span', { class: 'hint' }, " · a page under today's day")]
     : [noteGlyph(n.type), ' ', el('b', { text: n.title }),
       n.where ? el('span', { class: 'hint' }, ` · ${n.where}`) : null,
-      n.owner && n.owner !== NB.person.username ? el('span', { class: 'hint' }, ` · ${n.owner}`) : null]),
+      n.owner && n.owner !== NB.person.username ? el('span', { class: 'hint' }, ` · ${who(n.owner)}`) : null]),
 });
 
 const pickPlasmid = () => picker({
   title: 'Link a plasmid', placeholder: 'Search the plasmid library',
   search: async (q) => (await api('GET', `/plasmids?q=${encodeURIComponent(q)}`)).plasmids,
   describe: (p) => [el('b', { text: p.name }), el('span', { class: 'hint' },
-    ` · ${p.length.toLocaleString()} bp${p.circular ? ', circular' : ''}${p.owner ? ` · ${p.owner}` : ''}`
+    ` · ${p.length.toLocaleString()} bp${p.circular ? ', circular' : ''}${p.owner ? ` · ${who(p.owner)}` : ''}`
     + `${p.confirmed ? ' · ✓ sequenced' : ''}`)],
 });
 
@@ -270,7 +275,7 @@ const pickNote = (types, title = 'Choose a note') => picker({
   title, placeholder: 'Search by title',
   search: async (q) => (await api('GET', `/search?q=${encodeURIComponent(q)}&types=${(types || []).join(',')}`)).notes,
   describe: (n) => [noteGlyph(n.type), ' ', el('b', { text: n.title }),
-    n.owner && n.owner !== NB.person.username ? el('span', { class: 'hint' }, ` · ${n.owner}`) : null],
+    n.owner && n.owner !== NB.person.username ? el('span', { class: 'hint' }, ` · ${who(n.owner)}`) : null],
 });
 
 /** Choose a protocol: your favourites first, then the rest of the library. */
@@ -281,7 +286,7 @@ const pickProtocol = () => picker({
     return [...all.filter((p) => p.favorite), ...all.filter((p) => !p.favorite)];
   },
   describe: (p) => [p.favorite ? '★ ' : [glyph('protocol'), ' '], el('b', { text: p.title }),
-    el('span', { class: 'hint' }, `${p.folder ? ` · ${p.folder}` : ''} · by ${p.created_by || 'MoClo'}`)],
+    el('span', { class: 'hint' }, `${p.folder ? ` · ${p.folder}` : ''} · by ${who(p.created_by) || 'MoClo'}`)],
 });
 
 /** Choose a line, seed lot or plant from the seed bank (the lab's own; other labs' are not found). */
@@ -477,7 +482,7 @@ const Search = {
         class: 'search-hit', tabindex: '0', onclick: () => App.open(n.id),
         onkeydown: (e) => { if (e.key === 'Enter') App.open(n.id); },
       }, el('div', { class: 'search-title' }, noteGlyph(n.type), ' ', mark(n.title)),
-      el('div', { class: 'hint' }, [n.space === 'library' ? 'Protocol library' : (n.owner !== NB.person.username ? `${n.owner}'s notebook` : ''),
+      el('div', { class: 'hint' }, [n.space === 'library' ? 'Protocol library' : (n.owner !== NB.person.username ? `${who(n.owner)}'s notebook` : ''),
         n.where].filter(Boolean).join(' › ')),
       n.snippet ? el('div', { class: 'search-snippet' }, mark(n.snippet)) : null)))
         : el('p', { class: 'hint', style: 'padding:.4rem' }, q.startsWith('#') ? 'No notes with that label.' : 'Nothing found. Try fewer words.'));
@@ -720,14 +725,14 @@ const Blocks = {
       const moved = !!item.moved;
       const editable = ctx.editable && !moved;
       const tick = el('span', { class: 'tick', 'data-tick': `${block.id}|${item.id}` },
-        done && item.by ? `✓ ${item.by} · ${localTime(item.at)}` : '');
+        done && item.by ? `✓ ${who(item.by)} · ${localTime(item.at)}` : '');
       const box = el('input', {
         type: 'checkbox', checked: done, disabled: !editable, title: moved ? 'Moved on to next week' : '',
         onchange: () => {
           item.done = box.checked;
           if (!box.checked) { item.by = null; item.at = null; }
           li.classList.toggle('done', box.checked);
-          tick.textContent = box.checked ? (item.by ? `✓ ${item.by} · ${localTime(item.at)}` : '✓ saving…') : '';
+          tick.textContent = box.checked ? (item.by ? `✓ ${who(item.by)} · ${localTime(item.at)}` : '✓ saving…') : '';
           // A task done does not move on: its "→ Next week" goes, and comes back when unticked.
           if (moveBtn) moveBtn.hidden = box.checked;
           ctx.changed();
@@ -1694,7 +1699,7 @@ const Blocks = {
           item.done = box.checked;
           if (!box.checked) { item.by = null; item.at = null; }
           li.classList.toggle('done', box.checked);
-          tick.textContent = box.checked ? (item.by ? `✓ ${item.by} · ${localTime(item.at)}` : '✓ saving…') : '';
+          tick.textContent = box.checked ? (item.by ? `✓ ${who(item.by)} · ${localTime(item.at)}` : '✓ saving…') : '';
           ctx.changed();
         },
       });
@@ -1722,7 +1727,7 @@ const Blocks = {
         },
         ondragend: () => { dragging = null; clearMarks(); },
       }, '⋮⋮') : null;
-      const tick = el('span', { class: 'tick', 'data-tick': `${block.id}|${item.id}` }, done && item.by ? `✓ ${item.by} · ${localTime(item.at)}` : '');
+      const tick = el('span', { class: 'tick', 'data-tick': `${block.id}|${item.id}` }, done && item.by ? `✓ ${who(item.by)} · ${localTime(item.at)}` : '');
       const li = el('li', { class: done ? 'done' : '',
         // Only a step of this list being dragged is taken, not a file or another list's step.
         ondragover: (e) => {
@@ -1843,12 +1848,12 @@ const Blocks = {
             type: 'checkbox', checked: !!value, disabled: !ctx.editable,
             onchange: () => {
               row.cells[c] = box.checked ? (value && value.by ? value : { done: true }) : null;
-              label.textContent = box.checked ? (row.cells[c].by ? `${row.cells[c].by} · ${localTime(row.cells[c].at)}` : 'saving…') : '';
+              label.textContent = box.checked ? (row.cells[c].by ? `${who(row.cells[c].by)} · ${localTime(row.cells[c].at)}` : 'saving…') : '';
               changed();
             },
           });
           const label = el('span', { class: 'tick', 'data-tick': `${block.id}|${row.id}|${c}` },
-            value && value.by ? `${value.by} · ${localTime(value.at)}` : '');
+            value && value.by ? `${who(value.by)} · ${localTime(value.at)}` : '');
           return el('td', { class: 'cell-check' }, box, label);
         }
         // Text and fill-in cells take links with @, as text does: a chemical in a protocol's table, say.
@@ -2048,7 +2053,7 @@ const Shares = {
         const draw = () => put(list, data.shares.length
           ? el('table', { class: 'library-table share-table' }, el('tbody', {}, data.shares.map((s) => el('tr', {},
             el('td', {}, glyph(s.target_type === 'lab' ? 'lab' : 'person'), ' ', el('b', { text: s.label })),
-            el('td', { class: 'hint' }, `by ${s.created_by || '—'} · ${localTime(s.created_at)}`),
+            el('td', { class: 'hint' }, `by ${who(s.created_by) || '—'} · ${localTime(s.created_at)}`),
             el('td', { class: 'nowrap' }, el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
               try { data = await api('DELETE', `/shares/${s.id}`); draw(); onChange?.(); toast(`No longer shared with ${s.label}`, 'success'); } catch (err) { toast(err.message, 'error'); }
             } }, 'Retract'))))))
@@ -2056,7 +2061,7 @@ const Shares = {
             : page ? 'Not shared: only you (and your lab\'s lead) see it.' : 'Not shared: only its own lab sees it.'));
         const options = [
           ...(data.labs || []).map((lab) => ({ value: `lab:${lab.id}`, label: `${lab.name} (the whole lab)` })),
-          ...(data.people || []).map((u) => ({ value: `person:${u}`, label: u })),
+          ...(data.people || []).map((u) => ({ value: `person:${u}`, label: who(u) })),
         ];
         const select = el('select', { class: 'share-select' }, el('option', { value: '' }, notebook || page ? 'Choose a lab or a person…' : 'Choose a lab…'),
           options.map((o) => el('option', { value: o.value }, o.label)));
@@ -2098,6 +2103,7 @@ const App = {
   async init() {
     try {
       this.me = await api('GET', '/me');
+      NB.names = this.me.names || {};
     } catch (err) {
       put(document.getElementById('main'), el('div', { class: 'empty-state' }, err.message));
       return;
@@ -2200,17 +2206,17 @@ const App = {
 
   async reloadTrees() {
     // What others share may have changed since the page was opened.
-    try { this.me = await api('GET', '/me'); } catch { /* keep what we had */ }
+    try { this.me = await api('GET', '/me'); NB.names = this.me.names || {}; } catch { /* keep what we had */ }
     await Tree.mount(document.getElementById('treeMine'), this.me.notebook, { editable: true });
     // A notebook's own buttons: export it whole, and share it (its lab's lead, or an admin).
     const actions = (nb) => [
-      el('button', { class: 'tree-act', title: `Export ${nb.owner}'s notebook`, onclick: (e) => {
+      el('button', { class: 'tree-act', title: `Export ${who(nb.owner)}'s notebook`, onclick: (e) => {
         e.stopPropagation();
-        Exports.open({ id: nb.id, title: `${nb.owner}'s notebook`, kind: 'notebook' });
+        Exports.open({ id: nb.id, title: `${who(nb.owner)}'s notebook`, kind: 'notebook' });
       } }, '⤓'),
-      nb.can_share ? el('button', { class: 'tree-act', title: `Share ${nb.owner}'s notebook with a lab or a person`, onclick: (e) => {
+      nb.can_share ? el('button', { class: 'tree-act', title: `Share ${who(nb.owner)}'s notebook with a lab or a person`, onclick: (e) => {
         e.stopPropagation();
-        Shares.open({ id: nb.id, title: `${nb.owner}'s notebook`, kind: 'notebook' });
+        Shares.open({ id: nb.id, title: `${who(nb.owner)}'s notebook`, kind: 'notebook' });
       } }, glyph('people')) : null,
     ].filter(Boolean);
     const groups = [['othersSection', 'treeOthers', (this.me.others || []).filter((nb) => !nb.shared)],
@@ -2224,14 +2230,14 @@ const App = {
       for (const nb of list) {
         const holder = el('div');
         box.append(holder);
-        await Tree.mount(holder, nb.id, { label: nb.archived ? `${nb.owner} (left)` : nb.owner, actions: actions(nb) });
+        await Tree.mount(holder, nb.id, { label: nb.archived ? `${who(nb.owner)} (left)` : who(nb.owner), actions: actions(nb) });
       }
     }
     // Pages shared to work on together: opened, changed and added to right here.
     if (pages.length) {
       document.getElementById('treeShared').append(el('ul', { class: 'tree-list' }, pages.map((p) => {
         const node = Tree.node(p, false, true);
-        node.querySelector('.tree-title').after(el('span', { class: 'tree-owner hint' }, ` · ${p.owner}`));
+        node.querySelector('.tree-title').after(el('span', { class: 'tree-owner hint' }, ` · ${who(p.owner)}`));
         return node;
       })));
     }
@@ -2296,7 +2302,7 @@ const App = {
         const scroll = window.scrollY;
         this.show(now);
         window.scrollTo(0, scroll);
-        if (now.updated_by && now.updated_by !== NB.person.username) toast(`Updated by ${now.updated_by}`, 'info', 2500);
+        if (now.updated_by && now.updated_by !== NB.person.username) toast(`Updated by ${who(now.updated_by)}`, 'info', 2500);
       } catch { /* gone, or offline for a moment: the next look will tell */ }
     }, 20000);
   },
@@ -2344,16 +2350,16 @@ const App = {
     const owner = note.space === 'notebook' && note.owner !== NB.person.username;
     const meta = el('div', { class: 'note-meta' },
       el('span', { class: `badge badge-${note.type}` }, noteGlyph(note.type), ` ${note.type}`),
-      owner ? el('span', { class: 'badge badge-owner' }, `${note.owner}'s notebook`) : null,
+      owner ? el('span', { class: 'badge badge-owner' }, `${who(note.owner)}'s notebook`) : null,
       !editable ? el('span', { class: 'badge badge-readonly' }, 'read only') : null,
       ...(note.shared_in || []).map((r) => el('span', {
         class: 'badge badge-shared',
         title: r.id === note.id ? 'Shared to work on together' : `Part of “${r.title}”, shared to work on together`,
       }, note.owner === NB.person.username
         ? [glyph('people'), ` shared with ${r.with.join(', ')}${r.id === note.id ? '' : ` (in ${r.title})`}`]
-        : [glyph('people'), ` shared by ${note.owner}${r.id === note.id ? '' : ` (in ${r.title})`}`])),
+        : [glyph('people'), ` shared by ${who(note.owner)}${r.id === note.id ? '' : ` (in ${r.title})`}`])),
       el('span', { class: 'hint' }, note.updated_by || note.created_by
-        ? `Last saved by ${note.updated_by || note.created_by} · ${localTime(note.updated_at)}`
+        ? `Last saved by ${who(note.updated_by || note.created_by)} · ${localTime(note.updated_at)}`
         : `Supplied with the Lab Notebook · ${localTime(note.updated_at)}`),
       el('span', { class: 'save-state', id: 'saveState' }),
       el('span', { class: 'note-actions' },
@@ -2424,7 +2430,7 @@ const App = {
       c.preview ? el('p', { class: 'child-text', text: c.preview }) : null,
       el('div', { class: 'child-meta hint' }, [
         c.child_count ? `${c.child_count} note${c.child_count === 1 ? '' : 's'} under it` : '',
-        c.updated_at ? `${c.updated_by ? `${c.updated_by} · ` : ''}${localTime(c.updated_at).slice(0, 10)}` : '',
+        c.updated_at ? `${c.updated_by ? `${who(c.updated_by)} · ` : ''}${localTime(c.updated_at).slice(0, 10)}` : '',
       ].filter(Boolean).join(' · ')))) : el('p', { class: 'hint' }, 'Nothing you can open is under it.'));
     }).catch((err) => put(grid, el('p', { class: 'hint' }, err.message)));
     return el('section', { class: 'children-panel' }, head, grid);
@@ -2792,7 +2798,7 @@ const App = {
           el('a', { href: a.view ? viewUrl(a.id) : attachmentUrl(a.id), target: '_blank', rel: 'noopener', text: a.filename,
             title: Viewer.shows(a) ? 'Open it here (Ctrl-click: in a new tab)' : 'Download, to open in its program',
             onclick: (e) => { if (plainClick(e) && Viewer.open(a.id)) e.preventDefault(); } }),
-          el('div', { class: 'hint' }, `${sizeLabel(a.size)} · ${a.created_by || '—'} · ${localTime(a.created_at)}`)),
+          el('div', { class: 'hint' }, `${sizeLabel(a.size)} · ${who(a.created_by) || '—'} · ${localTime(a.created_at)}`)),
         el('span', { class: 'attachment-actions' },
           el('a', { class: 'btn btn-secondary btn-sm', href: attachmentUrl(a.id, true), title: 'Download' }, '⤓'),
           note.can_edit && a.image ? el('button', { class: 'btn btn-secondary btn-sm', title: 'Draw and write on it (the photo is kept as it is)',
@@ -2900,8 +2906,8 @@ const App = {
           el('div', {}, el('b', {}, span(b)), ' · ', el('a', { href: open(b), target: '_blank', rel: 'noopener' }, b.resource.name),
             b.resource.location ? el('span', { class: 'hint' }, ` (${b.resource.location})`) : null,
             b.title ? ` · ${b.title}` : null),
-          others(b).length ? el('div', { class: 'hint' }, b.role === 'tagged' ? `Booked by ${b.booked_by}${b.people.length > 1 ? `, with ${others(b).filter((p) => p !== b.booked_by).join(', ')}` : ''}`
-            : `With ${others(b).join(', ')}`) : null,
+          others(b).length ? el('div', { class: 'hint' }, b.role === 'tagged' ? `Booked by ${who(b.booked_by)}${b.people.length > 1 ? `, with ${others(b).filter((p) => p !== b.booked_by).map(who).join(', ')}` : ''}`
+            : `With ${others(b).map(who).join(', ')}`) : null,
           notes));
     };
     const panel = el('details', { class: 'bookings-panel', open: !store.get('hideBookings', false),
@@ -2920,14 +2926,14 @@ const App = {
     if (note.placements.length + (note.other_places || 0) > 1) {
       parts.push(el('div', {}, el('b', {}, 'In: '), note.placements.map((p, i) => [i ? ', ' : '',
         el('a', { href: `#note=${p.parent_id}`, onclick: (e) => { e.preventDefault(); this.open(p.parent_id); } },
-          p.parent_owner && p.parent_owner !== note.owner ? `${p.parent_title} (${p.parent_owner}'s notebook)` : p.parent_title)]),
+          p.parent_owner && p.parent_owner !== note.owner ? `${p.parent_title} (${who(p.parent_owner)}'s notebook)` : p.parent_title)]),
       note.other_places ? el('span', { class: 'hint' },
         `${note.placements.length ? ', and ' : ''}${note.other_places} place${note.other_places > 1 ? 's' : ''} in someone else's notebook`) : null));
     }
     if (note.backlinks.length) {
       parts.push(el('div', {}, el('b', {}, note.type === 'protocol' ? 'Used on: ' : 'Linked from: '),
         note.backlinks.map((b, i) => [i ? ', ' : '', el('a', { href: `#note=${b.id}`,
-          onclick: (e) => { e.preventDefault(); this.open(b.id); } }, b.owner && b.owner !== NB.person.username ? `${b.title} (${b.owner})` : b.title)])));
+          onclick: (e) => { e.preventDefault(); this.open(b.id); } }, b.owner && b.owner !== NB.person.username ? `${b.title} (${who(b.owner)})` : b.title)])));
     }
     return parts.length ? el('footer', { class: 'links-panel' }, parts) : null;
   },
@@ -3079,8 +3085,8 @@ const App = {
             },
           }, p.favorite ? '★' : '☆')),
           el('td', {}, el('a', { href: `#note=${p.id}`, class: 'library-title', onclick: (e) => { e.preventDefault(); this.open(p.id); } }, p.title),
-            el('div', { class: 'hint' }, `by ${p.created_by || 'the MoClo Library Tool'}`,
-              p.updated_by && p.updated_by !== p.created_by ? ` · changed by ${p.updated_by}` : '', ` · ${localTime(p.updated_at).slice(0, 10)}`,
+            el('div', { class: 'hint' }, `by ${who(p.created_by) || 'the MoClo Library Tool'}`,
+              p.updated_by && p.updated_by !== p.created_by ? ` · changed by ${who(p.updated_by)}` : '', ` · ${localTime(p.updated_at).slice(0, 10)}`,
               p.shared && p.lab ? el('span', { class: 'badge badge-shared', title: 'Shared with your lab by another lab' }, ` shared by ${p.lab}`) : null,
               !p.shared && p.shares ? el('span', { class: 'badge badge-shared', title: 'Shared with other labs' }, ` shared with ${p.shares} lab${p.shares > 1 ? 's' : ''}`) : null,
               !p.lab && !p.shared ? el('span', { class: 'hint' }, ' · every lab') : null)),
@@ -3289,7 +3295,7 @@ const App = {
     apply(this.note.content);
     for (const [key, s] of stamps) {
       for (const label of document.querySelectorAll(`[data-tick="${CSS.escape(key)}"]`)) {
-        label.textContent = key.split('|').length === 2 ? `✓ ${s.by} · ${localTime(s.at)}` : `${s.by} · ${localTime(s.at)}`;
+        label.textContent = key.split('|').length === 2 ? `✓ ${who(s.by)} · ${localTime(s.at)}` : `${who(s.by)} · ${localTime(s.at)}`;
       }
     }
   },

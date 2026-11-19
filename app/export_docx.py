@@ -383,7 +383,7 @@ class _Writer:
             p.paragraph_format.left_indent = self.Inches(0.25)
             p.add_run(f'{"☑" if item.get("by") else "☐"} {n}. {item.get("text") or ""}')
             if item.get('by'):
-                run = p.add_run(f'   ✓ {item["by"]} · {self.ctx.when(item.get("at"))}')
+                run = p.add_run(f'   ✓ {self.ctx.who(item["by"])} · {self.ctx.when(item.get("at"))}')
                 run.font.size = self.Pt(8)
                 run.font.color.rgb = self.RGBColor(*GREEN)
 
@@ -404,7 +404,7 @@ class _Writer:
             p.runs[0].text = f'{box} {p.runs[0].text}' if p.runs else ''
             if not p.runs:
                 p.add_run(box)
-            note = (f'   ✓ {item["by"]} · {self.ctx.when(item.get("at"))}' if item.get('by')
+            note = (f'   ✓ {self.ctx.who(item["by"])} · {self.ctx.when(item.get("at"))}' if item.get('by')
                     else f'   moved on to the week of {_dmy(item["moved"])}' if item.get('moved') else '')
             if note:
                 run = p.add_run(note)
@@ -445,7 +445,7 @@ class _Writer:
                 if col.get('kind') == 'check':
                     p.add_run('☑' if raw else '☐')
                     if isinstance(raw, dict) and raw.get('by'):
-                        run = p.add_run(f' {raw["by"]} · {self.ctx.when(raw.get("at"))}')
+                        run = p.add_run(f' {self.ctx.who(raw["by"])} · {self.ctx.when(raw.get("at"))}')
                         run.font.size = self.Pt(7.5)
                         run.font.color.rgb = self.RGBColor(*GREEN)
                     continue

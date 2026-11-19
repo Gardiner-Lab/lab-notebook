@@ -32,6 +32,7 @@ from flask import current_app
 
 from app import bookings as bookings_mod
 from app import dates, notes
+from app import people as people_mod
 from app.db import connect
 from app.people import Person
 
@@ -88,6 +89,12 @@ class Context:
     entries: List[Entry]
     included: set = field(default_factory=set)
     stamp: str = ''
+    # username -> display name, for those who set one on the suite's dashboard.
+    names: dict = field(default_factory=dict)
+
+    def who(self, username: Optional[str]) -> str:
+        """A person as they are shown: their display name, or their username."""
+        return people_mod.shown(username, self.names) or ''
 
     def when(self, stamp: Optional[str]) -> str:
         """A stored UTC time, in the exporter's time zone."""
@@ -150,7 +157,7 @@ def load(person: Person, att_id: str) -> Optional[dict]:
             'data': bytes(row['data'])}
 
 
-def _bookings_block(conn, row) -> Optional[dict]:
+def _bookings_block(conn, row, names: Optional[dict] = None) -> Optional[dict]:
     """A day's bookings (app/bookings.py), as a text block to print at the top of the day."""
     if row['type'] != 'day' or not row['owner']:
         return None
@@ -164,7 +171,7 @@ def _bookings_block(conn, row) -> Optional[dict]:
     lines = []
     for b in day['items']:
         r = b['resource']
-        others = [p for p in [b['booked_by'], *b['people']] if p != row['owner']]
+        others = [people_mod.shown(p, names) for p in [b['booked_by'], *b['people']] if p != row['owner']]
         line = (f"<b>{esc(bookings_mod.local_span(b))}</b> · {esc(r['name'])}"
                 + (f" ({esc(r['location'])})" if r['location'] else '')
                 + (f" · {esc(b['title'])}" if b['title'] else '')
@@ -180,6 +187,7 @@ def collect(person: Person, root_id: str, children: bool = True, progress=None) 
         root = notes._row(conn, root_id)
     if not notes.can_view(person, root):
         raise notes.Forbidden('This notebook is not yours to open')
+    shown = people_mod.display_names()
     entries: List[Entry] = []
     printed: Dict[str, str] = {}
     container = root['type'] in ('notebook', 'library')
@@ -196,11 +204,12 @@ def collect(person: Person, root_id: str, children: bool = True, progress=None) 
                 (row['id'],))
                 if a['name'] not in ('dateNote', 'monthNote', 'yearNote', 'notebookRoot', 'protocolLibrary', 'seed')]
             files = _attachments_of(conn, row['id'])
-            day_bookings = _bookings_block(conn, full) if full['id'] not in printed else None
+            day_bookings = _bookings_block(conn, full, shown) if full['id'] not in printed else None
         entries.append(Entry(
-            id=full['id'], title=full['title'], type=full['type'], space=full['space'], owner=full['owner'],
+            id=full['id'], title=notes.title_of(full, shown), type=full['type'], space=full['space'], owner=full['owner'],
             depth=depth, where=' › '.join(p['title'] for p in path[:-1]),
-            created_by=full['created_by'], created_at=full['created_at'], updated_by=full['updated_by'],
+            created_by=people_mod.shown(full['created_by'], shown), created_at=full['created_at'],
+            updated_by=people_mod.shown(full['updated_by'], shown),
             updated_at=full['updated_at'], revision=full['revision'], labels=labels,
             content=([day_bookings] if day_bookings else []) + (json.loads(full['content'] or '[]') if full['id'] not in printed else []),
             attachments=files if full['id'] not in printed else [],
@@ -222,15 +231,15 @@ def collect(person: Person, root_id: str, children: bool = True, progress=None) 
             with connect() as conn:
                 kid_row = conn.execute('SELECT * FROM notes WHERE id = ?', (kid['id'],)).fetchone()
             add(kid_row, 0, (root_id, kid['id']))
-        title = root['title']
-        subtitle = 'Protocol library' if root['type'] == 'library' else f"{root['owner']}'s notebook"
+        title = notes.title_of(root, shown)
+        subtitle = 'Protocol library' if root['type'] == 'library' else f"{people_mod.shown(root['owner'], shown)}'s notebook"
     else:
         add(root, 0, (root_id,))
         with connect() as conn:
             path = notes._path(conn, root_id)
-        title = root['title']
+        title = notes.title_of(root, shown)
         subtitle = ' › '.join(p['title'] for p in path[:-1])
-    ctx = Context(person=person, tz=dt_timezone.utc, origin='', base='', title=title, subtitle=subtitle,
+    ctx = Context(person=person, tz=dt_timezone.utc, origin='', base='', title=title, subtitle=subtitle, names=shown,
                   entries=entries)
     ctx.included = {e.id for e in entries}
     return ctx

@@ -237,7 +237,7 @@ class _Builder:
     def steps(self, block: dict) -> str:
         items = ''.join(
             f'<li><span class="box">{"☑" if i.get("by") else "☐"}</span> {esc(i.get("text") or "")}'
-            + (f'<span class="tick">✓ {esc(i["by"])} · {esc(self.ctx.when(i.get("at")))}</span>' if i.get('by') else '')
+            + (f'<span class="tick">✓ {esc(self.ctx.who(i["by"]))} · {esc(self.ctx.when(i.get("at")))}</span>' if i.get('by') else '')
             + '</li>' for i in block.get('items') or [])
         title = f'<div class="block-title">{esc(block["title"])}</div>' if block.get('title') else ''
         return f'<div class="steps">{title}<ol>{items}</ol></div>'
@@ -250,7 +250,7 @@ class _Builder:
             if level in ('high', 'medium', 'low'):
                 box += f' <span class="priority priority-{level}">{level.capitalize()}</span>'
             text = self.text({'html': i.get('html') or ''})
-            note = (f'<span class="tick">✓ {esc(i["by"])} · {esc(self.ctx.when(i.get("at")))}</span>' if i.get('by')
+            note = (f'<span class="tick">✓ {esc(self.ctx.who(i["by"]))} · {esc(self.ctx.when(i.get("at")))}</span>' if i.get('by')
                     else f'<span class="tick">moved on to the week of {esc(_dmy(i["moved"]))}</span>' if i.get('moved') else '')
             rows.append(f'<li><span class="box">{box}</span> {text}{note}</li>')
         title = f'<div class="block-title">{esc(block["title"])}</div>' if block.get('title') else ''
@@ -274,7 +274,7 @@ class _Builder:
                 shown = computed[r][c]
                 if col.get('kind') == 'check':
                     cells.append('<td><span class="box">☑</span>' + (
-                        f'<span class="tick">{esc(raw["by"])} · {esc(self.ctx.when(raw.get("at")))}</span>'
+                        f'<span class="tick">{esc(self.ctx.who(raw["by"]))} · {esc(self.ctx.when(raw.get("at")))}</span>'
                         if isinstance(raw, dict) and raw.get('by') else '') + '</td>' if raw else '<td><span class="box">☐</span></td>')
                     continue
                 text = raw if col.get('kind') == 'text' and not str(raw or '').startswith('=') else shown['display']

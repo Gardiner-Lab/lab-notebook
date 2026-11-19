@@ -20,7 +20,7 @@
         <a href="{{ request.script_root }}/help">Help</a>
         <a href="{{ request.script_root }}/about">About</a>
     </nav>
-    <span class="tt-user">{{ person.username }}{% if person.role != 'member' %} · {{ 'admin' if person.role == 'admin' else 'lab lead' }}{% endif %}</span>
+    <span class="tt-user" title="{{ person.username }}">{{ names.get(person.username) or person.username }}{% if person.role != 'member' %} · {{ 'admin' if person.role == 'admin' else 'lab lead' }}{% endif %}</span>
     <a class="tt-logout" href="{{ links.logout }}">Log out</a>
 </header>
 
@@ -94,6 +94,7 @@
         stocks: {{ links.stocks | tojson }},
         genome: {{ links.genome | tojson }},
         person: {{ person.to_dict() | tojson }},
+        names: {{ names | tojson }},
     };
 </script>
 <script src="{{ request.script_root }}/static/js/sheet.js?v={{ version }}"></script>

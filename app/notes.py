@@ -235,18 +235,25 @@ def _path(conn, note_id: str) -> List[dict]:
     current = note_id
     while current and current not in seen:
         seen.add(current)
-        row = conn.execute('SELECT id, title, type FROM notes WHERE id = ?', (current,)).fetchone()
+        row = conn.execute('SELECT id, title, type, owner FROM notes WHERE id = ?', (current,)).fetchone()
         if row is None:
             break
-        trail.append({'id': row['id'], 'title': row['title'], 'type': row['type']})
+        trail.append({'id': row['id'], 'title': title_of(row), 'type': row['type']})
         parent = conn.execute('SELECT parent_id FROM branches WHERE note_id = ? ORDER BY rowid LIMIT 1',
                               (current,)).fetchone()
         current = parent['parent_id'] if parent else None
     return list(reversed(trail))
 
 
+def title_of(row, names: Optional[Dict[str, str]] = None) -> str:
+    """A note's title; a notebook is called after its owner as they are shown (their display name)."""
+    if row['type'] == 'notebook' and row['owner']:
+        return f"{people_mod.shown(row['owner'], names)}'s notebook"
+    return row['title']
+
+
 def summary(row) -> dict:
-    return {'id': row['id'], 'title': row['title'], 'type': row['type'], 'space': row['space'],
+    return {'id': row['id'], 'title': title_of(row), 'type': row['type'], 'space': row['space'],
             'owner': row['owner']}
 
 
@@ -1266,7 +1273,8 @@ def _page_labs(note) -> Set[str]:
 def _share_labels(conn, note_id: str) -> List[str]:
     """Who a note is shared with, by name."""
     names = {lab['id']: lab['name'] for lab in people_mod.labs()}
-    return [names.get(s['target'], f"Lab {s['target']}") if s['target_type'] == 'lab' else s['target']
+    shown = people_mod.display_names()
+    return [names.get(s['target'], f"Lab {s['target']}") if s['target_type'] == 'lab' else people_mod.shown(s['target'], shown)
             for s in conn.execute('SELECT target_type, target FROM shares WHERE note_id = ? ORDER BY created_at, rowid',
                                   (note_id,))]
 
@@ -1310,9 +1318,11 @@ def shares(person: Person, note_id: str) -> dict:
                               (note_id,)).fetchall() if allowed else []
     labs = people_mod.labs_for(person)
     names = {lab['id']: lab['name'] for lab in people_mod.labs()}
+    shown = people_mod.display_names()
     out = {'can_share': allowed,
            'shares': [{'id': s['id'], 'target_type': s['target_type'], 'target': s['target'],
-                       'label': names.get(s['target'], f"Lab {s['target']}") if s['target_type'] == 'lab' else s['target'],
+                       'label': names.get(s['target'], f"Lab {s['target']}") if s['target_type'] == 'lab'
+                       else people_mod.shown(s['target'], shown),
                        'created_by': s['created_by'], 'created_at': s['created_at']} for s in listed]}
     if allowed and _is_page(row):
         # A page goes to people and labs of its owner's chair group, its own lab too.

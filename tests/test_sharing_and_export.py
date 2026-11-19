@@ -635,3 +635,37 @@ def test_the_demo_sees_only_the_demos(as_user, world):
     assert [lab['name'] for lab in offer.get('labs', [])] in ([], ['Other Lab'])
     assert olead.post(f"/api/notes/{own['id']}/shares", json={'target_type': 'lab', 'target': '1'}).status_code == 400
     assert ana_book is None or zoe.get(f"/api/notes/{ana_book}").status_code == 403
+
+
+def test_people_are_shown_by_their_display_names(as_user, world):
+    """The name set on the suite's dashboard, not the username; the username where there is none."""
+    conn = _two_leads(world)
+    conn.executescript("""
+        CREATE TABLE display_names (username TEXT PRIMARY KEY, name TEXT NOT NULL, updated_by TEXT, updated_at TEXT);
+        INSERT INTO display_names VALUES ('ana', 'Ana Silva', 'ana', '2026-11-19'), ('lead', 'Dr Lee', 'boss', '2026-11-19');
+    """)
+    conn.commit()
+    ana, lead = as_user('ana'), as_user('lead')
+    day = ana.post('/api/days', json={'date': '2026-10-16'}).get_json()['note']
+    _me(as_user('zoe'))                                 # zoe's notebook, made on first opening
+
+    me = _me(lead)
+    assert me['names']['ana'] == 'Ana Silva'
+    others = {n['owner']: n for n in me['others']}
+    assert others['ana']['title'] == "Ana Silva's notebook"
+    assert others['zoe']['title'] == "zoe's notebook"          # no display name: the username
+    note = lead.get(f"/api/notes/{day['id']}").get_json()['note']
+    assert note['path'][0]['title'] == "Ana Silva's notebook"
+    # The page shows the signed-in person by their name too.
+    assert 'Dr Lee' in lead.get('/').get_data(as_text=True)
+
+    # Shared with: by name.
+    root = _me(lead)['notebook']
+    assert lead.post(f"/api/notes/{root}/shares", json={'target_type': 'person', 'target': 'ana'}).status_code in (200, 201)
+    labels = [s['label'] for s in lead.get(f"/api/notes/{root}/shares").get_json()['shares']]
+    assert labels == ['Ana Silva']
+
+    # Exports: the notebook and who saved it, by name.
+    from app import people
+    ctx = exporting.collect(people.Person(username='ana'), day['id'])
+    assert ctx.entries[0].created_by == 'Ana Silva' and ctx.subtitle.startswith("Ana Silva's notebook")
