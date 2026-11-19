@@ -515,8 +515,8 @@ def _two_leads(world):
 
 def test_who_sees_whose_notebook_follows_the_lab_roles(as_user, world):
     """
-    Unless something is shared: a lab admin sees every notebook in the lab, a lab lead sees every
-    one but a lab admin's, and a member sees only their own.
+    Unless something is shared: a lab admin or a lab lead sees every notebook in the lab but a lab
+    admin's, and a member sees only their own.
     """
     _two_leads(world)
     ana, ben, lead, zoe, lead2, olead, boss = (as_user(u) for u in ('ana', 'ben', 'lead', 'zoe', 'lead2', 'olead', 'boss'))
@@ -547,12 +547,30 @@ def test_who_sees_whose_notebook_follows_the_lab_roles(as_user, world):
                     json={'target_type': 'person', 'target': 'ben'}).status_code in (403, 404)
 
 
-def test_a_lab_admin_sees_another_lab_admin_of_their_lab(as_user, world):
+def test_lab_admins_do_not_see_each_others_notebooks_unless_shared(as_user, world):
+    """Not in their own lab, nor someone who is lab admin of another lab they share."""
     conn = _two_leads(world)
     conn.execute("UPDATE lab_members SET lab_admin = 1 WHERE username = 'zoe'")
+    # olead: lab admin of Other Lab, a member of the Gardiner Lab.
+    conn.execute("INSERT INTO lab_members (username, lab_id, role, lab_admin, joined_at) "
+                 "VALUES ('olead', 1, 'member', 0, '7')")
     conn.commit()
-    lead, zoe = as_user('lead'), as_user('zoe')
+    lead, zoe, olead = as_user('lead'), as_user('zoe'), as_user('olead')
     day = zoe.post('/api/days', json={'date': '2026-10-16'}).get_json()['note']
+    oday = olead.post('/api/days', json={'date': '2026-10-16'}).get_json()['note']
+    assert lead.get(f"/api/notes/{day['id']}").status_code == 403
+    assert zoe.get(f"/api/notes/{lead.post('/api/days', json={'date': '2026-10-17'}).get_json()['note']['id']}").status_code == 403
+    # olead is only a member here, but lab admin elsewhere: hidden from this lab's admins and leads.
+    assert lead.get(f"/api/notes/{oday['id']}").status_code == 403
+    assert as_user('lead2').get(f"/api/notes/{oday['id']}").status_code == 403
+    assert 'zoe' not in {n['owner'] for n in _me(lead)['others']}
+    # A lab admin still sees the lab's members.
+    ana = as_user('ana')
+    aday = ana.post('/api/days', json={'date': '2026-10-16'}).get_json()['note']
+    assert lead.get(f"/api/notes/{aday['id']}").status_code == 200
+    # Shared: then they do.
+    assert zoe.post(f"/api/notes/{day['id']}/shares",
+                    json={'target_type': 'person', 'target': 'lead'}).status_code in (200, 201)
     assert lead.get(f"/api/notes/{day['id']}").status_code == 200
 
 

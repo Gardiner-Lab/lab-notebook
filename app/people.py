@@ -82,9 +82,11 @@ class Person:
         May open this person's notebook (beyond what is shared): who sees whose.
 
         - Themselves, and an administrator of the suite: always.
-        - A lab admin: everyone in a lab they are lab admin of, lab leads and other lab admins too.
+        - A lab admin: everyone in a lab they are lab admin of, lab leads too, but not another lab
+          admin: lab admins read each other's notebooks only where something is shared.
         - A lab lead: everyone in a lab they lead except a lab admin. A notebook is one thing, not
-          one per lab, so someone who is lab admin of any lab stays closed to lab leads.
+          one per lab, so someone who is lab admin of any lab stays closed to lab leads and to the
+          other lab admins.
         - A member: only their own.
 
         Someone who has left (archived) is open again to their labs' leads and lab admins, so the
@@ -104,10 +106,8 @@ class Person:
         for lab in mine:
             if not lab.get('lab') or lab['lab'].casefold() not in theirs:
                 continue
-            here = rank(lab)
-            if here == 2:
-                return True
-            if here == 1 and (their_rank < 2 or gone):
+            # Lab leads and lab admins alike: not someone who is lab admin of any lab.
+            if rank(lab) >= 1 and (their_rank < 2 or gone):
                 return True
         return False
 
