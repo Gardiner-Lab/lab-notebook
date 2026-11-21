@@ -15,7 +15,7 @@ def test_steps_put_in_a_new_order_keep_their_ticks(as_user):
     ana = as_user('ana')
     page = _page(ana, _me(ana)['notebook'], 'Run', [_steps('Thaw', 'Mix', 'Spin', 'Load', ticked=(1,))])
     items = page['content'][0]['items']
-    assert [i['text'] for i in items] == ['Thaw', 'Mix', 'Spin', 'Load'] and items[1]['by'] == 'ana'
+    assert [i['html'] for i in items] == ['Thaw', 'Mix', 'Spin', 'Load'] and items[1]['by'] == 'ana'
     ticked_at = items[1]['at']
 
     # Mix (ticked) dragged to the end, Load to the top.
@@ -23,7 +23,7 @@ def test_steps_put_in_a_new_order_keep_their_ticks(as_user):
     saved = ana.put(f"/api/notes/{page['id']}", json={'content': [{**page['content'][0], 'items': order}],
                                                      'base_version': page['version']}).get_json()['note']
     again = saved['content'][0]['items']
-    assert [i['text'] for i in again] == ['Load', 'Thaw', 'Spin', 'Mix']
+    assert [i['html'] for i in again] == ['Load', 'Thaw', 'Spin', 'Mix']
     assert again[3]['by'] == 'ana' and again[3]['at'] == ticked_at, 'the tick went with its step'
     assert [i['by'] for i in again[:3]] == [None, None, None]
 
@@ -61,7 +61,7 @@ def test_a_protocol_is_added_as_a_page_under_today(as_user):
     section = page['content'][0]
     assert section['type'] == 'section' and section['source']['id'] == protocol['id'] and section['source']['version'] == 1
     items = section['blocks'][0]['items']
-    assert [i['text'] for i in items] == ['Pick a colony', 'Add to mix']
+    assert [i['html'] for i in items] == ['Pick a colony', 'Add to mix']
     assert [i['by'] for i in items] == [None, None], 'the protocol\'s own tick is not carried over'
 
     # Today's own page is left as it was, and the protocol lists the page as where it was used.

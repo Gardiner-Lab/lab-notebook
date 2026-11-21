@@ -202,7 +202,8 @@ def collect(person: Person, root_id: str, children: bool = True, progress=None) 
             labels = [f"#{a['name']}{'=' + a['value'] if a['value'] else ''}" for a in conn.execute(
                 "SELECT name, value FROM attributes WHERE note_id = ? AND type = 'label' ORDER BY position, rowid",
                 (row['id'],))
-                if a['name'] not in ('dateNote', 'monthNote', 'yearNote', 'notebookRoot', 'protocolLibrary', 'seed')]
+                if a['name'] not in ('dateNote', 'monthNote', 'yearNote', 'notebookRoot', 'protocolLibrary',
+                                     'seed', 'seedVersion')]
             files = _attachments_of(conn, row['id'])
             day_bookings = _bookings_block(conn, full, shown) if full['id'] not in printed else None
         entries.append(Entry(

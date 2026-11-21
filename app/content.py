@@ -35,6 +35,11 @@ TEXT_TAGS = {'p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'sub', 'sup', 'h1', 
 TEXT_ATTRIBUTES = {'a': {'href', 'data-plasmid', 'data-note', 'data-seed', 'data-stock', 'data-track', 'data-attachment', 'class', 'title'},
                    'img': {'data-attachment', 'alt', 'title'},
                    'span': {'class'}, 'mark': {'class'}}
+# The marks a step and a table cell may carry. The same letter formatting as text,
+# without the block tags and pictures: a step is one line and a cell one value, so
+# nothing in them may start a paragraph, a list or a heading.
+INLINE_TAGS = {'b', 'strong', 'i', 'em', 'u', 's', 'sub', 'sup', 'code', 'span', 'mark', 'a'}
+INLINE_ATTRIBUTES = {'a': TEXT_ATTRIBUTES['a'], 'span': {'class'}, 'mark': {'class'}}
 COLUMN_KINDS = ('text', 'number', 'scaled', 'fill', 'check', 'formula')
 MAX_HTML = 200_000
 MAX_CELL = 2_000
@@ -54,8 +59,18 @@ CELL_LINK = re.compile(r'\[[^\]\n]{0,300}\]\((note|plasmid|seed|stock|track):([^
 
 
 def cell_text(value: Any) -> str:
-    """A table cell as people read it: its links ([label](stock:GL-C-0003)) as their labels, for exports."""
-    return CELL_LINK.sub(lambda m: m.group(0)[1:m.group(0).rindex('](')], '' if value is None else str(value))
+    """A table cell as people read it: without its formatting, and its links
+    ([label](stock:GL-C-0003)) as their labels, for exports and for search."""
+    return CELL_LINK.sub(lambda m: m.group(0)[1:m.group(0).rindex('](')], strip_tags(value))
+
+
+def cell_markup(value: Any) -> str:
+    """A table cell keeping its formatting, with its links as their labels: for the
+    exports that can show bold and italic. Cleaned again here, so what an export
+    writes out is the safe subset even if it came from somewhere else."""
+    labelled = CELL_LINK.sub(lambda m: html.escape(m.group(0)[1:m.group(0).rindex('](')], quote=False),
+                             str(value if value is not None else ''))
+    return clean_inline(labelled)
 
 
 # What a section put into a day by another tool is, by its source's kind: shown
@@ -117,6 +132,35 @@ def now() -> str:
 def clean_html(html: Any) -> str:
     return nh3.clean(str(html or '')[:MAX_HTML], tags=TEXT_TAGS, attributes=TEXT_ATTRIBUTES,
                      url_schemes={'http', 'https', 'mailto'}, link_rel='noopener noreferrer')
+
+
+_BREAK = re.compile(r'<\s*br\s*/?\s*>|</\s*(p|div|li|ul|ol|h[1-6]|pre|blockquote|tr|td)\s*>', re.I)
+
+
+def clean_inline(value: Any, limit: int = MAX_CELL * 4) -> str:
+    """A step or a table cell as it is kept: its letter formatting, on one line.
+    A line break, or the end of a paragraph, becomes the space between the words
+    rather than disappearing and running them together."""
+    text = _BREAK.sub(' ', str(value if value is not None else '')[:limit])
+    cleaned = nh3.clean(text, tags=INLINE_TAGS, attributes=INLINE_ATTRIBUTES,
+                        url_schemes={'http', 'https', 'mailto'}, link_rel='noopener noreferrer')
+    # Whatever the browser sent, a step and a cell stay one line.
+    return re.sub(r'\s*[\r\n]+\s*', ' ', cleaned).strip()
+
+
+def strip_tags(value: Any) -> str:
+    """The words in a step or a cell, without its formatting: for numbers, formulas and search."""
+    return html.unescape(_TAG.sub('', str(value if value is not None else '')))
+
+
+def step_html(item: Any) -> str:
+    """A step's words with their formatting. Steps were plain text before formatting
+    could be put in them, so a step saved then is escaped and kept as it reads."""
+    if not isinstance(item, dict):
+        return ''
+    if item.get('html') is not None:
+        return clean_inline(item.get('html'))
+    return clean_inline(html.escape(_text(item.get('text'), MAX_CELL), quote=False))
 
 
 def _text(value: Any, limit: int = 300) -> str:
@@ -222,7 +266,7 @@ class _Cleaner:
                     continue
                 iid = _text(item.get('id'), 40) or new_id()
                 tick = self._tick((bid, iid, None), bool(item.get('done') or item.get('by')))
-                items.append({'id': iid, 'text': _text(item.get('text'), MAX_CELL),
+                items.append({'id': iid, 'html': step_html(item),
                               'by': tick['by'] if tick else None, 'at': tick['at'] if tick else None})
             return {'id': bid, 'type': 'steps', 'title': _text(block.get('title')), 'items': items}
         if kind == 'tasks':
@@ -292,7 +336,7 @@ class _Cleaner:
                 if col['kind'] == 'check':
                     cells.append(self._tick((bid, rid, c), bool(value)))
                 else:
-                    cells.append(_text(value, MAX_CELL) if value is not None else '')
+                    cells.append(clean_inline(value) if value is not None else '')
             rows.append({'id': rid, 'cells': cells})
         scale = block.get('scale') if isinstance(block.get('scale'), dict) else None
         if scale is not None:
@@ -324,13 +368,14 @@ def plain_text(blocks: List[dict]) -> str:
             if kind == 'text':
                 words.append(html.unescape(_TAG.sub(' ', block.get('html') or '')))
             elif kind == 'steps':
-                words.extend(str(i.get('text') or '') for i in block.get('items') or [])
+                words.extend(cell_text(step_html(i)) for i in block.get('items') or [])
             elif kind == 'tasks':
                 words.extend(html.unescape(_TAG.sub(' ', i.get('html') or '')) for i in block.get('items') or [])
             elif kind == 'table':
                 words.extend(str(c.get('name') or '') for c in block.get('columns') or [])
                 for row in block.get('rows') or []:
-                    words.extend(c for c in row.get('cells') or [] if isinstance(c, str) and not c.startswith('='))
+                    words.extend(cell_text(c) for c in row.get('cells') or []
+                                 if isinstance(c, str) and not strip_tags(c).lstrip().startswith('='))
             elif kind == 'section':
                 walk(block.get('blocks'))
             elif kind == 'gel':

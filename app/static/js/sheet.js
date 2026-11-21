@@ -164,6 +164,16 @@
     return value;
   }
 
+  /**
+   * A cell's value without its formatting: a cell may carry bold, italic and the rest,
+   * which are not part of what it says. "<b>5</b>" is the number 5, and a formula stays
+   * one however it is dressed. Kept the same as app/content.py strip_tags.
+   */
+  const plain = (raw) => (typeof raw === 'string'
+    ? raw.replace(/<[^>]*>/g, '').replace(/&(lt|gt|amp|quot|#39|nbsp);/g,
+      (m, n) => ({ lt: '<', gt: '>', amp: '&', quot: '"', '#39': "'", nbsp: ' ' }[n]))
+    : raw);
+
   const literal = (raw) => {
     const s = String(raw ?? '').trim();
     if (s === '') return null;
@@ -185,12 +195,13 @@
     const memo = new Map();
     const busy = new Set();
     const NUMERIC = new Set(['number', 'scaled', 'fill']);
-    const rowUsed = rows.map((row) => columns.some((col, c) => col.kind !== 'check'
-      && String((row.cells || [])[c] ?? '').trim() !== ''));
+    const rawAt = (r, c) => plain((rows[r]?.cells || [])[c]);
+    const rowUsed = rows.map((row, r) => columns.some((col, c) => col.kind !== 'check'
+      && String(rawAt(r, c) ?? '').trim() !== ''));
 
     function cellFormula(r, c) {
       const col = columns[c] || {};
-      const raw = (rows[r]?.cells || [])[c];
+      const raw = rawAt(r, c);
       if (typeof raw === 'string' && raw.trim().startsWith('=')) return raw.trim().slice(1);
       if ((raw === '' || raw === null || raw === undefined) && col.kind === 'formula' && col.formula) {
         return String(col.formula).trim().replace(/^=/, '');
@@ -211,7 +222,7 @@
       let result;
       try {
         const col = columns[c] || {};
-        const raw = (rows[r]?.cells || [])[c];
+        const raw = rawAt(r, c);
         const formula = cellFormula(r, c);
         if (col.kind === 'check') result = { value: raw ? 1 : 0 };
         else if (formula !== null) {
@@ -252,7 +263,7 @@
     return String(Math.round(value * 100) / 100);
   }
 
-  const Sheet = { compute, evaluate, show, colName, colIndex, PENDING };
+  const Sheet = { compute, evaluate, show, colName, colIndex, plain, PENDING };
   if (typeof module !== 'undefined' && module.exports) module.exports = Sheet;
   else root.Sheet = Sheet;
 }(typeof window !== 'undefined' ? window : globalThis));

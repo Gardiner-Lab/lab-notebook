@@ -5,6 +5,34 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **The supplied MoClo protocol follows the lab's SOP, and supplied protocols are kept up to date.**
+  The MoClo Golden Gate protocol in the library now matches the MoClo Library Tool: 10X rCutSmart
+  buffer, 1 µL of T4 ligase (400 units), 1 µL of enzyme (20 units), a 1:3 vector-to-insert ratio
+  (40 fmol vector, 120 fmol each insert), and the cycling program of 37 °C 20 s, 30 cycles of
+  37 °C 5 min / 16 °C 5 min, then 37 °C 10 min, 50 °C 5 min, 80 °C 5 min and a 12 °C hold.
+  Until now a protocol supplied with the notebook was written once and never looked at again, so a
+  change here reached only new installations. A supplied protocol is now brought up to date when the
+  one here changes — but only while the lab has not touched its copy. The moment someone edits it,
+  that copy is theirs and is left alone, and the update waits for the labs that have not. The change
+  is an ordinary new version, so the protocol's history still shows what it said before.
+- **Copying notes into another page keeps their formatting and their links.** A paste used to be
+  reduced to its words and its web links, so a note copied from one page into another arrived as a
+  wall of plain text: paragraphs, headings, lists, bold, italic, colours and markers all gone, and
+  the links to plasmids, notes, stocks, seed lots and tracks with them. A paste now keeps everything
+  the notebook itself writes, including those links, whether it comes from another page, a web page,
+  an email or Word. Anything outside that — scripts, styles, fonts and colours from elsewhere,
+  pictures from the web — is still dropped, and a table copied from a spreadsheet still becomes a
+  table. An address pasted onto selected text still links that text rather than replacing it.
+- **Steps and table cells take the same formatting as text.** Bold, italic, underline,
+  strike-through, colours, markers and links can now be used in a step and in a table cell, with the
+  same formatting bar; before, both were plain text and anything applied to them was lost on saving.
+  Formatting is not part of what a cell says, so the arithmetic, the number columns and the formulas
+  read straight through it: a bold `2` is still 2, and a formula still works out however it looks.
+  A step and a cell stay one line, so a paste of several paragraphs joins up into one. Steps written
+  before this read exactly as they did. The Word and PDF exports show the formatting too, and search
+  still finds the words inside it.
+
 ## [0.30.0] - 2026-11-19
 
 ### Changed

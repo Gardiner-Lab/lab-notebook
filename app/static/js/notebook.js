@@ -177,19 +177,33 @@ const STOCK_KINDS = { G: 'glycerol', O: 'primer', C: 'chemical', A: 'antibody', 
 // A link in a table cell, put there with @ (app/content.py CELL_LINK): [label](stock:GL-C-0003).
 const CELL_LINK = /\[([^\]\n]{0,300})\]\((note|plasmid|seed|stock|track):([^)\s"]{1,80})\)/g;
 const cellToken = (kind, id, label) => `[${String(label).replace(/[[\]\n]/g, ' ')}](${kind}:${id})`;
-/** A cell's text with its links as links, for showing it; null when it has none. */
+/** Everything in a box selected, as clicking into an input used to do. */
+function selectAll(area) {
+  const range = document.createRange();
+  range.selectNodeContents(area);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+/** A piece of a cell, with whatever formatting it carries (cleaned when it was saved). */
+function cellPiece(markup) {
+  const span = el('span', {});
+  span.innerHTML = markup;
+  return span;
+}
+/** A cell with its links as links and its formatting shown, for reading it; null when it has none. */
 function cellLinks(text) {
   const s = String(text ?? '');
   const out = [];
   let last = 0;
   CELL_LINK.lastIndex = 0;
   for (let m = CELL_LINK.exec(s); m; m = CELL_LINK.exec(s)) {
-    if (m.index > last) out.push(s.slice(last, m.index));
+    if (m.index > last) out.push(cellPiece(s.slice(last, m.index)));
     out.push(el('a', { [`data-${m[2]}`]: m[3], href: '#', title: 'Open it (click the cell around it to change the cell)' }, m[1]));
     last = m.index + m[0].length;
   }
   if (!out.length) return null;
-  if (last < s.length) out.push(s.slice(last));
+  if (last < s.length) out.push(cellPiece(s.slice(last)));
   return out;
 }
 const stockLink = (code) => `${NB.stocks}/#${STOCK_KINDS[code.split('-').slice(-2, -1)[0]] || 'glycerol'}=${encodeURIComponent(code)}`;
@@ -1006,7 +1020,9 @@ const Blocks = {
         this.linkAt(area, at, sync);
       }
     });
-    // Pasted text comes in as plain text: what else a page holds is added with the tools.
+    // Pasted text keeps its formatting: paragraphs, headings, lists, bold and the rest of what the
+    // notebook itself writes, so a note copied into another page arrives as it was, its links to
+    // plasmids, stocks and notes with it. Anything outside that subset is dropped.
     // A table copied from a spreadsheet or a web page becomes a table, where it was pasted.
     // A pasted picture (a screenshot, say) is attached to the note and shown where it was pasted.
     area.addEventListener('paste', (e) => {
@@ -1016,9 +1032,18 @@ const Blocks = {
       if (grid && (grid.length > 1 || grid[0].length > 1)) { App.pasteTable(block, area, grid); return; }
       const files = [...(e.clipboardData.files || [])];
       if (files.length) { App.attachHere(area, files, sync); return; }
-      // A copied bulleted or numbered list (from Word, a web page, an email) is pasted as a list.
-      const listed = Clip.lists(e.clipboardData.getData('text/plain'));
-      if (listed) { document.execCommand('insertHTML', false, this.listHtml(listed)); sync(); return; }
+      const html = e.clipboardData.getData('text/html');
+      // An address copied on its own still links what is selected, rather than replacing it.
+      if (this.pasteAddress(area, e.clipboardData)) { sync(); return; }
+      // A list the copy marks up as one comes through as it is; Word writes its bullets as
+      // characters instead, which Clip reads back into a list.
+      if (!/<\s*(ul|ol)\b/i.test(html)) {
+        const listed = Clip.lists(e.clipboardData.getData('text/plain'));
+        if (listed) { document.execCommand('insertHTML', false, this.listHtml(listed)); sync(); return; }
+      }
+      const rich = this.richerThanText(html) ? this.richFromHtml(html) : null;
+      // Links pasted in are shown and opened like the rest at once, not only after the next draw.
+      if (rich) { document.execCommand('insertHTML', false, rich); this.decorateLinks(area); sync(); return; }
       // Web links survive: copied from a page or note, or an address pasted on its own.
       if (this.pasteWithLinks(area, e.clipboardData)) { sync(); return; }
       document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
@@ -1370,6 +1395,95 @@ const Blocks = {
   },
 
   /**
+   * The tags kept from a paste, by what the server keeps (app/content.py TEXT_TAGS): what the
+   * clipboard calls them on the left, what the notebook writes on the right. A heading below h3
+   * becomes an h3, and a <div> a paragraph, as a line typed here does.
+   */
+  PASTE_TAGS: {
+    P: 'p', DIV: 'p', BR: 'br', HR: 'hr', B: 'b', STRONG: 'strong', I: 'i', EM: 'em', U: 'u',
+    S: 's', STRIKE: 's', DEL: 's', SUB: 'sub', SUP: 'sup', H1: 'h1', H2: 'h2', H3: 'h3',
+    H4: 'h3', H5: 'h3', H6: 'h3', UL: 'ul', OL: 'ol', LI: 'li', A: 'a', CODE: 'code', TT: 'code',
+    PRE: 'pre', BLOCKQUOTE: 'blockquote', SPAN: 'span', FONT: 'span', MARK: 'mark', IMG: 'img',
+  },
+  // Only the notebook's own classes survive a paste: a colour, a marker, a tab.
+  KEPT_CLASS: /^(tc-|hl-)[a-z]+$|^tab$/,
+
+  /**
+   * HTML from the clipboard (another note, a web page, an email, Word) as the notebook keeps it:
+   * paragraphs, headings, lists, bold, italic and the rest of the subset the server allows, and the
+   * notebook's own links to plasmids, notes, stocks and attachments. Scripts, styles, colours from
+   * elsewhere and every other attribute are dropped. `inline` leaves out the block tags, for a step
+   * or a table cell, which are one line. Null when nothing is left.
+   */
+  richFromHtml(html, { inline = false } = {}) {
+    const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    const BLOCK = /^(P|DIV|H[1-6]|UL|OL|LI|PRE|BLOCKQUOTE|HR)$/;
+    const walk = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) return this.escapeHtml(node.textContent.replace(/[\t\r\n]+/g, ' '));
+      if (node.nodeType !== Node.ELEMENT_NODE) return '';
+      const name = node.nodeName;
+      if (/^(SCRIPT|STYLE|HEAD|TITLE|META|LINK|TEMPLATE|NOSCRIPT)$/.test(name)) return '';
+      let inner = [...node.childNodes].map(walk).join('');
+      // What the clipboard says with a style rather than a tag: Word and Google Docs both do.
+      const style = node.getAttribute?.('style') || '';
+      const weight = /font-weight:\s*(bold|[6-9]00)/i.test(style);
+      const italic = /font-style:\s*italic/i.test(style);
+      const under = /text-decoration[^;]*underline/i.test(style);
+      const struck = /text-decoration[^;]*line-through/i.test(style);
+      let tag = this.PASTE_TAGS[name];
+      if (inline && (!tag || BLOCK.test(name) || tag === 'br' || tag === 'img')) {
+        // A step and a cell are one line: a block's words come through, the block itself does not.
+        tag = null;
+      }
+      let out;
+      if (!tag) out = inner;
+      else if (tag === 'img') {
+        // Only a picture already attached to a note: the server names pictures by attachment, never
+        // by address, so one from a web page cannot be kept.
+        const att = node.getAttribute('data-attachment');
+        out = att ? `<img data-attachment="${this.escapeHtml(att)}">` : '';
+      } else if (tag === 'br' || tag === 'hr') out = `<${tag}>`;
+      else if (tag === 'a') {
+        const data = ['note', 'plasmid', 'seed', 'stock', 'track', 'attachment']
+          .filter((k) => node.getAttribute(`data-${k}`))
+          .map((k) => ` data-${k}="${this.escapeHtml(node.getAttribute(`data-${k}`))}"`).join('');
+        const href = data ? '' : this.webAddress(node.getAttribute('href') || '');
+        if (!inner.trim()) out = '';
+        else if (data) out = `<a${data}>${inner}</a>`;
+        else if (href) out = `<a href="${this.escapeHtml(href)}">${inner}</a>`;
+        else out = inner;
+      } else {
+        const cls = (node.getAttribute('class') || '').split(/\s+/).filter((c) => this.KEPT_CLASS.test(c));
+        if ((tag === 'span' || tag === 'mark') && !cls.length && !weight && !italic && !under && !struck) {
+          out = inner;                                   // a span carrying nothing is not worth keeping
+        } else if (!inner.trim() && tag !== 'li') {
+          out = '';
+        } else {
+          const attr = cls.length ? ` class="${this.escapeHtml(cls.join(' '))}"` : '';
+          out = `<${tag}${attr}>${inner}</${tag}>`;
+        }
+      }
+      if (out && tag !== 'img') {
+        for (const [on, wrap] of [[weight, 'b'], [italic, 'i'], [under, 'u'], [struck, 's']]) {
+          if (on && !new RegExp(`^<${wrap}>`).test(out)) out = `<${wrap}>${out}</${wrap}>`;
+        }
+      }
+      // A block that is not kept still ends what came before it: on its own line in text, and as the
+      // space between the words in a step or a cell, which are one line.
+      if (!tag && BLOCK.test(name) && out.trim()) out += inline ? ' ' : '<br>';
+      return out;
+    };
+    const out = walk(doc.body).replace(/(\s|<br>)+$/, '').replace(/^(\s|<br>)+/, '');
+    return out.trim() ? (inline ? out.replace(/ {2,}/g, ' ') : out) : null;
+  },
+
+  /** True when a paste holds more than its plain words: formatting, a list, or a link worth keeping. */
+  richerThanText(html) {
+    return /<\s*(p|div|h[1-6]|ul|ol|li|b|strong|i|em|u|s|strike|del|sub|sup|code|pre|blockquote|mark|img|a|br|hr)\b/i
+      .test(String(html || ''));
+  },
+
+  /**
    * HTML from the clipboard (a web page, an email, another note) reduced to its text and its web links,
    * as HTML; null when it holds no link worth keeping. Styles, scripts and everything else are dropped,
    * as with any paste; blocks become line breaks.
@@ -1401,18 +1515,27 @@ const Blocks = {
    * address pasted alone becomes one (onto the selection, when text is selected), and an address in
    * pasted text is made one. True when it pasted; false leaves the paste to the plain-text default.
    */
-  pasteWithLinks(area, data) {
+  /**
+   * An address pasted on its own: a link on the selected text, or the address as a link.
+   * True when it pasted. Tried before the formatting, so pasting a link onto a word still
+   * links the word rather than replacing it.
+   */
+  pasteAddress(area, data) {
     const text = data.getData('text/plain');
     const sel = window.getSelection();
     const href = this.webAddress(text);
-    if (href && sel.rangeCount && !sel.isCollapsed && area.contains(sel.anchorNode)) {
+    if (!href) return false;
+    if (sel.rangeCount && !sel.isCollapsed && area.contains(sel.anchorNode)) {
       document.execCommand('createLink', false, href);
       return true;
     }
-    if (href) {
-      document.execCommand('insertHTML', false, `<a href="${this.escapeHtml(href)}">${this.escapeHtml(text.trim())}</a>`);
-      return true;
-    }
+    document.execCommand('insertHTML', false, `<a href="${this.escapeHtml(href)}">${this.escapeHtml(text.trim())}</a>`);
+    return true;
+  },
+
+  pasteWithLinks(area, data) {
+    const text = data.getData('text/plain');
+    if (this.pasteAddress(area, data)) return true;
     const fromHtml = this.linksFromHtml(data.getData('text/html'));
     if (fromHtml) { document.execCommand('insertHTML', false, fromHtml); return true; }
     const linked = this.linkifiedHtml(text);
@@ -1514,6 +1637,58 @@ const Blocks = {
     sel.addRange(caret);
     for (const node of area.querySelectorAll('mark')) if (!node.textContent) node.remove();
     return true;
+  },
+
+  /**
+   * One line as it is kept: a step or a table cell. The same letter formatting as text, with no
+   * paragraphs, lists or pictures, which the server would drop anyway (app/content.py INLINE_TAGS).
+   */
+  storableInline(area) {
+    const copy = area.cloneNode(true);
+    this.tidyNodes(copy);
+    // A block the browser made (Enter, or a paste) leaves its words behind, on the one line.
+    for (const node of [...copy.querySelectorAll('p, div, li, ul, ol, h1, h2, h3, pre, blockquote, br, img, hr')].reverse()) {
+      node.replaceWith(...(node.tagName === 'BR' ? [document.createTextNode(' ')] : node.childNodes));
+    }
+    for (const a of copy.querySelectorAll('a[data-plasmid], a[data-note], a[data-seed], a[data-stock], a[data-track], a[data-attachment]')) {
+      for (const attr of ['href', 'class', 'title']) a.removeAttribute(attr);
+    }
+    return copy.innerHTML.replace(/\s+/g, ' ').trim();
+  },
+
+  /**
+   * A one-line box that takes formatting: a step, or a table cell. The same formatting bar as text,
+   * and the same paste, kept to one line. `onInput` is given the line as it will be kept.
+   */
+  inlineEditor(attrs, html, { onInput, editable = true }) {
+    const area = el('div', { ...attrs, contenteditable: editable ? 'true' : 'false' });
+    area.innerHTML = html || '';
+    this.decorateLinks(area);
+    area.addEventListener('click', (e) => this.followLink(e));
+    if (!editable) return area;
+    const sync = () => onInput(this.storableInline(area));
+    area.addEventListener('input', sync);
+    area.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const clip = e.clipboardData;
+      if (this.pasteAddress(area, clip)) { sync(); return; }
+      const rich = this.richerThanText(clip.getData('text/html'))
+        ? this.richFromHtml(clip.getData('text/html'), { inline: true }) : null;
+      if (rich) { document.execCommand('insertHTML', false, rich); this.decorateLinks(area); sync(); return; }
+      // One line: the lines of what was pasted join up, as they did before formatting.
+      document.execCommand('insertText', false, clip.getData('text/plain').replace(/\s*[\r\n]+\s*/g, ' '));
+      sync();
+    });
+    area.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) e.preventDefault();
+      if (e.key.toLowerCase() === 'k' && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        const bar = document.getElementById('formatBar');
+        if (bar) this.webLinkBox(area, sync, bar);
+      }
+    });
+    area.addEventListener('focus', () => App.showFormatBar(area, sync));
+    return area;
   },
 
   /** The text as kept: links by what they point at, not by this page's address for it. */
@@ -1657,7 +1832,15 @@ const Blocks = {
     const { kind, target, label } = chosen;
     const token = cellToken(kind, kind === 'plasmid' || kind === 'track' || kind === 'note' ? target.id : target.code, label);
     const value = String(row.cells[c] ?? '');
-    row.cells[c] = value[pos - 1] === '@' ? `${value.slice(0, pos - 1)}${token} ${value.slice(pos)}` : `${value} ${token}`;
+    if (pos === null) {
+      // From a cell that takes formatting: the "@" that opened this is the last one in the cell,
+      // counting only the ones in its words and not any inside a tag.
+      const ats = [...value.matchAll(/<[^>]*>|@/g)].filter((m) => m[0] === '@');
+      const at = ats.length ? ats[ats.length - 1].index : -1;
+      row.cells[c] = at >= 0 ? `${value.slice(0, at)}${token} ${value.slice(at + 1)}` : `${value} ${token}`;
+    } else {
+      row.cells[c] = value[pos - 1] === '@' ? `${value.slice(0, pos - 1)}${token} ${value.slice(pos)}` : `${value} ${token}`;
+    }
     if (document.activeElement === input) input.blur();
     changed();
     if (kind === 'stock') App.noteDisposal(target, true);
@@ -1703,18 +1886,22 @@ const Blocks = {
           ctx.changed();
         },
       });
-      const text = ctx.editable
-        ? el('textarea', { class: 'step-text', rows: 1, placeholder: 'A step',
-          oninput: (e) => { item.text = oneLine(e); ctx.changed(); },
-          onkeydown: (e) => {
-            noEnter(e);
-            if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-              e.preventDefault();
-              const up = e.key === 'ArrowUp';
-              moved(i, up ? i - 1 : i + 2, up ? i - 1 : i + 1);
-            }
-          } }, item.text || '')
-        : el('span', { class: 'step-text', text: item.text });
+      // A step takes the same formatting as text: bold, italic, colour, a marker. Steps written
+      // before that was so were kept as plain text, and read back here as what they said.
+      const stepHtml = item.html !== undefined && item.html !== null
+        ? item.html : escapeHtml(item.text || '');
+      const text = Blocks.inlineEditor(
+        { class: 'step-text', 'data-placeholder': 'A step' }, stepHtml,
+        { editable: ctx.editable, onInput: (line) => { item.html = line; delete item.text; ctx.changed(); } });
+      if (ctx.editable) {
+        text.addEventListener('keydown', (e) => {
+          if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+            e.preventDefault();
+            const up = e.key === 'ArrowUp';
+            moved(i, up ? i - 1 : i + 2, up ? i - 1 : i + 1);
+          }
+        });
+      }
       const handle = ctx.editable ? el('span', {
         class: 'step-handle', draggable: 'true', title: 'Drag to move this step (or Alt+↑ / Alt+↓ in it)',
         onclick: (e) => e.stopPropagation(),
@@ -1804,7 +1991,14 @@ const Blocks = {
         const kind = block.columns[cell.c]?.kind;
         const raw = block.rows[cell.r].cells[cell.c] ?? '';
         const shown = computed[cell.r][cell.c];
-        cell.input.value = (kind === 'text' && !String(raw).startsWith('=')) ? raw : shown.display;
+        // A cell may carry formatting, so what it says is written as markup, not as a value.
+        // A worked-out cell shows its answer instead, and so does one written differently from the
+        // way the answer reads ("0,61" shown as 0.61) — there the formatting cannot be kept.
+        const plain = Sheet.plain(String(raw));
+        const isFormula = !!shown.formula || plain.trim().startsWith('=');
+        const written = !isFormula && (kind === 'text' || plain.trim() === String(shown.display));
+        cell.input.innerHTML = written ? String(raw) : escapeHtml(shown.display);
+        Blocks.decorateLinks(cell.input);
         // Links put in with @ show as links over the cell while it is not being changed.
         const parts = cell.view ? cellLinks(raw) : null;
         if (cell.view) {
@@ -1858,25 +2052,45 @@ const Blocks = {
         }
         // Text and fill-in cells take links with @, as text does: a chemical in a protocol's table, say.
         const linkable = col.kind === 'text' || col.kind === 'fill';
-        const input = el('input', {
-          type: 'text', class: `cell kind-${col.kind}`, readonly: !ctx.editable,
-          placeholder: col.kind === 'fill' ? (App.note?.space === 'library' ? 'on the day' : 'fill in') : '',
-          onfocus: () => { input.value = row.cells[c] ?? ''; if (view) view.hidden = true; input.classList.remove('has-links'); input.select(); },
+        // A cell takes the same formatting as text does: bold, italic, colour, a marker. It stays
+        // one line, and what it says is still read as a number or a formula through the formatting.
+        const input = el('div', {
+          class: `cell kind-${col.kind}`, contenteditable: ctx.editable ? 'true' : 'false',
+          'data-placeholder': col.kind === 'fill' ? (App.note?.space === 'library' ? 'on the day' : 'fill in') : '',
+          onfocus: () => {
+            input.innerHTML = String(row.cells[c] ?? '');
+            Blocks.decorateLinks(input);
+            if (view) view.hidden = true;
+            input.classList.remove('has-links');
+            selectAll(input);
+            App.showFormatBar(input, () => { row.cells[c] = Blocks.storableInline(input); changed(); });
+          },
           onblur: () => update(),
           oninput: (e) => {
-            row.cells[c] = input.value;
+            row.cells[c] = Blocks.storableInline(input);
             changed();
-            if (linkable && ctx.editable && e.data === '@') this.linkCell(row, c, input.selectionStart, input, changed);
+            if (linkable && ctx.editable && e.data === '@') this.linkCell(row, c, null, input, changed);
           },
-          // Cells copied from a spreadsheet fill the table from here, right and down, with rows and columns added as needed.
+          // Cells copied from a spreadsheet fill the table from here, right and down, with rows and
+          // columns added as needed; anything else is pasted into this cell, keeping its formatting.
           onpaste: (e) => {
             if (!ctx.editable) return;
             const grid = Clip.gridOrLines(e.clipboardData);
-            if (!grid || (grid.length === 1 && grid[0].length === 1)) return;
+            if (grid && !(grid.length === 1 && grid[0].length === 1)) {
+              e.preventDefault();
+              this.fillTable(block, r, c, grid);
+              draw(); changed();
+              cells.find((x) => x.r === r && x.c === c)?.input.focus();
+              return;
+            }
             e.preventDefault();
-            this.fillTable(block, r, c, grid);
-            draw(); changed();
-            cells.find((x) => x.r === r && x.c === c)?.input.focus();
+            const clip = e.clipboardData;
+            const rich = this.richerThanText(clip.getData('text/html'))
+              ? this.richFromHtml(clip.getData('text/html'), { inline: true }) : null;
+            if (rich) { document.execCommand('insertHTML', false, rich); Blocks.decorateLinks(input); }
+            else document.execCommand('insertText', false, clip.getData('text/plain').replace(/\s*[\r\n]+\s*/g, ' '));
+            row.cells[c] = Blocks.storableInline(input);
+            changed();
           },
           onkeydown: (e) => {
             // Enter goes down a row, as in a spreadsheet.
@@ -1953,7 +2167,8 @@ const Blocks = {
     }
     grid.forEach((values, i) => values.forEach((value, j) => {
       const row = block.rows[r + i];
-      row.cells[c + j] = block.columns[c + j].kind === 'check' ? (Clip.ticked(value) ? { done: true } : null) : value.trim();
+      // A cell is kept as markup now, so copied words go in as words, not as tags.
+      row.cells[c + j] = block.columns[c + j].kind === 'check' ? (Clip.ticked(value) ? { done: true } : null) : escapeHtml(value.trim());
     }));
     if (cut) toast(`A table holds at most ${Clip.MAX_ROWS} rows and ${Clip.MAX_COLUMNS} columns: the rest was left out.`, 'error', 7000);
   },
@@ -2824,6 +3039,9 @@ const App = {
   attributeBar(note) {
     const bar = el('div', { class: 'attributes' });
     for (const a of note.attributes) {
+      // The notebook's own bookkeeping: which version of a supplied protocol this is. It says
+      // nothing to anyone reading the protocol, so it is not shown.
+      if (a.name === 'seedVersion') continue;
       // A day's or month's own label shown day-first (30-10-2026, 10-2026); it is kept as it is (2026-10-30).
       const shown = ['dateNote', 'monthNote', 'weekNote'].includes(a.name) && /^\d{4}-\d\d(-\d\d)?$/.test(a.value || '')
         ? a.value.split('-').reverse().join('-') : a.value;
@@ -2831,7 +3049,8 @@ const App = {
       bar.append(el('span', { class: `attr attr-${a.type}` }, text,
         a.type === 'relation' ? el('a', { href: `#note=${a.value}`, onclick: (e) => { e.preventDefault(); this.open(a.value); } },
           a.target_title || 'a deleted note') : null,
-        note.can_edit && !['dateNote', 'monthNote', 'yearNote', 'weekNote', 'notebookRoot', 'protocolLibrary', 'seed'].includes(a.name)
+        note.can_edit && !['dateNote', 'monthNote', 'yearNote', 'weekNote', 'notebookRoot', 'protocolLibrary',
+                           'seed', 'seedVersion'].includes(a.name)
           ? el('button', { class: 'attr-x', title: 'Remove', onclick: async () => {
             try { await api('DELETE', `/attributes/${a.id}`); note.attributes = note.attributes.filter((x) => x !== a); bar.replaceWith(this.attributeBar(note)); } catch (err) { toast(err.message, 'error'); }
           } }, '×') : null));

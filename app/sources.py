@@ -12,6 +12,7 @@ What the notebook takes from the other tools, read-only.
                     adapted like any other.
 """
 
+import hashlib
 import html
 import json
 import os
@@ -173,8 +174,8 @@ def moclo_protocol() -> List[dict]:
         {'type': 'text', 'html': (
             '<p>Modular Cloning (MoClo) Golden Gate assembly, from the MoClo Library Tool\'s protocol guide. '
             'Level 0 parts go into Level 1 cassettes with <b>BsaI</b>; Level 1 cassettes into Level 2 '
-            'multi-gene constructs with <b>BpiI</b>.</p>'
-            '<p>Use a 2:1 molar ratio of insert to vector: about 40 fmol of acceptor vector and 80 fmol '
+            'multi-gene constructs with <b>BbsI-HF/BpiI</b>.</p>'
+            '<p>Use a 1:3 molar ratio of acceptor vector to insert: about 40 fmol of vector and 120 fmol '
             'of each insert. ng = (fmol × bp × 660) / 1,000,000. Set the number of reactions to scale '
             'the totals.</p>')},
         {'type': 'table', 'title': 'Reaction setup (20 µL each)',
@@ -187,25 +188,28 @@ def moclo_protocol() -> List[dict]:
              {'name': 'Lot', 'kind': 'fill'},
              {'name': 'Added', 'kind': 'check'}],
          'rows': [{'cells': c} for c in [
-             ['10x Buffer G', '2', '', '1x', '', None],
-             ['100 mM ATP', '0.2', '', '1 mM', '', None],
+             ['10X rCutSmart Buffer (NEB)', '2', '', '1x', '', None],
+             ['100 mM ATP (Thermo)', '0.2', '', '1 mM', '', None],
              ['Acceptor vector (~40 fmol)', '', '', 'calculate from size', '', None],
-             ['Insert DNA (~80 fmol each)', '', '', '2:1 insert:vector', '', None],
-             ['BsaI (Level 1) or BpiI (Level 2)', '1', '', '10 units', '', None],
-             ['T4 DNA ligase', '0.4', '', '2 units', '', None],
+             ['Insert DNA (~120 fmol each)', '', '', '1:3 vector:insert', '', None],
+             ['BsaI-HF (Level 1) or BbsI-HF/BpiI (Level 2)', '1', '', '20 units (20,000 U/mL)', '', None],
+             ['T4 DNA ligase (NEB)', '1', '', '400 units (400,000 U/mL)', '', None],
              ['MQ water', '=20-SUM(B1:B6)', '', 'to 20 µL', '', None]]]},
         {'type': 'table', 'title': 'Thermal cycling', 'scale': None,
          'columns': [{'name': 'Step', 'kind': 'text'}, {'name': 'Temperature', 'kind': 'text'},
                      {'name': 'Time', 'kind': 'text'}, {'name': 'Cycles', 'kind': 'text'},
                      {'name': 'Purpose', 'kind': 'text'}],
          'rows': [{'cells': c} for c in [
-             ['1', '37 °C', '10 min', '60 cycles of steps 1–2', 'Digestion (BsaI/BpiI)'],
-             ['2', '22 °C', '10 min', '', 'Ligation (T4 ligase)'],
-             ['3', '37 °C', '10 min', '1', 'Final digestion'],
-             ['4', '65 °C', '20 min', '1', 'Enzyme inactivation'],
-             ['5', '12 °C', 'hold', '', 'Until transformation']]]},
-        {'type': 'text', 'html': '<p>For difficult assemblies with many inserts, raise the cycles from 60 '
-                                 'to 80–100.</p>'},
+             ['1', '37 °C', '20 sec', '1', 'Initial equilibration'],
+             ['2', '37 °C', '5 min', '30 cycles of steps 2–3', 'Restriction digestion'],
+             ['3', '16 °C', '5 min', '', 'Ligation (T4 ligase)'],
+             ['4', '37 °C', '10 min', '1', 'Final digestion'],
+             ['5', '50 °C', '5 min', '1', 'Partial enzyme denaturation'],
+             ['6', '80 °C', '5 min', '1', 'Complete heat inactivation'],
+             ['7', '12 °C', 'hold', '', 'Until transformation']]]},
+        {'type': 'text', 'html': '<p>For difficult or multipart assemblies, raise the number of '
+                                 'digestion/ligation cycles above 30, and transform the whole 20 µL '
+                                 'rather than 5–10 µL.</p>'},
         {'type': 'steps', 'title': 'Procedure', 'items': steps(
             'Plan the assembly in the MoClo tool: check part compatibility and overhangs',
             'For plant transformation: include a selection marker (e.g. BASTA) next to the left T-DNA '
@@ -213,13 +217,16 @@ def moclo_protocol() -> List[dict]:
             'Thaw all components on ice and label the PCR tubes',
             'Add in order: buffer, ATP, DNA, enzyme, ligase, water',
             'Mix gently by pipetting and spin down briefly',
-            'Run the MoClo program (60 cycles, about 20 hours; can run overnight)',
-            'Transform 5–10 µL into competent E. coli and plate on selective medium; 37 °C overnight',
+            'Run the MoClo program (30 digestion/ligation cycles, about 5.5 hours)',
+            'Transform 5–10 µL into competent E. coli, or the whole 20 µL for a difficult or '
+            'multipart assembly, and plate on selective medium; 37 °C overnight',
             'Pick 4–8 colonies and screen by colony PCR, or miniprep and restriction digest',
             'Confirm the construct by whole-plasmid sequencing')},
         {'type': 'text', 'html': (
-            '<p><b>Storage.</b> Enzymes at −20 °C; reaction mix at 4 °C (short term) or −20 °C; '
-            'transformed cells as glycerol stocks at −80 °C; plasmids at −20 °C in TE or water.</p>')},
+            '<p><b>Storage.</b> T4 ligase and BsaI/BbsI-HF/BpiI at −20 °C; reaction mix at 4 °C '
+            '(short term) or −20 °C; transformed cells as glycerol stocks at −80 °C; plasmids at '
+            '−20 °C in TE or water. MoClo components come from the −80 °C glycerol stocks; purified '
+            'plasmids, primers, buffers and enzymes live in the −20 °C freezer.</p>')},
     ]
 
 
@@ -367,16 +374,73 @@ SEEDS = [
 ]
 
 
+def _fingerprint(body: str) -> str:
+    return hashlib.sha256(body.encode('utf-8')).hexdigest()[:16]
+
+
 def seed_library() -> None:
-    """Put the starting protocols into the library, each once: deleting one keeps it out."""
+    """Put the starting protocols into the library, each once: deleting one keeps it out.
+
+    A supplied protocol is also brought up to date when the one here changes — the MoClo
+    protocol following the lab's SOP, say — but only while it is still as it was supplied.
+    The moment a lab changes its copy, that copy is theirs and is left alone; the update
+    then waits in this file for a lab that has not touched it. What was supplied last is
+    remembered as a 'seedVersion' label, so later changes can tell the two apart.
+    """
     from app import notes
     library = notes.library_root()
     with connect() as conn:
         for key, title, blocks, source in SEEDS:
-            if conn.execute("SELECT 1 FROM attributes WHERE name = 'seed' AND value = ?", (key,)).fetchone():
+            supplied = blocks()
+            # What this file says, which is the same from one start to the next. The content as it
+            # is stored cannot be compared instead: cleaning it gives every block a fresh id.
+            supplied_fp = _fingerprint(json.dumps(supplied, sort_keys=True, default=str))
+            row = conn.execute(
+                "SELECT n.id, n.revision, n.content, n.deleted_at FROM attributes a "
+                'JOIN notes n ON n.id = a.note_id '
+                "WHERE a.type = 'label' AND a.name = 'seed' AND a.value = ?", (key,)).fetchone()
+            if row:
+                _refresh_seed(conn, notes, row, title, supplied, supplied_fp, source)
                 continue
-            cleaned = content_mod.clean_blocks(blocks(), username=source)
+            cleaned = content_mod.clean_blocks(supplied, username=source)
             note_id = notes._create(conn, title=title, type='protocol', space='library',
                                     owner=None, by=None, parent_id=library, content=cleaned)
             notes._label(conn, note_id, 'seed', key)
+            notes._label(conn, note_id, 'seedVersion', f'{supplied_fp}:{_fingerprint(json.dumps(cleaned))}')
             notes._label(conn, note_id, 'source', source)
+
+
+def _refresh_seed(conn, notes, row, title: str, supplied: list, supplied_fp: str, source: str) -> None:
+    """A supplied protocol brought up to date, while the lab has not changed its copy.
+
+    The 'seedVersion' label remembers two things: what this file said when the protocol was last
+    supplied, so an unchanged file does nothing, and what was then written into the note, so an
+    edit since can be told apart from it.
+    """
+    if row['deleted_at']:
+        return
+    was = conn.execute("SELECT id, value FROM attributes WHERE note_id = ? AND type = 'label' "
+                       "AND name = 'seedVersion'", (row['id'],)).fetchone()
+    if was and was['value'].count(':') == 1:
+        last_supplied, last_written = was['value'].split(':')
+        if last_supplied == supplied_fp:
+            return                                   # this file has not changed: nothing to do
+        untouched = _fingerprint(row['content'] or '') == last_written
+    else:
+        # Supplied before any of this was remembered: never edited since means never edited.
+        untouched = row['revision'] == 1
+    if not untouched:
+        return
+    cleaned = content_mod.clean_blocks(supplied, username=source)
+    body = json.dumps(cleaned)
+    number = notes._keep_revision(conn, row['id'], title, body, source, 'updated',
+                                  f'Brought up to date with the protocol supplied by {source}')
+    conn.execute('UPDATE notes SET content = ?, search_text = ?, revision = ?, version = version + 1, '
+                 'updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                 (body, content_mod.plain_text(cleaned), number, source, row['id']))
+    notes._index_links(conn, row['id'], cleaned)
+    value = f'{supplied_fp}:{_fingerprint(body)}'
+    if was:
+        conn.execute('UPDATE attributes SET value = ? WHERE id = ?', (value, was['id']))
+    else:
+        notes._label(conn, row['id'], 'seedVersion', value)

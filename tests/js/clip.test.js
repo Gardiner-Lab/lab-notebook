@@ -64,4 +64,12 @@ assert.strictEqual(Clip.lists('just a sentence'), null);
 assert.strictEqual(Clip.lists('- only one'), null);
 assert.strictEqual(Clip.lists('o well\no dear'), null);
 
+// A cell is kept as markup, so copied words go in as words: a copied "<" or "&" stays what it was
+// and cannot bring tags of its own into the table.
+const risky = Clip.table([['Note'], ['a < b & "c"'], ['<b>bold</b>']]);
+assert.strictEqual(risky.rows[0].cells[0], 'a &#60; b &#38; &#34;c&#34;');
+assert.strictEqual(risky.rows[1].cells[0], '&#60;b&#62;bold&#60;/b&#62;');
+// The column is still read as text or numbers from what was copied, not from the escaping.
+assert.deepStrictEqual(Clip.table([['n'], ['1'], ['2']]).columns[0].kind, 'number');
+
 console.log('clip: all passed');

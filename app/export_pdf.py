@@ -236,7 +236,7 @@ class _Builder:
 
     def steps(self, block: dict) -> str:
         items = ''.join(
-            f'<li><span class="box">{"☑" if i.get("by") else "☐"}</span> {esc(i.get("text") or "")}'
+            f'<li><span class="box">{"☑" if i.get("by") else "☐"}</span> {self.text({"html": content.step_html(i)})}'
             + (f'<span class="tick">✓ {esc(self.ctx.who(i["by"]))} · {esc(self.ctx.when(i.get("at")))}</span>' if i.get('by') else '')
             + '</li>' for i in block.get('items') or [])
         title = f'<div class="block-title">{esc(block["title"])}</div>' if block.get('title') else ''
@@ -277,10 +277,13 @@ class _Builder:
                         f'<span class="tick">{esc(self.ctx.who(raw["by"]))} · {esc(self.ctx.when(raw.get("at")))}</span>'
                         if isinstance(raw, dict) and raw.get('by') else '') + '</td>' if raw else '<td><span class="box">☐</span></td>')
                     continue
-                text = raw if col.get('kind') == 'text' and not str(raw or '').startswith('=') else shown['display']
-                text = content.cell_text(text)   # @ links as their labels
+                plain = content.strip_tags(raw)
                 css = 'error' if shown.get('error') else ('num' if sheet._is_num(shown.get('value')) else '')
-                cells.append(f'<td class="{css}">{esc(str(text or ""))}</td>')
+                if col.get('kind') == 'text' and not plain.lstrip().startswith('='):
+                    # What was written, with its formatting; @ links as their labels.
+                    cells.append(f'<td class="{css}">{content.cell_markup(raw)}</td>')
+                else:
+                    cells.append(f'<td class="{css}">{esc(str(content.cell_text(shown["display"]) or ""))}</td>')
             body.append('<tr>' + ''.join(cells) + '</tr>')
         title = f'<div class="block-title">{esc(block["title"])}</div>' if block.get('title') else ''
         scale = block.get('scale')

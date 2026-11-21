@@ -669,3 +669,25 @@ def test_people_are_shown_by_their_display_names(as_user, world):
     from app import people
     ctx = exporting.collect(people.Person(username='ana'), day['id'])
     assert ctx.entries[0].created_by == 'Ana Silva' and ctx.subtitle.startswith("Ana Silva's notebook")
+
+
+def test_formatting_in_steps_and_cells_reaches_the_exports(as_user):
+    """Bold in a step or a cell is bold in the Word document, not markup and not lost."""
+    import docx
+    ana = as_user('ana')
+    page = ana.post('/api/notes', json={'parent_id': _me(ana)['notebook'], 'title': 'Formatted', 'content': [
+        {'type': 'steps', 'title': 'Procedure', 'items': [{'html': 'Spin at <b>13,000</b> g'}]},
+        {'type': 'table', 'title': 'Mix',
+         'columns': [{'name': 'Reagent', 'kind': 'text'}, {'name': 'Vol', 'kind': 'number'}],
+         'rows': [{'cells': ['<i>Buffer</i>', '<b>2</b>']}]},
+    ]}).get_json()['note']
+    _, _, got = _export(ana, page['id'], 'docx')
+    document = docx.Document(io.BytesIO(got.data))
+    runs = [r for p in document.paragraphs for r in p.runs]
+    step = next(p for p in document.paragraphs if '13,000' in p.text)
+    assert '<b>' not in step.text, 'the formatting is formatting, not markup on the page'
+    assert any(r.bold and '13,000' in r.text for r in runs), 'the step keeps its bold'
+    cells = [c for t in document.tables for row in t.rows for c in row.cells]
+    reagent = next(c for c in cells if c.text.strip() == 'Buffer')
+    assert any(r.italic for p in reagent.paragraphs for r in p.runs), 'the cell keeps its italic'
+    assert next(c for c in cells if c.text.strip() == '2'), 'a formatted number still reads as its number'

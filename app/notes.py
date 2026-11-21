@@ -1019,7 +1019,8 @@ def remove_attribute(person: Person, attr_id: str) -> None:
             raise Forbidden('You cannot change this note')
         # 'seed' marks a protocol supplied with the notebook: without it, the next
         # start would supply it again.
-        if attr['name'] in ('dateNote', 'monthNote', 'yearNote', 'weekNote', 'notebookRoot', 'protocolLibrary', 'seed'):
+        if attr['name'] in ('dateNote', 'monthNote', 'yearNote', 'weekNote', 'notebookRoot', 'protocolLibrary',
+                            'seed', 'seedVersion'):
             raise ValueError('This label keeps the notebook in order and cannot be removed')
         conn.execute('DELETE FROM attributes WHERE id = ?', (attr_id,))
 

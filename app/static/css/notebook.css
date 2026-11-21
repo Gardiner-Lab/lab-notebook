@@ -177,9 +177,12 @@ textarea.block-title { display: block; resize: none; overflow: hidden; line-heig
 .steps-list li.dragging { opacity: .4; }
 .steps-list li.drop-before { box-shadow: 0 -2px 0 var(--accent, #2f6f4f); }
 .steps-list li.drop-after { box-shadow: 0 2px 0 var(--accent, #2f6f4f); }
-textarea.step-text { display: inline-block; resize: none; overflow: hidden; line-height: 1.4; vertical-align: top; }
-.steps-list li > textarea.step-text { vertical-align: top; }
-textarea.step-text:focus { outline: 1px solid var(--border); border-radius: .3rem; }
+/* A step takes formatting, so it is written in, not typed into a box. */
+div.step-text { display: inline-block; line-height: 1.4; vertical-align: top; outline: none; min-height: 1.4em; }
+.steps-list li > div.step-text { vertical-align: top; }
+div.step-text:focus { outline: 1px solid var(--border); border-radius: .3rem; }
+div.step-text:empty::before { content: attr(data-placeholder); color: var(--muted); }
+.step-text mark { background: #fef08a; color: inherit; border-radius: .15rem; padding: 0 .1rem; }
 .tick { font-size: .75rem; color: var(--ok); margin-left: .4rem; white-space: nowrap; }
 
 .section-box { border-left: 4px solid var(--tt-brown); padding-left: .8rem; }
@@ -204,8 +207,13 @@ textarea.step-text:focus { outline: 1px solid var(--border); border-radius: .3re
 .sheet th input.col-name:hover { border-bottom-color: var(--border); }
 .sheet th input.col-name:focus { outline: none; border-bottom: 1px solid var(--accent); }
 .sheet th .col-formula { font-family: ui-monospace, monospace; font-weight: 400; font-size: .72rem; color: var(--tt-booking); }
-.sheet .cell { font: inherit; width: 100%; min-width: 4.5rem; border: 0; padding: .3rem .4rem; background: transparent; }
+/* A cell takes formatting too, so it is written in rather than typed into an input. One line: what
+   is pasted into it joins up, and the row keeps its height. */
+.sheet .cell { font: inherit; width: 100%; min-width: 4.5rem; border: 0; padding: .3rem .4rem; background: transparent;
+  outline: none; min-height: 1.5em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sheet .cell:empty::before { content: attr(data-placeholder); color: var(--muted); }
 .sheet .cell:focus { outline: 2px solid var(--primary); outline-offset: -2px; background: #fff; }
+.sheet .cell mark { background: #fef08a; color: inherit; border-radius: .15rem; padding: 0 .1rem; }
 .sheet .cell.kind-text { min-width: 11rem; }
 .sheet .cell.kind-number, .sheet .cell.kind-scaled, .sheet .cell.kind-formula { text-align: right; font-variant-numeric: tabular-nums; }
 .sheet .cell.computed { color: var(--tt-booking); font-weight: 600; }

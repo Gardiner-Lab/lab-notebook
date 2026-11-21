@@ -124,6 +124,9 @@
       return grid;
     },
 
+    // A cell is kept as markup (app/content.py INLINE_TAGS), so copied words go in as words.
+    escape: (v) => String(v).replace(/[&<>"]/g, (ch) => `&#${ch.charCodeAt(0)};`),
+
     number: (v) => v.trim() !== '' && Number.isFinite(Number(v.trim().replace(',', '.'))),
     ticked: (v) => /^(true|yes|ja|waar|x|✓|✔|1|done)$/i.test(v.trim()),
 
@@ -140,7 +143,7 @@
         unit: '', formula: '',
       }));
       return { id: newId(), type: 'table', title: '', scale: null, columns,
-        rows: body.map((row) => ({ id: newId(), cells: row.map((v) => v.trim()) })) };
+        rows: body.map((row) => ({ id: newId(), cells: row.map((v) => this.escape(v.trim())) })) };
     },
   };
 

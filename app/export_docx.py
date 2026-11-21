@@ -379,9 +379,18 @@ class _Writer:
         if block.get('title'):
             doc.add_paragraph().add_run(block['title']).bold = True
         for n, item in enumerate(block.get('items') or [], 1):
-            p = doc.add_paragraph()
+            # The step's own words, with their formatting, then the box and number in front.
+            marker = len(doc.paragraphs)
+            self.text({'html': content.step_html(item)})
+            if len(doc.paragraphs) == marker:
+                doc.add_paragraph()
+            p = doc.paragraphs[marker]
             p.paragraph_format.left_indent = self.Inches(0.25)
-            p.add_run(f'{"☑" if item.get("by") else "☐"} {n}. {item.get("text") or ""}')
+            box = f'{"☑" if item.get("by") else "☐"} {n}. '
+            if p.runs:
+                p.runs[0].text = f'{box}{p.runs[0].text}'
+            else:
+                p.add_run(box)
             if item.get('by'):
                 run = p.add_run(f'   ✓ {self.ctx.who(item["by"])} · {self.ctx.when(item.get("at"))}')
                 run.font.size = self.Pt(8)
@@ -450,9 +459,16 @@ class _Writer:
                         run.font.color.rgb = self.RGBColor(*GREEN)
                     continue
                 shown = computed[r][c]
-                text = raw if col.get('kind') == 'text' and not str(raw or '').startswith('=') else shown['display']
-                text = content.cell_text(text)   # @ links as their labels
-                run = p.add_run(str(text or ''))
+                plain = content.strip_tags(raw)
+                if col.get('kind') == 'text' and not plain.lstrip().startswith('='):
+                    # What was written, with its formatting; @ links as their labels.
+                    start = len(p.runs)
+                    for child in richtext.parse(content.cell_markup(raw)).children:
+                        self._inline(p, child, [], {})
+                    for run in p.runs[start:]:
+                        run.font.size = self.Pt(9)
+                    continue
+                run = p.add_run(str(content.cell_text(shown['display']) or ''))
                 run.font.size = self.Pt(9)
                 if shown.get('error'):
                     run.font.color.rgb = self.RGBColor(0xB9, 0x1C, 0x1C)

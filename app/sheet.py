@@ -11,6 +11,8 @@ import math
 import re
 from typing import Any, Callable, Dict, List, Optional
 
+from app import content
+
 
 class _Pending:
     def __repr__(self):
@@ -316,8 +318,11 @@ def compute(table: dict) -> List[List[dict]]:
         return (rows[r] or {}).get('cells') or []
 
     def raw_at(r, c):
+        """A cell's value. A cell may carry formatting, which is not part of the
+        value: "<b>5</b>" is the number 5, and a formula stays one however it looks."""
         cs = cells(r)
-        return cs[c] if c < len(cs) else None
+        raw = cs[c] if c < len(cs) else None
+        return content.strip_tags(raw) if isinstance(raw, str) else raw
 
     row_used = [any((col or {}).get('kind') != 'check' and str('' if raw_at(r, c) is None else raw_at(r, c)).strip() != ''
                     for c, col in enumerate(columns)) for r in range(len(rows))]

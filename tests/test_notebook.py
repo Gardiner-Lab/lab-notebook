@@ -783,3 +783,89 @@ def test_a_pages_waste_disposal_box_is_kept_as_written(as_user):
     from app import content as content_mod
     assert 'Halogenated organic waste' in content_mod.plain_text(saved['content'])
     assert content_mod.IMPORTED_LABELS['disposal'].startswith('How and where')
+
+
+def test_steps_and_cells_keep_their_formatting(as_user):
+    """Bold, italic, a colour and a marker belong in a step and in a table cell, not only in text.
+    Anything outside that subset is dropped, and a step and a cell stay one line."""
+    ana = as_user('ana')
+    day = ana.post('/api/days', json={'date': '2026-10-20'}).get_json()['note']
+    content = [
+        {'id': 's1', 'type': 'steps', 'title': 'Do', 'items': [
+            {'id': 'i1', 'html': 'Spin at <b>13,000</b> <i>g</i>'},
+            # Steps were plain text before they could be formatted: one saved then still reads right.
+            {'id': 'i2', 'text': 'Mix well & wait'},
+            {'id': 'i3', 'html': '<p onclick="x()">Lyse</p><script>evil()</script>'},
+            {'id': 'i4', 'html': 'one<br>two'},
+        ]},
+        {'id': 'b1', 'type': 'table', 'title': 'T',
+         'columns': [{'name': 'Sample', 'kind': 'text'}, {'name': 'OD', 'kind': 'number'}],
+         'rows': [{'id': 'r1', 'cells': ['<b>WT</b> <img src=x onerror=y>', '<b>0.61</b>']}]},
+    ]
+    saved = ana.put(f"/api/notes/{day['id']}",
+                    json={'content': content, 'base_version': day['version']}).get_json()['note']
+    steps, table = saved['content']
+    assert steps['items'][0]['html'] == 'Spin at <b>13,000</b> <i>g</i>'
+    assert steps['items'][1]['html'] == 'Mix well &amp; wait', 'an older plain step reads as it was written'
+    assert steps['items'][2]['html'] == 'Lyse', 'no scripts, no blocks: a step is one line'
+    assert steps['items'][3]['html'] == 'one two', 'a step stays one line'
+    assert table['rows'][0]['cells'][0] == '<b>WT</b>', 'a picture is not a cell value'
+    assert table['rows'][0]['cells'][1] == '<b>0.61</b>'
+
+
+def test_a_formatted_cell_is_still_read_as_its_number(as_user):
+    """Formatting is not part of what a cell says: the arithmetic and the search see through it."""
+    from app import content as content_mod
+    from app import sheet
+    table = {'columns': [{'name': 'A', 'kind': 'number'}, {'name': 'B', 'kind': 'formula', 'formula': '=A*2'}],
+             'rows': [{'id': 'r', 'cells': ['<b>21</b>', '']}]}
+    assert sheet.compute(table)[0][1]['value'] == 42
+    assert content_mod.cell_text('<b>WT</b> [pGFP](plasmid:p1)') == 'WT pGFP'
+    words = content_mod.plain_text([
+        {'type': 'steps', 'items': [{'html': 'Spin at <b>13,000</b> g'}]},
+        {'type': 'table', 'columns': [{'name': 'Sample', 'kind': 'text'}],
+         'rows': [{'cells': ['<mark class="hl-yellow">WT</mark>']}]}])
+    assert '13,000' in words and 'WT' in words and '<b>' not in words
+
+
+def test_a_supplied_protocol_is_brought_up_to_date_unless_the_lab_changed_it(as_user, world, monkeypatch):
+    """A protocol supplied with the notebook follows this file when it changes, but only while
+    nobody has edited it: a lab's own version of it is theirs and is left alone."""
+    from app import sources
+    # The supplied list is stood in for here, and put back for the tests that follow.
+    monkeypatch.setattr(sources, 'SEEDS', list(sources.SEEDS))
+    supplied = lambda blocks: [(sources.MOCLO_PROTOCOL_KEY, 'MoClo Golden Gate assembly',
+                                lambda: blocks, 'MoClo Library Tool')]
+    ana = as_user('ana')
+    found = [p for p in ana.get('/api/protocols').get_json()['protocols']
+             if p['title'] == 'MoClo Golden Gate assembly']
+    assert found, 'the MoClo protocol is supplied'
+    moclo_id = found[0]['id']
+    before = ana.get(f'/api/notes/{moclo_id}').get_json()['note']
+    assert 'rCutSmart' in content_of(before), 'the supplied protocol follows the lab SOP'
+
+    # Seeding again changes nothing while the protocol is as it was supplied.
+    sources.seed_library()
+    same = ana.get(f'/api/notes/{moclo_id}').get_json()['note']
+    assert same['version'] == before['version'], 'nothing to do, so no new version'
+
+    # A newer supplied protocol reaches a copy nobody has touched.
+    monkeypatch.setattr(sources, 'SEEDS', supplied([{'type': 'text', 'html': '<p>A newer MoClo protocol</p>'}]))
+    sources.seed_library()
+    updated = ana.get(f'/api/notes/{moclo_id}').get_json()['note']
+    assert 'A newer MoClo protocol' in content_of(updated) and updated['version'] > before['version']
+
+    # Once a lab changes its copy, a later supplied version leaves it alone.
+    boss = as_user('boss')          # an admin may change a protocol supplied with the notebook
+    mine = boss.put(f'/api/notes/{moclo_id}',
+                    json={'content': [{'type': 'text', 'html': '<p>Our own way</p>'}],
+                          'base_version': updated['version']})
+    assert mine.status_code == 200, mine.get_json()
+    monkeypatch.setattr(sources, 'SEEDS', supplied([{'type': 'text', 'html': '<p>Newer still</p>'}]))
+    sources.seed_library()
+    kept = ana.get(f'/api/notes/{moclo_id}').get_json()['note']
+    assert 'Our own way' in content_of(kept) and 'Newer still' not in content_of(kept)
+
+
+def content_of(note):
+    return json.dumps(note['content'])
