@@ -5,6 +5,8 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-11-21
+
 ### Changed
 - **The supplied MoClo protocol follows the lab's SOP, and supplied protocols are kept up to date.**
   The MoClo Golden Gate protocol in the library now matches the MoClo Library Tool: 10X rCutSmart
