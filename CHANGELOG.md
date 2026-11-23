@@ -5,6 +5,13 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-11-23
+
+### Changed
+- **A file attached to a page can be 50 MB, where it was 25 MB.** A photograph straight off a
+  microscope or a phone often passes 25 MB, and had to be shrunk before it would go on the day's
+  page. One upload as a whole now carries 128 MB, so several such photos still go up together.
+
 ## [0.31.0] - 2026-11-21
 
 ### Changed

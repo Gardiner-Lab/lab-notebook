@@ -32,7 +32,7 @@ from app import notes, viewer
 from app.db import connect
 from app.people import Person
 
-MAX_BYTES = 25 * 1024 * 1024
+MAX_BYTES = 50 * 1024 * 1024
 # Shown in pages. Anything else is downloaded.
 INLINE_TYPES = {'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp'}
 # Opened in the browser's own viewer, in a tab of its own.
