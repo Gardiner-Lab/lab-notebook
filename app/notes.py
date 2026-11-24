@@ -44,7 +44,7 @@ from app.people import Person
 
 LIBRARY_TITLE = 'Protocol library'
 # The notes of a notebook that can be shared to work on together.
-SHARED_PAGE_TYPES = ('page', 'day')
+SHARED_PAGE_TYPES = ('page', 'day', 'meeting')
 # One person's edits closer together than this make one revision.
 REVISION_WINDOW_MINUTES = 10
 NOTE_TYPES = ('page', 'protocol', 'folder')
@@ -167,6 +167,10 @@ def _demo_sees(person: Person, note) -> bool:
 
 
 def can_view(person: Person, note) -> bool:
+    if note['space'] == 'project':
+        # A task's page: its project's members (app/projects.py).
+        from app import projects
+        return projects.can_view_note(person, note)
     if getattr(person, 'in_demo', False) and not _demo_sees(person, note):
         return False
     if note['space'] == 'library':
@@ -187,6 +191,8 @@ def can_view(person: Person, note) -> bool:
 
 def can_edit(person: Person, note) -> bool:
     """Change this note's title, content and attributes."""
+    if note['space'] == 'project':
+        return can_view(person, note)       # every member of the project works on its tasks
     if note['space'] == 'library':
         if note['type'] == 'library':
             return False
@@ -203,6 +209,8 @@ def can_edit(person: Person, note) -> bool:
 
 def can_add_under(person: Person, parent) -> bool:
     """Put a new note (or a note moved here) under this one."""
+    if parent['space'] == 'project':
+        return False                         # a task's page has its notes on itself
     if parent['space'] == 'library':
         if parent['type'] == 'library':
             return True
@@ -259,6 +267,12 @@ def summary(row) -> dict:
 
 def get(person: Person, note_id: str) -> dict:
     row = _visible(person, note_id)
+    if row['type'] == 'meeting':
+        # A repeating meeting's open action items from its last meeting come onto this one (app/meetings.py).
+        from app import meetings
+        if meetings.carry_over(note_id):
+            with connect() as conn:
+                row = _row(conn, note_id)
     with connect() as conn:
         # Where it is, as far as this person may see: a page shared and shown
         # under someone else's page does not show their page to its owner.
@@ -287,7 +301,7 @@ def get(person: Person, note_id: str) -> dict:
             # The shared pages it is in, to work on together, and who with.
             'shared_in': [{**r, 'with': _share_labels(conn, r['id'])} for r in share_roots],
             'can_edit': can_edit(person, row),
-            'can_delete': can_edit(person, row) and row['type'] not in ('notebook', 'library')
+            'can_delete': can_edit(person, row) and row['type'] not in ('notebook', 'library', 'task')
                           and not (shared_root and row['owner'] != person.username and not person.is_admin),
             'can_add': can_add_under(person, row),
             'can_share': can_share(person, row),
@@ -305,6 +319,14 @@ def get(person: Person, note_id: str) -> dict:
             # And its week's to-do list, if made (app/todos.py).
             from app import todos
             note['todo'] = todos.find(conn, row['owner'], todos.monday(date.fromisoformat(iso)))
+        # A meeting's page: when and where, and who is invited (app/meetings.py).
+        if row['type'] == 'meeting':
+            from app import meetings
+            note['meeting'] = meetings.for_note(conn, person, note_id)
+        # A task's page: its project, dates, what it waits for, and where it was talked about (app/projects.py).
+        if row['type'] == 'task':
+            from app import projects
+            note['task'] = projects.for_note(conn, person, note_id)
     note['backlinks'] = [summary(b) for b in backlinks if can_view(person, b)]
     return note
 
@@ -531,30 +553,46 @@ def _child_with_label(conn, parent_id: str, name: str, value: str) -> Optional[s
 
 def day(person: Person, when: Optional[date] = None) -> str:
     """The person's page for a day, under Year › Month, made if it is not there yet."""
-    when = when or date.today()
-    root = notebook_root(person.username)
-    year, month, iso = str(when.year), when.strftime('%Y-%m'), when.isoformat()
+    return day_for(person.username, when)
+
+
+def day_for(username: str, when: Optional[date] = None) -> str:
+    """Someone's page for a day, made if it is not there yet: also for a meeting they are invited to."""
     with connect() as conn:
-        year_id = _child_with_label(conn, root, 'yearNote', year)
-        if not year_id:
-            year_id = _create(conn, title=year, type='year', space='notebook', owner=person.username,
-                              by=person.username, parent_id=root)
-            _label(conn, year_id, 'yearNote', year)
-        month_id = _child_with_label(conn, year_id, 'monthNote', month)
-        if not month_id:
-            month_id = _create(conn, title=dates.month_title(when), type='month',
-                               space='notebook', owner=person.username, by=person.username, parent_id=year_id)
-            _label(conn, month_id, 'monthNote', month)
-        day_id = _child_with_label(conn, month_id, 'dateNote', iso)
-        if not day_id:
-            day_id = _create(conn, title=dates.day_title(when), type='day',
-                             space='notebook', owner=person.username, by=person.username, parent_id=month_id,
-                             content=[{'id': content_mod.new_id(), 'type': 'text', 'html': ''}])
-            _label(conn, day_id, 'dateNote', iso)
-            # Its week's to-do list, if that week has one (app/todos.py).
-            from app import todos
-            todos.place_on_day(conn, person.username, when, day_id)
-        return day_id
+        return day_in(conn, username, when or date.today())
+
+
+def day_in(conn, username: str, when: date) -> str:
+    """day_for, within a transaction already open."""
+    found = conn.execute("SELECT id FROM notes WHERE type = 'notebook' AND owner = ? AND deleted_at IS NULL",
+                         (username,)).fetchone()
+    if found:
+        root = found['id']
+    else:
+        root = _create(conn, title=f"{username}'s notebook", type='notebook', space='notebook',
+                       owner=username, by=username)
+        _label(conn, root, 'notebookRoot')
+    year, month, iso = str(when.year), when.strftime('%Y-%m'), when.isoformat()
+    year_id = _child_with_label(conn, root, 'yearNote', year)
+    if not year_id:
+        year_id = _create(conn, title=year, type='year', space='notebook', owner=username,
+                          by=username, parent_id=root)
+        _label(conn, year_id, 'yearNote', year)
+    month_id = _child_with_label(conn, year_id, 'monthNote', month)
+    if not month_id:
+        month_id = _create(conn, title=dates.month_title(when), type='month',
+                           space='notebook', owner=username, by=username, parent_id=year_id)
+        _label(conn, month_id, 'monthNote', month)
+    day_id = _child_with_label(conn, month_id, 'dateNote', iso)
+    if not day_id:
+        day_id = _create(conn, title=dates.day_title(when), type='day',
+                         space='notebook', owner=username, by=username, parent_id=month_id,
+                         content=[{'id': content_mod.new_id(), 'type': 'text', 'html': ''}])
+        _label(conn, day_id, 'dateNote', iso)
+        # Its week's to-do list, if that week has one (app/todos.py).
+        from app import todos
+        todos.place_on_day(conn, username, when, day_id)
+    return day_id
 
 
 # Sections other tools put into a day, by kind: where each comes from.
@@ -689,8 +727,9 @@ def save(person: Person, note_id: str, title: Optional[str] = None, content: Opt
     if base_version is not None and int(base_version) != row['version']:
         raise Stale(get(person, note_id))
     new_title = (title.strip()[:200] or 'Untitled') if isinstance(title, str) else row['title']
-    if row['type'] in ('year', 'month', 'day', 'todo'):
-        new_title = row['title']          # a day is named by its date, a to-do list by its week
+    if row['type'] in ('year', 'month', 'day', 'todo', 'meeting', 'task'):
+        # A day is named by its date, a to-do list by its week, a meeting's page by its meeting.
+        new_title = row['title']
     previous = json.loads(row['content'] or '[]')
     blocks = previous if content is None else content_mod.clean_blocks(content, previous, person.username)
     body = json.dumps(blocks)
@@ -799,6 +838,8 @@ def delete(person: Person, note_id: str) -> None:
         row = _row(conn, note_id)
         if row['type'] in ('notebook', 'library') or not can_edit(person, row):
             raise Forbidden('You cannot delete this note')
+        if row['type'] == 'task':
+            raise ValueError("A task's page goes with its task: delete the task in its project")
         booked = _booked_inside(conn, row)
         if booked:
             raise ValueError(f'There is a booking on {booked}, so the notebook keeps its page: '
@@ -808,10 +849,11 @@ def delete(person: Person, note_id: str) -> None:
             raise Forbidden('Only its owner can delete a page shared with you; you can delete the pages under it')
         going = _owned_subtree(conn, note_id, row['owner'])
         for nid in going:
-            # A week's to-do list stays while another day of the week, not going, still shows it.
+            # A week's to-do list stays while another day of the week, not going, still shows it;
+            # a meeting's page while it is under someone else's day.
             if nid != note_id and conn.execute(
                     "SELECT 1 FROM notes n JOIN branches b ON b.note_id = n.id JOIN notes p ON p.id = b.parent_id "
-                    "WHERE n.id = ? AND n.type = 'todo' AND p.deleted_at IS NULL AND p.id NOT IN ({})".format(
+                    "WHERE n.id = ? AND n.type IN ('todo', 'meeting') AND p.deleted_at IS NULL AND p.id NOT IN ({})".format(
                         ','.join('?' * len(going))), (nid, *going)).fetchone():
                 continue
             # Notes already deleted on their own stay their own deletion.
@@ -834,7 +876,8 @@ def deleted(person: Person) -> List[dict]:
     with connect() as conn:
         rows = conn.execute(
             'SELECT n.*, (SELECT COUNT(*) FROM notes g WHERE g.deleted_root = n.id) AS with_it '
-            'FROM notes n WHERE n.deleted_at IS NOT NULL AND (n.deleted_root = n.id OR n.deleted_root IS NULL) '
+            "FROM notes n WHERE n.deleted_at IS NOT NULL AND n.space != 'project' "
+            'AND (n.deleted_root = n.id OR n.deleted_root IS NULL) '
             'ORDER BY n.deleted_at DESC LIMIT 500').fetchall()
         found = []
         for r in rows:
@@ -1019,7 +1062,7 @@ def remove_attribute(person: Person, attr_id: str) -> None:
             raise Forbidden('You cannot change this note')
         # 'seed' marks a protocol supplied with the notebook: without it, the next
         # start would supply it again.
-        if attr['name'] in ('dateNote', 'monthNote', 'yearNote', 'weekNote', 'notebookRoot', 'protocolLibrary',
+        if attr['name'] in ('dateNote', 'monthNote', 'yearNote', 'weekNote', 'meetingDate', 'notebookRoot', 'protocolLibrary',
                             'seed', 'seedVersion'):
             raise ValueError('This label keeps the notebook in order and cannot be removed')
         conn.execute('DELETE FROM attributes WHERE id = ?', (attr_id,))

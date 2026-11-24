@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from flask import Blueprint, Response, jsonify, request, send_file
 
-from app import attachments, exporting, notes, people, sources, todos, viewer
+from app import attachments, exporting, meetings, notes, people, projects, sources, todos, viewer
 
 api = Blueprint('api', __name__)
 
@@ -43,6 +43,8 @@ def me(person):
     notebook = notes.notebook_root(person.username)
     # Each day they have a booking on gets its page, before the notebook is shown.
     notes.pages_for_bookings(person)
+    # And this week's and next week's meetings they organise or are invited to (app/meetings.py).
+    meetings.pages_for(person)
     return jsonify({'person': person.to_dict(),
                     # How people are shown: username -> display name, for those who set one.
                     'names': people.display_names(),
@@ -90,6 +92,186 @@ def bring_task_back(person, todo_id, item_id):
     """A task moved on, back on this week's list."""
     todos.bring_back(person, todo_id, item_id)
     return jsonify({'note': notes.get(person, todo_id)})
+
+
+@api.get('/meetings')
+@signed_in
+def list_meetings(person):
+    """The meetings they organise or are invited to, and whom they may invite."""
+    return jsonify({'meetings': meetings.mine(person), 'invitable': meetings.invitable(person),
+                    'repeats': meetings.REPEATS})
+
+
+@api.post('/meetings')
+@signed_in
+def create_meeting(person):
+    return jsonify({'meeting': meetings.create(person, _body())}), 201
+
+
+@api.get('/meetings/<meeting_id>')
+@signed_in
+def get_meeting(person, meeting_id):
+    return jsonify({'meeting': meetings.get(person, meeting_id)})
+
+
+@api.put('/meetings/<meeting_id>')
+@signed_in
+def update_meeting(person, meeting_id):
+    return jsonify({'meeting': meetings.update(person, meeting_id, _body())})
+
+
+@api.get('/meetings/week')
+@signed_in
+def meetings_week(person):
+    """The week of meetings from ?start= (a date in the week; this week when left out), for the Meetings tab."""
+    raw = request.args.get('start', '').strip()
+    try:
+        start = date.fromisoformat(raw) if raw else meetings.today()
+    except ValueError:
+        raise ValueError('start must be YYYY-MM-DD')
+    return jsonify(meetings.week(person, start))
+
+
+@api.post('/meetings/<meeting_id>/dates/<day>')
+@signed_in
+def meeting_page(person, meeting_id, day):
+    """A date's page, made now if it is not yet."""
+    try:
+        when = date.fromisoformat(day)
+    except ValueError:
+        raise ValueError('The date must be YYYY-MM-DD')
+    return jsonify({'note': notes.get(person, meetings.page_for(person, meeting_id, when))})
+
+
+@api.post('/meetings/<meeting_id>/end')
+@signed_in
+def end_meeting(person, meeting_id):
+    """No more after today."""
+    return jsonify({'meeting': meetings.end(person, meeting_id)})
+
+
+# --- projects (app/projects.py) ---------------------------------------------------------
+
+@api.get('/projects')
+@signed_in
+def list_projects(person):
+    return jsonify({'projects': projects.mine(person), 'invitable': projects.invitable(person)})
+
+
+@api.post('/projects')
+@signed_in
+def create_project(person):
+    return jsonify({'project': projects.create(person, _body())}), 201
+
+
+@api.get('/projects/pick')
+@signed_in
+def pick_from_projects(person):
+    """The work packages and tasks of their projects, to put one on a page."""
+    return jsonify({'projects': projects.pickable(person)})
+
+
+@api.get('/projects/section')
+@signed_in
+def project_section(person):
+    """A task or work package as a section for a page (?kind=task|workpackage&id=...)."""
+    return jsonify({'section': projects.section(person, request.args.get('kind', ''), request.args.get('id', ''))})
+
+
+@api.get('/projects/<project_id>')
+@signed_in
+def get_project(person, project_id):
+    return jsonify({'project': projects.get(person, project_id)})
+
+
+@api.post('/projects/<project_id>/gantt.pdf')
+@signed_in
+def gantt_pdf(person, project_id):
+    """The Gantt chart the page drew (an SVG, in 'svg') as a PDF, with a table of the tasks."""
+    pdf = projects.gantt_pdf(person, project_id, str(_body().get('svg') or ''))
+    response = Response(pdf, mimetype='application/pdf')
+    response.headers['Content-Disposition'] = 'attachment; filename="gantt.pdf"'
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
+@api.put('/projects/<project_id>')
+@signed_in
+def update_project(person, project_id):
+    return jsonify({'project': projects.update(person, project_id, _body())})
+
+
+@api.delete('/projects/<project_id>')
+@signed_in
+def delete_project(person, project_id):
+    projects.delete(person, project_id)
+    return jsonify({'ok': True})
+
+
+@api.post('/projects/<project_id>/members')
+@signed_in
+def add_project_member(person, project_id):
+    return jsonify({'project': projects.add_member(person, project_id, str(_body().get('username') or ''))}), 201
+
+
+@api.delete('/projects/<project_id>/members/<username>')
+@signed_in
+def remove_project_member(person, project_id, username):
+    return jsonify({'project': projects.remove_member(person, project_id, username)})
+
+
+@api.post('/projects/<project_id>/workpackages')
+@signed_in
+def add_workpackage(person, project_id):
+    return jsonify({'project': projects.add_workpackage(person, project_id, _body())}), 201
+
+
+@api.put('/workpackages/<wp_id>')
+@signed_in
+def update_workpackage(person, wp_id):
+    return jsonify({'project': projects.update_workpackage(person, wp_id, _body())})
+
+
+@api.delete('/workpackages/<wp_id>')
+@signed_in
+def delete_workpackage(person, wp_id):
+    return jsonify({'project': projects.delete_workpackage(person, wp_id)})
+
+
+@api.get('/workpackages/<wp_id>')
+@signed_in
+def get_workpackage(person, wp_id):
+    return jsonify({'workpackage': projects.workpackage_ref(person, wp_id)})
+
+
+@api.get('/tasks/<task_id>')
+@signed_in
+def get_task(person, task_id):
+    return jsonify({'task': projects.task_ref(person, task_id)})
+
+
+@api.get('/workpackages/<wp_id>/discussed')
+@signed_in
+def workpackage_discussed(person, wp_id):
+    return jsonify({'discussed': projects.workpackage_discussed(person, wp_id)})
+
+
+@api.post('/projects/<project_id>/tasks')
+@signed_in
+def add_task(person, project_id):
+    return jsonify(projects.add_task(person, project_id, _body())), 201
+
+
+@api.put('/tasks/<task_id>')
+@signed_in
+def update_task(person, task_id):
+    return jsonify(projects.update_task(person, task_id, _body()))
+
+
+@api.delete('/tasks/<task_id>')
+@signed_in
+def delete_task(person, task_id):
+    return jsonify(projects.delete_task(person, task_id))
 
 
 @api.get('/notes/<note_id>/children')

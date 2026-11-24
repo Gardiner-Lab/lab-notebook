@@ -5,6 +5,52 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-24
+
+### Added
+- **Meetings, once or repeating, with a page under the day for everyone invited.** Press
+  **Meetings** under **Today** (or **＋ Meeting** on a day page) to set one up: a title, the first
+  date, the time, where, an agenda, and how often it repeats: once, every week, every two or four
+  weeks, or monthly on the same weekday (the second Tuesday, the last Friday), until a last date or
+  for good. Invite anyone with an account in Trellis Tools, whatever their lab. Each date gets a page, made for this week and next as
+  soon as anyone involved opens the notebook, like the week's to-do list. The page sits under the
+  day of the organiser and of everyone invited, and is shared with them, so all of them write on
+  the same page. It holds the agenda, an attendance list (ticked by whom and when), notes, and
+  action items that can tag plasmids, stocks, seed lots, tracks and pages with @. Everyone invited
+  takes notes on the page; only the organiser changes the meeting itself.
+  Changing a meeting reaches its pages from today on: one nobody has written on is made again, and
+  one already written on keeps its notes and gets the new title and the people added or taken off.
+  Deleting one date's page skips that date, and ending the meeting stops it after today.
+- **A repeating meeting's open action items go on to its next meeting.** From the day after a
+  meeting, its action items not ticked off appear on the next meeting's page, marked with the
+  meeting they came from, and stay on the earlier page marked as carried (as the to-do list moves a
+  task on to next week). Items added to the earlier page later follow too, and one still open at
+  the next meeting is carried on again. Not on the meeting's own day, so nothing changes under the
+  people writing on its page.
+- **A Meetings tab: your week of meetings on a schedule.** A column per day and a time grid, as in
+  the Booking tool, with the weeks before and after a click away. Meetings at the same time stand
+  side by side; a date skipped shows struck through. Click one to open its page; a page for a week
+  further ahead than next is made when it is opened.
+- **Projects: work packages, tasks and subtasks, what waits for what, and a Gantt chart.** A new
+  **Projects** tab. A project has members (anyone in Trellis Tools, invited by whoever set it up),
+  who all add and change its work packages and tasks. A task has a start, a length in days, the
+  people working on it, and may wait for other tasks: it starts the day after the last of them
+  finishes, plus a lag. Change when a task finishes, or tick it done earlier or later than planned,
+  and everything waiting for it moves, and a message says what moved; a loop is refused. A task
+  with subtasks spans them, and its subtasks wait for what it waits for. A Gantt chart of work
+  packages, tasks and subtasks, with arrows for what waits for what and a line for today, is
+  drawn at the top of the project.
+  Each task is also a page, for its description and notes, with @ links to protocols, stocks,
+  seeds and plasmids, attachments and a history.
+- **The Gantt chart exports as a PDF, a PNG or an SVG.** The PDF puts the chart on a landscape
+  page (A3 for a long project) followed by a table of every task: its dates, length, what it waits
+  for, who works on it and when it was done. The PNG is a picture at twice the size on screen, for
+  slides; the SVG a drawing for papers and posters. Each carries the project's name and the date.
+- **Tasks on meeting agendas and notebook pages.** On a meeting's page, **Agenda item…** puts a
+  task or work package of your projects on the agenda (**Task…** on any day or page of your
+  notebook). What is written under it is kept with it: the task's page lists, under **Talked
+  about**, every meeting and page it was put on, with the date and what was said.
+
 ## [0.32.0] - 2026-11-23
 
 ### Changed

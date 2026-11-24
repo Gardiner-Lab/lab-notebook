@@ -405,5 +405,8 @@ def links(blocks: List[dict]) -> List[Tuple[str, str]]:
                 walk(block.get('blocks'))
                 if block.get('source', {}).get('kind') == 'protocol' and block['source'].get('id'):
                     found.add(('note', block['source']['id']))
+                # A task or work package put on a page (a meeting's agenda item): app/projects.py.
+                if block.get('source', {}).get('kind') in ('task', 'workpackage') and block['source'].get('id'):
+                    found.add((block['source']['kind'], block['source']['id']))
     walk(blocks)
     return sorted(found)

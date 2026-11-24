@@ -166,7 +166,7 @@ const IMPORTED = {
 };
 /** The waste disposal box at the foot of a page that links chemicals. */
 const isDisposalBox = (b) => !!b && b.type === 'section' && b.source?.kind === 'disposal';
-const ICONS = { notebook: 'notebook', library: 'library', year: 'calendar', month: 'calendar', day: 'calendar', page: 'text', folder: 'folder', protocol: 'protocol', todo: 'steps' };   // glyphs
+const ICONS = { notebook: 'notebook', library: 'library', year: 'calendar', month: 'calendar', day: 'calendar', page: 'text', folder: 'folder', protocol: 'protocol', todo: 'steps', meeting: 'people', task: 'cube' };   // glyphs
 const noteGlyph = (type) => glyph(ICONS[type] || 'text');
 const editorLink = (id) => `${NB.editor}/editor?open=${encodeURIComponent(id)}`;
 const SEED_KINDS = { L: 'line', S: 'lot', P: 'plant' };
@@ -674,7 +674,8 @@ const Blocks = {
    */
   tasks(block, ctx) {
     const list = el('ul', { class: 'task-list' });
-    const wrap = el('div', { class: 'tasks' }, list);
+    // A meeting's action items carry a title; a week's to-do list is the page itself, and has none.
+    const wrap = el('div', { class: 'tasks' }, block.title ? el('div', { class: 'block-title', text: block.title }) : null, list);
     const dmy = (iso) => String(iso || '').split('-').reverse().join('-');
     const RANK = { high: 0, medium: 1, normal: 2, low: 3 };
     // Clicked, the marker goes up a level, from high on to low, and from low back to normal.
@@ -796,13 +797,16 @@ const Blocks = {
           document.execCommand('insertText', false, e.clipboardData.getData('text/plain').replace(/\s*[\r\n]+\s*/g, ' '));
         });
       }
-      const moveBtn = moved || !ctx.editable ? null : el('button', { class: 'btn btn-sm btn-secondary', hidden: done || null,
+      const moveBtn = moved || !ctx.editable || !ctx.todo ? null : el('button', { class: 'btn btn-sm btn-secondary', hidden: done || null,
         title: "Move this task on to next week's to-do list", onclick: () => act(item, 'move') }, '→ Next week');
       const marks = el('div', { class: 'task-marks' }, tick,
-        item.from_week ? el('span', { class: 'hint' }, ` from the week of ${dmy(item.from_week)}`) : null,
-        moved ? el('span', { class: 'hint' }, `→ moved on to the week of ${dmy(item.moved)}`) : null);
+        // On a week's to-do list a task moves on to next week; a meeting's action item is carried to its next meeting.
+        item.from_week ? el('span', { class: 'hint' }, ctx.todo ? ` from the week of ${dmy(item.from_week)}`
+          : ` from the meeting of ${dmy(item.from_week)}`) : null,
+        moved ? el('span', { class: 'hint' }, ctx.todo ? `→ moved on to the week of ${dmy(item.moved)}`
+          : `→ carried to the meeting of ${dmy(item.moved)}`) : null);
       const actions = !ctx.editable ? null : el('span', { class: 'task-actions' },
-        moved ? el('button', { class: 'btn btn-sm btn-secondary', title: "Put it back on this week's list, and take it off next week's",
+        moved && ctx.todo ? el('button', { class: 'btn btn-sm btn-secondary', title: "Put it back on this week's list, and take it off next week's",
           onclick: () => act(item, 'back') }, 'Bring back')
           : moveBtn,
         moved ? null : el('button', { class: 'icon-btn', title: 'Remove this task', onclick: () => {
@@ -1962,13 +1966,18 @@ const Blocks = {
     const origin = src.kind === 'protocol'
       ? el('span', {}, 'Protocol', src.version ? ` · version ${src.version}` : '', ' · ',
         el('a', { href: `#note=${src.id}`, onclick: (e) => { e.preventDefault(); App.open(src.id); } }, 'open it'))
+      : src.kind === 'task' || src.kind === 'workpackage'
+        ? el('span', {}, src.kind === 'task' ? 'Task' : 'Work package', src.name ? ` of ${src.name}` : '', ' · ',
+          el('a', { href: '#', onclick: (e) => { e.preventDefault(); Projects.openSource(src); } }, 'open it'),
+          el('span', {}, ' · what is written here shows on it'))
       : src.kind === 'moclo-reaction' ? el('span', {}, 'From the MoClo Library Tool')
         : IMPORTED[src.kind] ? el('span', {}, IMPORTED[src.kind][1]) : null;
     const inner = el('div', { class: 'section-blocks' });
     this.renderList(block.blocks, inner, ctx);
     return el('div', { class: 'section-box' },
       el('div', { class: 'section-head' },
-        el('span', { class: 'section-icon' }, glyph(src.kind === 'moclo-reaction' ? 'cassette' : IMPORTED[src.kind]?.[0] || 'protocol')),
+        el('span', { class: 'section-icon' }, glyph(src.kind === 'moclo-reaction' ? 'cassette' : src.kind === 'task' ? 'steps'
+          : src.kind === 'workpackage' ? 'cube' : IMPORTED[src.kind]?.[0] || 'protocol')),
         ctx.editable
           ? el('input', { type: 'text', class: 'section-title', value: block.title || '',
             oninput: (e) => { block.title = e.target.value; ctx.changed(); } })
@@ -2306,6 +2315,150 @@ const Shares = {
   },
 };
 
+/* --- meetings (app/meetings.py) ------------------------------------------------- */
+
+const Meetings = {
+  /** The meetings someone organises or is invited to; set up a new one. */
+  async list() {
+    let data;
+    try { data = await api('GET', '/meetings'); } catch (err) { toast(err.message, 'error'); return; }
+    modal({
+      title: 'Meetings',
+      wide: true,
+      build: (body, close) => {
+        const row = (m) => el('tr', {},
+          el('td', {}, el('b', { text: m.title }), m.ended ? el('span', { class: 'hint' }, ' · ended') : null,
+            el('div', { class: 'hint' }, `${m.when} · ${m.start_time}–${m.end_time}${m.location ? ` · ${m.location}` : ''}`)),
+          el('td', { class: 'hint nowrap' }, m.next ? `Next: ${dayMonthYear(m.next)}` : 'No more dates'),
+          el('td', { class: 'hint' }, m.can_edit
+            ? (m.people.length ? `With ${m.people.map(who).join(', ')}` : 'No one invited')
+            : `Set up by ${who(m.owner)}`),
+          el('td', { class: 'nowrap' }, m.can_edit && !m.ended ? el('button', {
+            class: 'btn btn-secondary btn-sm', onclick: () => { close(); this.edit(m, { data }); },
+          }, 'Change') : null));
+        body.append(
+          el('p', { class: 'hint' }, 'A meeting gets a page under the day it falls on, for this week and next, in your notebook ',
+            'and in the notebook of everyone invited: one page you all write on, with the agenda, who came, notes and action items.'),
+          data.meetings.length
+            ? el('table', { class: 'library-table meeting-table' }, el('tbody', {}, data.meetings.map(row)))
+            : el('p', { class: 'hint' }, 'No meetings yet.'));
+      },
+      buttons: [{ label: 'Close', kind: 'secondary' },
+        { label: '＋ New meeting', onClick: () => { this.edit(null, { data }); } }],
+    });
+  },
+
+  /** Set up a meeting (m null), on a day if given, or change one. */
+  async edit(m, { day = null, data = null } = {}) {
+    try { data = data || await api('GET', '/meetings'); } catch (err) { toast(err.message, 'error'); return; }
+    const pad = (n) => String(n).padStart(2, '0');
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const text = (html) => {
+      const doc = new DOMParser().parseFromString(html || '', 'text/html');
+      return [...doc.body.children].map((p) => p.textContent).join('\n') || doc.body.textContent || '';
+    };
+    const html = (t) => t.split('\n').map((line) => line.trim()).filter(Boolean)
+      .map((line) => `<p>${line.replace(/[<>&]/g, (ch) => `&#${ch.charCodeAt(0)};`)}</p>`).join('');
+    const field = (label, input, hint) => el('label', { class: 'meeting-field' }, el('span', {}, label), input,
+      hint ? el('span', { class: 'hint' }, hint) : null);
+    const title = el('input', { type: 'text', value: m?.title || '', placeholder: 'e.g. Lab meeting', maxlength: 120 });
+    const first = el('input', { type: 'text', inputmode: 'numeric', placeholder: 'dd-mm-yyyy',
+      value: dayMonthYear(m?.starts_on || day || todayIso) });
+    const start = el('input', { type: 'text', inputmode: 'numeric', placeholder: 'HH:MM', maxlength: 5, value: m?.start_time || '10:00' });
+    const end = el('input', { type: 'text', inputmode: 'numeric', placeholder: 'HH:MM', maxlength: 5, value: m?.end_time || '11:00' });
+    const repeat = el('select', {}, Object.entries(data.repeats).map(([value, label]) =>
+      el('option', { value, selected: (m?.repeat || 'weekly') === value || null }, label)));
+    const until = el('input', { type: 'text', inputmode: 'numeric', placeholder: 'dd-mm-yyyy, or leave empty',
+      value: m?.until ? dayMonthYear(m.until) : '' });
+    const untilField = field('Last date', until, 'Empty: it goes on until you end it.');
+    const showUntil = () => { untilField.hidden = repeat.value === 'none'; };
+    repeat.addEventListener('change', showUntil);
+    showUntil();
+    const place = el('input', { type: 'text', value: m?.location || '', placeholder: 'e.g. Room 2.12, or a video link', maxlength: 200 });
+    const agenda = el('textarea', { rows: 4, placeholder: 'One point per line' }, text(m?.agenda));
+    const chosen = new Set(m?.people || []);
+    const filter = el('input', { type: 'search', placeholder: 'Find someone…' });
+    const boxes = el('div', { class: 'meeting-people' });
+    const draw = () => {
+      const q = filter.value.trim().toLowerCase();
+      put(boxes, data.invitable.length ? data.invitable
+        .filter((u) => !q || chosen.has(u) || `${u} ${who(u)}`.toLowerCase().includes(q))
+        .map((u) => el('label', { class: 'meeting-person' },
+          el('input', { type: 'checkbox', checked: chosen.has(u) || null,
+            onchange: (e) => { if (e.target.checked) chosen.add(u); else chosen.delete(u); count.textContent = `${chosen.size} invited`; } }),
+          ` ${who(u)}`))
+        : el('p', { class: 'hint' }, 'No one else has an account yet.'));
+    };
+    const count = el('span', { class: 'hint' }, `${chosen.size} invited`);
+    filter.addEventListener('input', draw);
+    draw();
+    const isoOf = (box, what, optional = false) => {
+      if (optional && !box.value.trim()) return null;
+      const iso = isoFromDayMonthYear(box.value);
+      if (!iso) throw new Error(`Type the ${what} as dd-mm-yyyy, for example 05-11-2026`);
+      return iso;
+    };
+    const save = async () => {
+      const body = {
+        title: title.value, starts_on: isoOf(first, 'first date'), start_time: start.value, end_time: end.value,
+        repeat: repeat.value, until: repeat.value === 'none' ? null : isoOf(until, 'last date', true),
+        location: place.value, agenda: html(agenda.value), people: [...chosen],
+      };
+      const { meeting } = m ? await api('PUT', `/meetings/${m.id}`, body) : await api('POST', '/meetings', body);
+      toast(m ? 'Meeting changed' : `Meeting set up: ${meeting.when}`, 'success');
+      await this.after();
+    };
+    const buttons = [{ label: 'Cancel', kind: 'secondary' }];
+    if (m) {
+      buttons.push({ label: 'End meeting…', kind: 'danger', onClick: ({ close }) => { this.end(m, close); return false; } });
+    }
+    buttons.push({ label: m ? 'Save' : 'Set up meeting', onClick: save });
+    modal({
+      title: m ? `Change “${m.title}”` : 'New meeting',
+      wide: true,
+      build: (body) => body.append(el('div', { class: 'meeting-form' },
+        field('Title', title),
+        el('div', { class: 'meeting-row' }, field('First date', first), field('From', start, '24-hour clock'), field('To', end)),
+        el('div', { class: 'meeting-row' }, field('Repeats', repeat), untilField),
+        field('Where', place),
+        field('Agenda', agenda, 'Put at the top of every meeting\'s page; each page can then be written on by itself.'),
+        el('div', { class: 'meeting-field' }, el('span', {}, 'Invite ', count), filter, boxes,
+          el('span', { class: 'hint' }, 'Anyone in Trellis Tools. Its pages are shared with them and show under their days: they take notes on them, '
+            + 'and only you change the meeting itself.')),
+        m ? el('p', { class: 'hint' }, 'Changes reach the pages from today on: one nobody has written on is made again; one written on keeps what is written. ',
+          'Pages of days gone by stay as they were. To skip one date, delete its page.') : null)),
+      buttons,
+    });
+  },
+
+  /** No more dates after today; pages already written on stay. */
+  end(m, closeForm) {
+    modal({
+      title: `End “${m.title}”?`,
+      build: (body) => body.append(el('p', {}, 'No more pages are made after today. Pages to come that nobody has written on go; ',
+        'pages with notes on them, and every page of days gone by, stay.')),
+      buttons: [{ label: 'Keep it', kind: 'secondary' }, {
+        label: 'End meeting', kind: 'danger', onClick: async () => {
+          await api('POST', `/meetings/${m.id}/end`);
+          closeForm();
+          toast('Meeting ended', 'success');
+          await this.after();
+        },
+      }],
+    });
+  },
+
+  /** After a change: the tree, and the page shown, as they are now. */
+  async after() {
+    if (App.note) {
+      try { await App.refresh(); } catch { await App.reloadTrees(); }
+    } else {
+      await App.reloadTrees();
+    }
+  },
+};
+
 /* --- the note ------------------------------------------------------------------- */
 
 const App = {
@@ -2324,6 +2477,7 @@ const App = {
       return;
     }
     document.getElementById('btnToday').addEventListener('click', () => this.startDay());
+    document.getElementById('btnMeetings').addEventListener('click', () => { location.hash = '#meetings'; });
     // Another day is typed as dd-mm-yyyy (the browser's own date box follows its language, often
     // yyyy-mm-dd or mm/dd/yyyy), or chosen on the browser's calendar from the button beside it.
     const dayBox = document.getElementById('dayPicker');
@@ -2367,7 +2521,7 @@ const App = {
     Search.init();
     this.watch();
     await Promise.all([this.reloadTrees(), this.loadFavorites()]);
-    if (location.hash.startsWith('#protocols') || location.hash.startsWith('#deleted')) this.route();
+    if (/^#(protocols|deleted|meetings|projects?)/.test(location.hash)) this.route();
     else {
       const start = this.hashNote() || store.get('last', null);
       if (start) this.open(start, { quiet: true });
@@ -2378,27 +2532,31 @@ const App = {
   route() {
     if (location.hash.startsWith('#protocols')) { this.showLibrary(); return; }
     if (location.hash.startsWith('#deleted')) { this.showDeleted(); return; }
+    if (location.hash.startsWith('#meetings')) { MeetingWeek.show(); return; }
+    const project = (location.hash.match(/^#project=([\w-]+)/) || [])[1];
+    if (project) { Projects.showProject(project); return; }
+    if (location.hash.startsWith('#projects')) { Projects.showList(); return; }
     const id = this.hashNote();
-    if (id && (id !== this.note?.id || !document.getElementById('library').hidden)) this.open(id);
+    if (id && (id !== this.note?.id || document.getElementById('note').hidden)) this.open(id);
   },
 
   setTab(name) {
     document.getElementById('tabNotebook').classList.toggle('active', name === 'notebook');
     document.getElementById('tabProtocols').classList.toggle('active', name === 'protocols');
+    document.getElementById('tabMeetings').classList.toggle('active', name === 'meetings');
+    document.getElementById('tabProjects').classList.toggle('active', name === 'projects');
   },
 
   /** Show one of the main views (note, library, deleted, or none), hiding the others. */
   view(name) {
-    for (const [id, key] of [['note', 'note'], ['library', 'library'], ['deletedView', 'deleted'], ['emptyState', 'empty']]) {
+    for (const [id, key] of [['note', 'note'], ['library', 'library'], ['deletedView', 'deleted'], ['emptyState', 'empty'],
+      ['meetingsView', 'meetings'], ['projectsView', 'projects']]) {
       document.getElementById(id).hidden = key !== name;
     }
   },
 
   showEmpty() {
-    document.getElementById('note').hidden = true;
-    document.getElementById('library').hidden = true;
-    document.getElementById('deletedView').hidden = true;
-    document.getElementById('emptyState').hidden = false;
+    this.view('empty');
     this.setTab('notebook');
   },
 
@@ -2542,11 +2700,13 @@ const App = {
     }
     this.view('note');
     const box = document.getElementById('note');
-    this.setTab(note.space === 'library' ? 'protocols' : 'notebook');
+    this.setTab(note.space === 'library' ? 'protocols' : note.space === 'project' ? 'projects'
+      : note.type === 'meeting' ? 'meetings' : 'notebook');
     Tree.markActive(note.id);
     for (const f of document.querySelectorAll('.fav-item')) f.classList.toggle('active', f.dataset.id === note.id);
     const editable = note.can_edit;
-    const ctx = { editable, changed: () => this.changed() };
+    // ctx.todo: a week's to-do list, whose tasks move on to next week; a meeting's action items do not.
+    const ctx = { editable, todo: note.type === 'todo', changed: () => this.changed() };
 
     const crumbs = el('nav', { class: 'crumbs' }, note.path.slice(0, -1).map((p, i) => [
       i ? el('span', { class: 'crumb-sep' }, '›') : null,
@@ -2556,7 +2716,7 @@ const App = {
         if (p.type !== 'notebook') this.open(p.id);
       } }, p.title)]));
 
-    const fixedTitle = !editable || ['day', 'month', 'year', 'todo'].includes(note.type);
+    const fixedTitle = !editable || ['day', 'month', 'year', 'todo', 'meeting', 'task'].includes(note.type);
     const title = fixedTitle
       ? el('h1', { class: 'note-title', text: note.title })
       : el('input', { type: 'text', class: 'note-title', value: note.title,
@@ -2607,6 +2767,11 @@ const App = {
             } catch (err) { toast(err.message, 'error'); }
           },
         }, glyph('steps'), note.todo ? " Week's to-do" : " ＋ Week's to-do") : null,
+        note.type === 'day' && editable && note.owner === NB.person.username ? el('button', {
+          class: 'btn btn-sm btn-secondary',
+          title: 'Set up a meeting on this day, once or repeating, and invite people: it is shared with them and shows under their days too',
+          onclick: () => Meetings.edit(null, { day: (note.attributes.find((a) => a.name === 'dateNote') || {}).value }),
+        }, glyph('people'), ' ＋ Meeting') : null,
         note.can_share ? el('button', {
           class: 'btn btn-secondary btn-sm',
           title: note.space === 'library' ? 'Share this protocol with other labs'
@@ -2625,7 +2790,7 @@ const App = {
 
     this._blocks = { blocks, ctx };
     put(box, crumbs, el('div', { class: 'note-head' }, title), meta, this.attributeBar(note), this.bookingsPanel(note),
-      blocks, editable ? this.insertBar(note, blocks, ctx) : null, note.has_children ? this.childCards(note) : null,
+      this.meetingPanel(note), Projects.taskPanel(note), blocks, editable ? this.insertBar(note, blocks, ctx) : null, note.has_children ? this.childCards(note) : null,
       this.attachmentPanel(note), this.linksPanel(note));
   },
 
@@ -2731,7 +2896,28 @@ const App = {
       el('button', { class: 'btn btn-secondary btn-sm', onclick: () => add({ id: newId(), type: 'steps', title: '', items: [{ id: newId(), text: '' }] }) }, glyph('steps'), ' Steps'),
       el('button', { class: 'btn btn-secondary btn-sm', title: 'A gel photo: click the wells you used, and name the sample in each',
         onclick: () => this.addGel(note, add) }, '▥ Gel photo…'),
-      note.space === 'notebook' ? el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
+      note.space === 'notebook' ? el('button', {
+        class: 'btn btn-secondary btn-sm',
+        title: note.type === 'meeting' ? 'Put a task or work package of your projects on the agenda: what is written under it shows on the task'
+          : 'Put a task or work package of your projects on this page: what is written under it shows on the task',
+        onclick: async () => {
+          let section;
+          try { section = await Projects.pickSection(); } catch (err) { toast(err.message, 'error'); return; }
+          if (!section) return;
+          add(section);
+          // On a meeting's page an agenda item goes with the agenda: before the attendance list.
+          const at = note.type === 'meeting' ? note.content.findIndex((b) => b.type === 'steps' && b.title === 'Attendance') : -1;
+          const now = note.content.indexOf(section);
+          if (at >= 0 && now > at) {
+            note.content.splice(now, 1);
+            note.content.splice(at, 0, section);
+            Blocks.renderList(note.content, blocks, ctx);
+            this.changed();
+            blocks.querySelector(`[data-block="${section.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+          }
+        },
+      }, glyph('cube'), note.type === 'meeting' ? ' Agenda item…' : ' Task…') : null,
+      note.space !== 'library' ? el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
         const protocol = await pickProtocol();
         if (!protocol) return;
         try {
@@ -3138,6 +3324,21 @@ const App = {
       data.upcoming.map((b, i) => [i ? ' · ' : '', el('a', { href: open(b), target: '_blank', rel: 'noopener' },
         `${dayOf(b.start)} ${time(b.start)} ${b.resource.name}`)])) : null);
     return panel;
+  },
+
+  /** A meeting's page (app/meetings.py): when and where, how often, and who is invited. */
+  meetingPanel(note) {
+    const m = note.meeting;
+    if (!m) return null;
+    return el('div', { class: 'meeting-panel' },
+      el('div', {}, glyph('people'), ' ', el('b', {}, `${dayMonthYear(m.date)} · ${m.start_time}–${m.end_time}`),
+        m.location ? ` · ${m.location}` : null, el('span', { class: 'hint' }, ` · ${m.when}${m.ended ? ' (ended)' : ''}`)),
+      el('div', { class: 'hint' }, `Set up by ${who(m.owner)}`,
+        m.people.length ? `, with ${m.people.map(who).join(', ')}` : '',
+        '. Everyone invited has this page under their day and takes notes on it; only the organiser changes the meeting.'),
+      m.can_edit && !m.ended ? el('div', { class: 'meeting-actions' },
+        el('button', { class: 'btn btn-secondary btn-sm', title: 'Change the time, the place, how often or who is invited',
+          onclick: () => Meetings.edit(m) }, glyph('pencil'), ' Change meeting')) : null);
   },
 
   linksPanel(note) {

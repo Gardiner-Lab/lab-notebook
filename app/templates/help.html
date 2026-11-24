@@ -24,6 +24,8 @@
         <a href="#shape">How it is arranged</a>
         <a href="#day">Writing a day</a>
         <a href="#todo">The week's to-do list</a>
+        <a href="#meetings">Meetings</a>
+        <a href="#projects">Projects</a>
         <a href="#text">Writing and formatting</a>
         <a href="#tables">Tables</a>
         <a href="#steps">Steps</a>
@@ -108,6 +110,71 @@
         <p>Whoever can change the day page can change its week's list; those who can only read it see it as
            it is. A day page that is deleted takes the list with it only when no other day of the week shows
            it.</p>
+    </section>
+
+    <section id="meetings">
+        <h2>Meetings</h2>
+        <p>A meeting, once or repeating, gets a page of its own under the day it falls on, in your notebook and in
+           the notebook of everyone you invite. It is one page you all write on: the agenda, who came, notes and
+           action items.</p>
+        <ol class="steps">
+            <li>Open the <b>Meetings</b> tab at the top (or the <b>Meetings</b> button under <b>Today</b>): your week of
+                meetings on a schedule, a column per day, with ‹ and › to the weeks before and after. Press
+                <b>＋ New meeting</b> there, or <b>＋ Meeting</b> on a day page to set one up on that day. Click a meeting to
+                open its page; a page for a week further ahead is made when you open it.</li>
+            <li>Give it a title, the first date, the time, where it is and an agenda, and choose how often it
+                repeats: once, every week, every two or four weeks, or every month on the same weekday (the second
+                Tuesday, the last Friday). A repeating meeting can stop at a last date, or go on until you end it.</li>
+            <li>Tick the people to invite: anyone with an account in Trellis Tools, whatever their lab. Each
+                meeting's page is shared with them, and shows under their day as well as yours.</li>
+            <li>The pages of this week's and next week's meetings are made as soon as you, or anyone invited, opens
+                the notebook; each week the next one follows, as the to-do list does.</li>
+            <li>On the page, tick who came under <b>Attendance</b> (the tick says who ticked it and when), write
+                under <b>Notes</b>, press <b>Agenda item…</b> to put a task or work package of one of your projects on the
+                agenda (see <a href="#projects">Projects</a>), and put what is to be done under <b>Action items</b>, where <code>@</code> tags
+                a plasmid, a stock, a seed lot, a track or a page.</li>
+        </ol>
+        <p>A repeating meeting carries its action items on: the day after a meeting, the action items not ticked off
+           go onto the next meeting's page, saying which meeting they came from, and stay on the earlier page marked as
+           carried. Anything added to the earlier page later follows too, and an item still open at the next meeting is
+           carried on again. Tick it on the newest page it is on.</p>
+        <p>Everyone invited takes notes on the meeting's page, as on any page shared with them. Only whoever set
+           the meeting up changes the meeting itself: its time, place, agenda, how often it repeats and who is
+           invited. They change it from the meeting's page (<b>Change meeting</b>) or from the
+           <b>Meetings</b> list. A change reaches the pages from today on: a page nobody has written on is made again
+           as the meeting now is; a page already written on keeps what was written, and gets the new title and the
+           people added or taken off. Pages of days gone by stay as they were. To skip one date, delete its page:
+           it is not made again (it comes back from <b>Deleted</b> like any page). <b>End meeting</b> stops it after
+           today.</p>
+    </section>
+
+    <section id="projects">
+        <h2>Projects</h2>
+        <p>The <b>Projects</b> tab plans work: a project has work packages, each with tasks, and tasks may have subtasks.
+           A Gantt chart of it all is drawn as you go.</p>
+        <ol class="steps">
+            <li>Press <b>＋ New project</b>, and tick the people to invite: anyone in Trellis Tools. Every member adds and
+                changes work packages and tasks; whoever set it up also renames it, invites and takes people off
+                (<b>Members</b>), and deletes it.</li>
+            <li>Add a <b>work package</b>, then its tasks with <b>＋ Task</b>, and subtasks with <b>＋</b> beside a task. A
+                task has a start, a length in days, and the people working on it; a task with subtasks spans them.</li>
+            <li>Under <b>Waits for</b>, tick the tasks that must finish first. It then starts the day after the last of them
+                finishes, plus a lag of days if you give one (2 for seeds to dry). Its subtasks wait with it.</li>
+            <li>Change when a task finishes, by its length or start, or tick it done earlier or later than planned
+                (<b>Done on</b>), and every task waiting for it moves, and those waiting for them: a message says which.
+                A loop of tasks waiting for each other is refused.</li>
+            <li>Click a task to open its page: write its description and notes there, with tables, steps, photos and
+                <code>@</code> links to protocols, stocks, seeds and plasmids, as on any page, with its history.</li>
+            <li>On a meeting's page press <b>Agenda item…</b>, or on any day or page of your notebook <b>Task…</b>, and choose
+                a task or work package of your projects. It goes on the page as a section: what you write in it shows on
+                the task's page under <b>Talked about</b> (and under <b>Talked about…</b> of a work package), with the
+                meeting and its date.</li>
+        </ol>
+        <p><b>⤓ Export chart</b>, above the Gantt chart, saves it as a PDF (the chart on a landscape page, then a table
+           of the tasks with their dates, what they wait for, who works on them and when they were done), a PNG picture
+           for slides, or an SVG drawing that stays sharp at any size, for papers and posters.</p>
+        <p>Days are calendar days, weekends included. Deleting a task takes its subtasks and its page with it; what was
+           written about it on meeting pages and days stays there.</p>
     </section>
 
     <section id="text">

@@ -48,7 +48,8 @@ _threads: Dict[str, threading.Thread] = {}
 _lock = threading.Lock()
 
 TYPE_NAMES = {'notebook': 'Notebook', 'library': 'Protocol library', 'year': 'Year', 'month': 'Month',
-              'day': 'Day', 'page': 'Page', 'folder': 'Folder', 'protocol': 'Protocol', 'todo': 'To-do list'}
+              'day': 'Day', 'page': 'Page', 'folder': 'Folder', 'protocol': 'Protocol', 'todo': 'To-do list',
+              'meeting': 'Meeting', 'task': 'Task'}
 # Shown as text in the export: a table or a list of lines.
 TABLE_TYPES = ('text/csv', 'text/tab-separated-values')
 TEXT_TYPES = ('text/', 'chemical/x-genbank', 'chemical/x-fasta')

@@ -17,7 +17,8 @@ _path: Optional[str] = None
 
 SCHEMA = """
 -- A note: a page of a notebook, a day, a protocol, or a folder of them.
--- type: notebook | library | year | month | day | page | protocol
+-- type: notebook | library | year | month | day | page | protocol | todo | meeting | task
+-- space 'project': a task's page, seen by its project's members (column project).
 -- space: 'notebook' (owned by `owner`) or 'library' (the shared protocols).
 CREATE TABLE IF NOT EXISTS notes (
     id TEXT PRIMARY KEY,
@@ -161,6 +162,110 @@ CREATE TABLE IF NOT EXISTS todo_pending (
     PRIMARY KEY (from_note, from_item)
 );
 CREATE INDEX IF NOT EXISTS idx_todo_pending_week ON todo_pending(owner, week);
+
+-- Meetings (app/meetings.py): set up by their organiser (owner), once or repeating
+-- (repeat: none | weekly | fortnightly | four-weekly | monthly), from starts_on until
+-- until (none: for good). Times are the lab's local time, HH:MM.
+CREATE TABLE IF NOT EXISTS meetings (
+    id TEXT PRIMARY KEY,
+    owner TEXT NOT NULL,
+    title TEXT NOT NULL,
+    starts_on TEXT NOT NULL,
+    until TEXT,
+    repeat TEXT NOT NULL DEFAULT 'none',
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    location TEXT NOT NULL DEFAULT '',
+    agenda TEXT NOT NULL DEFAULT '',
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ended_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_meetings_owner ON meetings(owner);
+-- Who is invited: the meeting's pages are shared with them and sit under their days.
+CREATE TABLE IF NOT EXISTS meeting_people (
+    meeting_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    PRIMARY KEY (meeting_id, username)
+);
+CREATE INDEX IF NOT EXISTS idx_meeting_people_user ON meeting_people(username);
+-- A date of a meeting whose page has been made (note_id); kept when the page is
+-- deleted, so a date skipped is not made again.
+CREATE TABLE IF NOT EXISTS meeting_dates (
+    meeting_id TEXT NOT NULL,
+    day TEXT NOT NULL,
+    note_id TEXT,
+    PRIMARY KEY (meeting_id, day)
+);
+CREATE INDEX IF NOT EXISTS idx_meeting_dates_note ON meeting_dates(note_id);
+
+-- Projects (app/projects.py): work packages, tasks and subtasks, what waits for what.
+CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    owner TEXT NOT NULL,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS project_members (
+    project_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    added_by TEXT,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (project_id, username)
+);
+CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members(username);
+CREATE TABLE IF NOT EXISTS workpackages (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    position INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_workpackages_project ON workpackages(project_id);
+-- A task: start_on is the start it is given (or was last given by what it waits for), duration in
+-- calendar days; sched_start and sched_end are the dates worked out (app/projects.py schedule).
+-- note_id: its page (a note of type 'task').
+CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    wp_id TEXT NOT NULL,
+    parent_id TEXT,
+    note_id TEXT,
+    title TEXT NOT NULL,
+    start_on TEXT NOT NULL,
+    duration INTEGER NOT NULL DEFAULT 1,
+    sched_start TEXT,
+    sched_end TEXT,
+    done_on TEXT,
+    done_by TEXT,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_note ON tasks(note_id);
+CREATE TABLE IF NOT EXISTS task_people (
+    task_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    PRIMARY KEY (task_id, username)
+);
+-- task_id waits for after_id to finish, then lag days more.
+CREATE TABLE IF NOT EXISTS task_deps (
+    task_id TEXT NOT NULL,
+    after_id TEXT NOT NULL,
+    lag INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (task_id, after_id)
+);
+CREATE INDEX IF NOT EXISTS idx_task_deps_after ON task_deps(after_id);
 """
 
 
@@ -175,6 +280,8 @@ _ADDED_COLUMNS = [
     # The lab a protocol or library folder belongs to (the suite's lab id, as
     # text): its author's, when it was written. None: every lab's.
     ('lab', 'TEXT'),
+    # The project a task's page belongs to (space 'project', app/projects.py).
+    ('project', 'TEXT'),
 ]
 
 
