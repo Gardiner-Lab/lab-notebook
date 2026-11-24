@@ -250,3 +250,44 @@ def _ok_put(client, note):
     r = client.put(f"/api/notes/{note['id']}", json={'content': note['content']})
     assert r.status_code == 200, r.get_json()
     return r.get_json()['note']
+
+
+def test_an_action_item_goes_on_ones_own_to_do_list(as_user, monkeypatch):
+    from app import bookings
+    monkeypatch.setattr(bookings, 'today', lambda: TODAY)
+    ana, ben, zoe = as_user('ana'), as_user('ben'), as_user('zoe')
+    _meeting(ana)
+    page = _get(ana, _meeting_pages(ana, MONDAY)[0]['id'])
+    page['content'][3]['items'] = [{'id': 'a1', 'html': 'Order primers', 'priority': 'high'},
+                                   {'id': 'a2', 'html': 'Book the confocal'}, {'id': 'a3', 'html': ''}]
+    page = _ok_put(ana, page)
+    version = page['version']
+    # Ben, invited, takes the first: it is on his list of this week, saying where it came from.
+    r = ben.post(f"/api/notes/{page['id']}/tasks/a1/todo")
+    assert r.status_code == 200, r.get_json()
+    todo = _get(ben, r.get_json()['todo'])
+    assert todo['type'] == 'todo' and todo['owner'] == 'ben'
+    item = next(b for b in todo['content'] if b['type'] == 'tasks')['items'][0]
+    assert (item['html'], item['priority'], item['from_note'], item['from_week']) == (
+        'Order primers', 'high', page['id'], MONDAY.isoformat())
+    # The meeting's page is not changed; it says whose list the item is on.
+    seen = _get(ana, page['id'])
+    assert seen['version'] == version
+    assert seen['on_todo'] == {'a1': [{'username': 'ben', 'done_at': None}]}
+    # Not twice; not an empty one; not by someone not at the meeting.
+    assert ben.post(f"/api/notes/{page['id']}/tasks/a1/todo").status_code == 400
+    assert ben.post(f"/api/notes/{page['id']}/tasks/a3/todo").status_code == 400
+    assert zoe.post(f"/api/notes/{page['id']}/tasks/a2/todo").status_code == 404
+    # Ana takes it too; ben ticks his: the meeting shows the tick, and a mark kept on later edits.
+    assert ana.post(f"/api/notes/{page['id']}/tasks/a1/todo").status_code == 200
+    item['done'] = True
+    todo['content'][0]['items'][0] = item
+    saved = _ok_put(ben, todo)
+    assert saved['content'][0]['items'][0]['from_note'] == page['id']
+    taken = _get(ana, page['id'])['on_todo']['a1']
+    assert [t['username'] for t in taken] == ['ben', 'ana'] and taken[0]['done_at'] and taken[1]['done_at'] is None
+    # Removed from ben's list: no longer listed, and he may take it again.
+    saved['content'][0]['items'] = []
+    _ok_put(ben, saved)
+    assert [t['username'] for t in _get(ana, page['id'])['on_todo']['a1']] == ['ana']
+    assert ben.post(f"/api/notes/{page['id']}/tasks/a1/todo").status_code == 200

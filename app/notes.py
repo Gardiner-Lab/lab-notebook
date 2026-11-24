@@ -323,6 +323,9 @@ def get(person: Person, note_id: str) -> dict:
         if row['type'] == 'meeting':
             from app import meetings
             note['meeting'] = meetings.for_note(conn, person, note_id)
+            # Its action items people put on their to-do lists, and whether they ticked them there (app/todos.py).
+            from app import todos
+            note['on_todo'] = todos.action_items_taken(conn, note_id)
         # A task's page: its project, dates, what it waits for, and where it was talked about (app/projects.py).
         if row['type'] == 'task':
             from app import projects

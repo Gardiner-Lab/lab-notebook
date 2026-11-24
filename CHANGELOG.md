@@ -5,6 +5,15 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-11-24
+
+### Added
+- **A meeting's action item onto your week's to-do list.** **→ My to-do** beside an action item
+  puts it on your to-do list of this week (made if there is none yet), with its priority and a
+  link back to the meeting it came from. The meeting's page says whose to-do lists it is on, with
+  a ✓ once ticked there. The meeting's page itself is not changed, so nobody writing on it during
+  the meeting has their save clash.
+
 ## [0.34.0] - 2026-11-24
 
 ### Added

@@ -266,6 +266,18 @@ CREATE TABLE IF NOT EXISTS task_deps (
     PRIMARY KEY (task_id, after_id)
 );
 CREATE INDEX IF NOT EXISTS idx_task_deps_after ON task_deps(after_id);
+
+-- A meeting's action item someone put on their week's to-do list (app/todos.py add_action_item): kept
+-- here, not on the meeting's page, so the page is not changed under those writing on it.
+CREATE TABLE IF NOT EXISTS action_todos (
+    note_id TEXT NOT NULL,
+    item_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    todo_id TEXT NOT NULL,
+    todo_item TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (note_id, item_id, username)
+);
 """
 
 

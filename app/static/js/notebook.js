@@ -744,6 +744,16 @@ const Blocks = {
         toast(how === 'move' ? "Moved on to next week's list" : 'Back on this week\'s list', 'success', 2500);
       } catch (err) { toast(err.message, 'error', 6000); }
     };
+    // A meeting's action item onto one's to-do list: saved first, then the page shown as it is.
+    const takeOn = async (item) => {
+      if (!(item.html || '').replace(/<[^>]*>/g, '').trim()) { toast('Write the action item first', 'info'); return; }
+      await App.flush();
+      try {
+        const { note: fresh } = await api('POST', `/notes/${ctx.meeting}/tasks/${item.id}/todo`);
+        App.show(fresh);
+        toast("On your to-do list of this week", 'success', 2500);
+      } catch (err) { toast(err.message, 'error', 6000); }
+    };
     const draw = () => put(list, ...block.items.map((item, i) => {
       const done = !!(item.by || item.done);
       const moved = !!item.moved;
@@ -810,14 +820,24 @@ const Blocks = {
         title: "Move this task on to next week's to-do list", onclick: () => act(item, 'move') }, '→ Next week');
       const marks = el('div', { class: 'task-marks' }, tick,
         // On a week's to-do list a task moves on to next week; a meeting's action item is carried to its next meeting.
-        item.from_week ? el('span', { class: 'hint' }, ctx.todo ? ` from the week of ${dmy(item.from_week)}`
-          : ` from the meeting of ${dmy(item.from_week)}`) : null,
+        // On a to-do list, an action item taken from a meeting links back to it.
+        item.from_note ? el('span', { class: 'hint' }, ' from ', el('a', { href: `#note=${item.from_note}` },
+          item.from_week ? `the meeting of ${dmy(item.from_week)}` : 'a meeting')) :
+          item.from_week ? el('span', { class: 'hint' }, ctx.todo ? ` from the week of ${dmy(item.from_week)}`
+            : ` from the meeting of ${dmy(item.from_week)}`) : null,
+        // On a meeting's page: whose to-do list it is on, ticked there or not.
+        (ctx.onTodo?.[item.id] || []).length ? el('span', { class: 'hint on-todo' }, ' · on the to-do list of ',
+          ctx.onTodo[item.id].map((t, n) => [n ? ', ' : '', `${who(t.username)}${t.done_at ? ' ✓' : ''}`])) : null,
         moved ? el('span', { class: 'hint' }, ctx.todo ? `→ moved on to the week of ${dmy(item.moved)}`
           : `→ carried to the meeting of ${dmy(item.moved)}`) : null);
       const actions = !ctx.editable ? null : el('span', { class: 'task-actions' },
         moved && ctx.todo ? el('button', { class: 'btn btn-sm btn-secondary', title: "Put it back on this week's list, and take it off next week's",
           onclick: () => act(item, 'back') }, 'Bring back')
           : moveBtn,
+        // A meeting's action item, onto one's own to-do list of this week.
+        ctx.meeting && !moved && !done && !(ctx.onTodo?.[item.id] || []).some((t) => t.username === NB.person.username)
+          ? el('button', { class: 'btn btn-sm btn-secondary', title: "Put this on your to-do list of this week; it says which meeting it came from, and ticking it there shows here",
+            onclick: () => takeOn(item) }, '→ My to-do') : null,
         moved ? null : el('button', { class: 'icon-btn', title: 'Remove this task', onclick: () => {
           block.items.splice(i, 1);
           draw();
@@ -2731,7 +2751,9 @@ const App = {
     for (const f of document.querySelectorAll('.fav-item')) f.classList.toggle('active', f.dataset.id === note.id);
     const editable = note.can_edit;
     // ctx.todo: a week's to-do list, whose tasks move on to next week; a meeting's action items do not.
-    const ctx = { editable, todo: note.type === 'todo', changed: () => this.changed() };
+    // ctx.onTodo: a meeting's action items on people's to-do lists ({item id: [{username, done_at}]}).
+    const ctx = { editable, todo: note.type === 'todo', meeting: note.type === 'meeting' ? note.id : null,
+      onTodo: note.on_todo || {}, changed: () => this.changed() };
 
     const crumbs = el('nav', { class: 'crumbs' }, note.path.slice(0, -1).map((p, i) => [
       i ? el('span', { class: 'crumb-sep' }, '›') : null,

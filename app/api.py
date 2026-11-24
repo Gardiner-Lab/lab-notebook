@@ -86,6 +86,14 @@ def move_task(person, todo_id, item_id):
     return jsonify({'note': notes.get(person, todo_id), 'next': next_id})
 
 
+@api.post('/notes/<note_id>/tasks/<item_id>/todo')
+@signed_in
+def action_item_to_todo(person, note_id, item_id):
+    """A meeting's action item onto this person's to-do list of this week."""
+    todo_id = todos.add_action_item(person, note_id, item_id)
+    return jsonify({'note': notes.get(person, note_id), 'todo': todo_id})
+
+
 @api.post('/notes/<todo_id>/tasks/<item_id>/back')
 @signed_in
 def bring_task_back(person, todo_id, item_id):

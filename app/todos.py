@@ -190,6 +190,73 @@ def move_on(person: Person, todo_id: str, item_id: str) -> Optional[str]:
     return next_id
 
 
+def add_action_item(person: Person, note_id: str, item_id: str) -> str:
+    """
+    A meeting's action item onto this person's to-do list of this week (made if need be), saying which meeting it
+    came from. The meeting's page is not changed: who took it is kept beside it (action_todos). The to-do list's id.
+    """
+    from app import bookings
+    with connect() as conn:
+        row = notes._row(conn, note_id)
+    if row['type'] != 'meeting' or not notes.can_view(person, row):
+        raise notes.NotFound('Meeting not found')
+    blocks = json.loads(row['content'] or '[]')
+    item = _item(blocks, item_id)
+    if item.get('by') or item.get('moved'):
+        raise ValueError('That action item is done, or carried on to the next meeting: take it from there')
+    if not content_mod.plain_text([{'type': 'tasks', 'items': [item]}]).strip():
+        raise ValueError('An empty action item does not go on a to-do list')
+    with connect() as conn:
+        had = conn.execute('SELECT * FROM action_todos WHERE note_id = ? AND item_id = ? AND username = ?',
+                           (note_id, item_id, person.username)).fetchone()
+        if had:
+            todo = conn.execute('SELECT content FROM notes WHERE id = ? AND deleted_at IS NULL', (had['todo_id'],)).fetchone()
+            if todo and any(i.get('id') == had['todo_item'] for b in json.loads(todo['content'] or '[]')
+                            if isinstance(b, dict) and b.get('type') == 'tasks' for i in b.get('items') or []):
+                raise ValueError('It is on your to-do list already')
+            conn.execute('DELETE FROM action_todos WHERE note_id = ? AND item_id = ? AND username = ?',
+                         (note_id, item_id, person.username))
+        day_label = conn.execute("SELECT value FROM attributes WHERE note_id = ? AND name = 'meetingDate'",
+                                 (note_id,)).fetchone()
+    today = bookings.today()
+    day_id = notes.day(person, today)
+    todo_id = make(person, day_id)
+    with connect() as conn:
+        todo = notes._row(conn, todo_id)
+        content = json.loads(todo['content'] or '[]')
+        items = _tasks_block(content)['items']
+        new_item = {'id': content_mod.new_id(), 'html': item.get('html') or '', 'by': None, 'at': None,
+                    'priority': content_mod.task_priority(item.get('priority')), 'moved': None,
+                    'from_item': item_id, 'from_week': day_label['value'] if day_label else None, 'from_note': note_id}
+        items.append(new_item)
+        content_mod.sort_tasks(items)
+        _write(conn, person, todo_id, content, 'edited')
+        conn.execute('INSERT INTO action_todos (note_id, item_id, username, todo_id, todo_item) VALUES (?, ?, ?, ?, ?)',
+                     (note_id, item_id, person.username, todo_id, new_item['id']))
+    return todo_id
+
+
+def action_items_taken(conn, note_id: str) -> dict:
+    """
+    For a meeting's page: who put which action item on their to-do list, and whether they have ticked it there
+    ({item id: [{username, done_at}]}), for those whose to-do list still holds it.
+    """
+    found: dict = {}
+    lists: dict = {}
+    for r in conn.execute('SELECT * FROM action_todos WHERE note_id = ? ORDER BY created_at, rowid', (note_id,)):
+        if r['todo_id'] not in lists:
+            todo = conn.execute('SELECT content FROM notes WHERE id = ? AND deleted_at IS NULL', (r['todo_id'],)).fetchone()
+            items = {}
+            for b in json.loads(todo['content'] or '[]') if todo else []:
+                if isinstance(b, dict) and b.get('type') == 'tasks':
+                    items.update({i.get('id'): i for i in b.get('items') or []})
+            lists[r['todo_id']] = items
+        mine = lists[r['todo_id']].get(r['todo_item'])
+        if mine is not None:
+            found.setdefault(r['item_id'], []).append({'username': r['username'], 'done_at': mine.get('at') if mine.get('by') else None})
+    return found
+
+
 def bring_back(person: Person, todo_id: str, item_id: str) -> None:
     """Undo a move: the task is to do this week again, and leaves next week's list, if not ticked there."""
     with connect() as conn:

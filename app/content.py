@@ -200,8 +200,9 @@ def _ticks(blocks: List[dict]) -> Dict[Tuple, dict]:
 
 def _task_marks(blocks: List[dict]) -> Dict[str, dict]:
     """
-    What only the notebook sets on a task, by its id: the week it was moved on to (``moved``), and
-    the task and week it was carried over from (``from_item``, ``from_week``). An edit keeps them.
+    What only the notebook sets on a task, by its id: the week it was moved on to (``moved``), the
+    task and week it was carried over from (``from_item``, ``from_week``), and the meeting's page an
+    action item put on a to-do list came from (``from_note``). An edit keeps them.
     """
     found: Dict[str, dict] = {}
     for block in blocks or []:
@@ -212,7 +213,7 @@ def _task_marks(blocks: List[dict]) -> Dict[str, dict]:
     return found
 
 
-TASK_MARKS = ('moved', 'from_item', 'from_week')
+TASK_MARKS = ('moved', 'from_item', 'from_week', 'from_note')
 
 # A task's priority. A list is kept in this order, high first; within a level, in the order its
 # person put the tasks.
