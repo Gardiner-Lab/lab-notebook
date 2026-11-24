@@ -266,6 +266,18 @@ div.step-text:empty::before { content: attr(data-placeholder); color: var(--mute
 .picker-item { padding: .45rem .5rem; border-radius: .35rem; cursor: pointer; }
 .picker-item:hover, .picker-item:focus { background: var(--accent-soft); outline: none; }
 .choice-row { display: flex; gap: .6rem; }
+/* What "@" links to: a grid of tiles of one size (notebook.js chooseLink). */
+.link-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: .5rem; }
+.link-choice { display: flex; align-items: flex-start; gap: .65rem; text-align: left; font: inherit; color: var(--text);
+    padding: .65rem .75rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--card); cursor: pointer; }
+.link-choice:hover, .link-choice:focus-visible { background: var(--accent-soft); border-color: var(--tt-green-line); outline: none; }
+.link-choice-icon { flex: none; display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: .4rem;
+    background: var(--tt-sunk); }
+.link-choice-icon .tt-glyph { width: 1.1rem; height: 1.1rem; }
+.link-choice-text { display: grid; gap: .1rem; min-width: 0; }
+.link-choice-text b { font-size: .95rem; }
+.link-choice-text .hint { line-height: 1.3; }
+@media (max-width: 560px) { .link-choices { grid-template-columns: 1fr; } }
 .menu { display: flex; flex-direction: column; gap: .3rem; }
 .menu-item { font: inherit; text-align: left; background: none; border: 1px solid var(--border); border-radius: .4rem; padding: .55rem .7rem; cursor: pointer; }
 .menu-item:hover { background: var(--hover); }
@@ -508,6 +520,10 @@ div.step-text:empty::before { content: attr(data-placeholder); color: var(--mute
     border: 1px solid var(--border); border-radius: .5rem; background: var(--card); cursor: pointer; }
 .export-choice:hover { background: var(--hover); }
 .export-choice b { min-width: 3rem; }
+/* A task tagged with @ (app/projects.py). */
+a.task-link-tag { color: var(--tt-brown-dark); text-decoration: none; border-bottom: 1px dashed var(--tt-brown-line);
+    background: var(--tt-brown-soft); border-radius: .2rem; padding: 0 .15rem; }
+a.task-link-tag::before { content: '☐ '; font-size: .85em; }
 .wp-card { margin: .9rem 0; border: 1px solid var(--border); border-left: 4px solid var(--c); border-radius: .6rem;
     background: var(--card); padding: .6rem .8rem; }
 .wp-head { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }

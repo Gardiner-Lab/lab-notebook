@@ -32,7 +32,8 @@ TEXT_TAGS = {'p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'sub', 'sup', 'h1', 
              'ul', 'ol', 'li', 'a', 'code', 'pre', 'blockquote', 'span', 'mark', 'hr', 'img'}
 # A picture or file is named by its attachment, never by an address: the page
 # works out where to fetch it from, so text cannot point images elsewhere.
-TEXT_ATTRIBUTES = {'a': {'href', 'data-plasmid', 'data-note', 'data-seed', 'data-stock', 'data-track', 'data-attachment', 'class', 'title'},
+TEXT_ATTRIBUTES = {'a': {'href', 'data-plasmid', 'data-note', 'data-seed', 'data-stock', 'data-track', 'data-task',
+                         'data-attachment', 'class', 'title'},
                    'img': {'data-attachment', 'alt', 'title'},
                    'span': {'class'}, 'mark': {'class'}}
 # The marks a step and a table cell may carry. The same letter formatting as text,
@@ -52,10 +53,10 @@ _ATTACHMENT_ID = re.compile(r'^[0-9a-f]{12,48}$')
 
 # Links to other notes, to plasmids, to the seed bank's lines, lots and plants, and to
 # Lab Stocks' glycerol stocks, primers, chemicals, antibodies and plant material (by code),
-# and to the Genome Browser's tracks (by id).
-_LINK = re.compile(r'data-(note|plasmid|seed|stock|track)="([^"]{1,80})"')
+# to the Genome Browser's tracks (by id), and to a project's tasks (by id, app/projects.py).
+_LINK = re.compile(r'data-(note|plasmid|seed|stock|track|task)="([^"]{1,80})"')
 # A link in a table cell, put there with @: [label](stock:GL-C-0003), as notebook.js CELL_LINK writes it.
-CELL_LINK = re.compile(r'\[[^\]\n]{0,300}\]\((note|plasmid|seed|stock|track):([^)\s"]{1,80})\)')
+CELL_LINK = re.compile(r'\[[^\]\n]{0,300}\]\((note|plasmid|seed|stock|track|task):([^)\s"]{1,80})\)')
 
 
 def cell_text(value: Any) -> str:

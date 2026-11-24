@@ -551,10 +551,43 @@ def for_note(conn, person: Person, note_id: str) -> Optional[dict]:
             'parent_id': row['parent_id'], 'discussed': discussed(conn, person, 'task', row['id'])}
 
 
+def _tagged_in(blocks: list, target_id: str) -> List[str]:
+    """The lines a task is tagged in with @ (a paragraph, a list item, a task, a step, a table cell), as text."""
+    import html as html_mod
+    import re
+    mark = f'data-task="{target_id}"'
+    token = f'(task:{target_id})'
+    found: List[str] = []
+
+    def plain(fragment: str) -> str:
+        return ' '.join(html_mod.unescape(re.sub(r'<[^>]+>', ' ', fragment)).split())
+
+    def walk(items):
+        for b in items or []:
+            if not isinstance(b, dict):
+                continue
+            kind = b.get('type')
+            if kind == 'text' and mark in (b.get('html') or ''):
+                # Line by line: split where a paragraph, heading, list item or line break begins or ends (the first
+                # line of a page may stand in no paragraph at all).
+                lines = re.split(r'</?(?:p|li|ul|ol|h[1-6]|blockquote|pre|div)\b[^>]*>|<br\s*/?>', b['html'], flags=re.I)
+                found.extend(plain(line) for line in lines if mark in line)
+            elif kind in ('tasks', 'steps'):
+                found.extend(plain(i.get('html') or i.get('text') or '') for i in b.get('items') or []
+                             if mark in (i.get('html') or ''))
+            elif kind == 'table':
+                for row in b.get('rows') or []:
+                    found.extend(content_mod.cell_text(c) for c in row.get('cells') or [] if isinstance(c, str) and token in c)
+            elif kind == 'section':
+                walk(b.get('blocks'))
+    walk(blocks)
+    return [f for f in found if f]
+
+
 def discussed(conn, person: Person, kind: str, target_id: str) -> List[dict]:
     """
-    The pages a task or work package was put on (a meeting's agenda, a day of a notebook), newest first, with what
-    was written there under it: those this person may open.
+    The pages a task or work package was put on (a meeting's agenda, a day of a notebook), or a task was tagged in
+    with @, newest first, with what was written there about it: those this person may open.
     """
     rows = conn.execute('SELECT n.* FROM links l JOIN notes n ON n.id = l.note_id WHERE l.target_type = ? '
                         'AND l.target_id = ? AND n.deleted_at IS NULL', (kind, target_id)).fetchall()
@@ -566,6 +599,8 @@ def discussed(conn, person: Person, kind: str, target_id: str) -> List[dict]:
         said = [content_mod.plain_text(b.get('blocks') or []) for b in blocks
                 if b.get('type') == 'section' and (b.get('source') or {}).get('kind') == kind
                 and (b.get('source') or {}).get('id') == target_id]
+        if kind == 'task':
+            said += _tagged_in(blocks, target_id)
         when = conn.execute("SELECT value FROM attributes WHERE note_id = ? AND name IN ('meetingDate', 'dateNote') "
                             'LIMIT 1', (r['id'],)).fetchone()
         found.append({**notes.summary(r), 'date': when['value'] if when else (r['updated_at'] or '')[:10],
@@ -674,6 +709,19 @@ def workpackage_ref(person: Person, wp_id: str) -> dict:
     with connect() as conn:
         row = _wp(conn, person, wp_id)
         return {'id': row['id'], 'project_id': row['project_id'], 'title': row['title']}
+
+
+def taggable(person: Person, query: str = '') -> List[dict]:
+    """The tasks of their projects whose title (or project, or work package) has all the words: for @."""
+    words = [w.lower() for w in (query or '').split()][:6]
+    found = []
+    for p in pickable(person):
+        for w in p['workpackages']:
+            for t in w['tasks']:
+                where = f"{p['title']} › {w['title']}"
+                if all(word in f"{t['title']} {where}".lower() for word in words):
+                    found.append({**t, 'where': where})
+    return found[:60]
 
 
 def pickable(person: Person) -> List[dict]:

@@ -5,6 +5,19 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-24
+
+### Added
+- **Tag a task with @.** Type @ anywhere you write - text, the week's to-do list, a meeting's
+  action items, a table cell - and choose **A task of a project** to tag one of your projects'
+  tasks. The tag opens the task's page, and the line it was tagged in shows there under
+  **Talked about**, beside the meetings it was put on the agenda of.
+
+### Changed
+- **The @ window is easier to read.** What @ links to - a plasmid, a stock, seeds, a genome track,
+  a page or protocol, a task - is a grid of tiles of one size, each saying where it lives, where
+  six buttons were squeezed into one row and their words broke over several lines.
+
 ## [0.33.0] - 2026-11-24
 
 ### Added

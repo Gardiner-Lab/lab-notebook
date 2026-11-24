@@ -218,3 +218,33 @@ def test_the_gantt_chart_exports_as_a_pdf_with_its_tasks(as_user):
         assert words in text, words
     assert zoe.post(f"/api/projects/{p['id']}/gantt.pdf", json={'svg': svg}).status_code == 403
     assert ana.post(f"/api/projects/{p['id']}/gantt.pdf", json={'svg': '<p>not a chart</p>'}).status_code == 400
+
+
+def test_a_task_tagged_with_at_shows_where_it_was_tagged(as_user):
+    ana, ben, zoe = as_user('ana'), as_user('ben'), as_user('zoe')
+    p = _project(ana)
+    t = _task(ana, p, title='Design guides')
+    task = _by_title(t['project'], 'Design guides')
+    # Found by its title, its project or work package, for members only.
+    assert [x['id'] for x in _ok(ben.get('/api/projects/tasks?q=guides'))['tasks']] == [task['id']]
+    assert [x['id'] for x in _ok(ben.get('/api/projects/tasks?q=petunia constructs'))['tasks']] == [task['id']]
+    assert _ok(zoe.get('/api/projects/tasks?q=guides'))['tasks'] == []
+    # Tagged on ben's day: in text, and in a table cell.
+    day = _ok(ben.post('/api/days', json={'date': '2026-11-25'}), 201)['note']
+    tag = f'<a data-task="{task["id"]}">Design guides</a>'
+    content = [{'type': 'text', 'html': f'Weighed the seeds.<br>Started {tag} with CRISPOR today<p>Then lunch</p>'},
+               {'type': 'table', 'title': '', 'columns': [{'name': 'What', 'kind': 'text'}],
+                'rows': [{'cells': [f'[Design guides](task:{task["id"]}) round 2']}]}]
+    saved = _ok(ben.put(f"/api/notes/{day['id']}", json={'content': content}))['note']
+    assert f'data-task="{task["id"]}"' in saved['content'][0]['html']
+    said = _ok(ben.get(f"/api/notes/{task['note_id']}"))['note']['task']['discussed']
+    assert [(d['id'], d['date']) for d in said] == [(day['id'], '2026-11-25')]
+    assert said[0]['text'] == 'Started Design guides with CRISPOR today · Design guides round 2'
+    # Ana, in the project, does not see ben's own day there: only pages she may open are listed.
+    assert _ok(ana.get(f"/api/notes/{task['note_id']}"))['note']['task']['discussed'] == []
+    # And on the week's to-do list.
+    todo = _ok(ben.post(f"/api/notes/{day['id']}/todo"))['note']
+    todo['content'][0]['items'] = [{'id': 'x1', 'html': f'Finish {tag}'}]
+    _ok(ben.put(f"/api/notes/{todo['id']}", json={'content': todo['content']}))
+    said = _ok(ben.get(f"/api/notes/{task['note_id']}"))['note']['task']['discussed']
+    assert any(d['id'] == todo['id'] and d['text'] == 'Finish Design guides' for d in said)

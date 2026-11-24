@@ -175,7 +175,7 @@ const SEED_KINDS = { L: 'line', S: 'lot', P: 'plant' };
 // material, in Lab Stocks.
 const STOCK_KINDS = { G: 'glycerol', O: 'primer', C: 'chemical', A: 'antibody', M: 'material' };
 // A link in a table cell, put there with @ (app/content.py CELL_LINK): [label](stock:GL-C-0003).
-const CELL_LINK = /\[([^\]\n]{0,300})\]\((note|plasmid|seed|stock|track):([^)\s"]{1,80})\)/g;
+const CELL_LINK = /\[([^\]\n]{0,300})\]\((note|plasmid|seed|stock|track|task):([^)\s"]{1,80})\)/g;
 const cellToken = (kind, id, label) => `[${String(label).replace(/[[\]\n]/g, ' ')}](${kind}:${id})`;
 /** Everything in a box selected, as clicking into an input used to do. */
 function selectAll(area) {
@@ -328,6 +328,14 @@ const pickStock = () => picker({
 });
 
 /** Choose a track in the Genome Browser, among those this person sees there. */
+/** Choose a task of one's projects, to tag it with @ (app/projects.py taggable). */
+const pickTask = () => picker({
+  title: 'Tag a task', placeholder: "Search your projects' tasks",
+  search: async (q) => (await api('GET', `/projects/tasks?q=${encodeURIComponent(q)}`)).tasks,
+  describe: (t) => [glyph('steps'), ' ', el('b', { text: t.title }),
+    el('span', { class: 'hint' }, ` · ${t.where} · ${dayMonthYear(t.start)} – ${dayMonthYear(t.end)}${t.done_on ? ' · done' : ''}`)],
+});
+
 const pickTrack = () => picker({
   title: 'Link a genome track', placeholder: 'Search the Genome Browser by track, experiment or genome',
   search: async (q) => {
@@ -642,6 +650,7 @@ const Blocks = {
     else if (link.dataset.seed) window.open(seedLink(link.dataset.seed), '_blank', 'noopener');
     else if (link.dataset.stock) window.open(stockLink(link.dataset.stock), '_blank', 'noopener');
     else if (link.dataset.track) window.open(trackLink(link.dataset.track), '_blank', 'noopener');
+    else if (link.dataset.task) Projects.openSource({ kind: 'task', id: link.dataset.task });
     else if (link.dataset.plasmid) window.open(editorLink(link.dataset.plasmid), '_blank', 'noopener');
     else if (link.dataset.note) App.open(link.dataset.note);
     else if (/^https?:/.test(link.getAttribute('href') || '')) window.open(link.href, '_blank', 'noopener');
@@ -1448,7 +1457,7 @@ const Blocks = {
         out = att ? `<img data-attachment="${this.escapeHtml(att)}">` : '';
       } else if (tag === 'br' || tag === 'hr') out = `<${tag}>`;
       else if (tag === 'a') {
-        const data = ['note', 'plasmid', 'seed', 'stock', 'track', 'attachment']
+        const data = ['note', 'plasmid', 'seed', 'stock', 'track', 'task', 'attachment']
           .filter((k) => node.getAttribute(`data-${k}`))
           .map((k) => ` data-${k}="${this.escapeHtml(node.getAttribute(`data-${k}`))}"`).join('');
         const href = data ? '' : this.webAddress(node.getAttribute('href') || '');
@@ -1557,7 +1566,7 @@ const Blocks = {
     const range = sel.getRangeAt(0).cloneRange();
     const inside = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement;
     const existing = inside.closest('a[href]');
-    const linkedHere = existing && area.contains(existing) && !existing.dataset.note && !existing.dataset.plasmid
+    const linkedHere = existing && area.contains(existing) && !existing.dataset.note && !existing.dataset.task && !existing.dataset.plasmid
       && !existing.dataset.seed && !existing.dataset.stock && !existing.dataset.track && !existing.dataset.attachment ? existing : null;
     bar.querySelector('.link-box')?.remove();
     const input = el('input', { type: 'text', placeholder: 'https://… or an email address', value: linkedHere ? linkedHere.getAttribute('href') : '',
@@ -1654,7 +1663,7 @@ const Blocks = {
     for (const node of [...copy.querySelectorAll('p, div, li, ul, ol, h1, h2, h3, pre, blockquote, br, img, hr')].reverse()) {
       node.replaceWith(...(node.tagName === 'BR' ? [document.createTextNode(' ')] : node.childNodes));
     }
-    for (const a of copy.querySelectorAll('a[data-plasmid], a[data-note], a[data-seed], a[data-stock], a[data-track], a[data-attachment]')) {
+    for (const a of copy.querySelectorAll('a[data-plasmid], a[data-note], a[data-seed], a[data-stock], a[data-track], a[data-task], a[data-attachment]')) {
       for (const attr of ['href', 'class', 'title']) a.removeAttribute(attr);
     }
     return copy.innerHTML.replace(/\s+/g, ' ').trim();
@@ -1706,7 +1715,7 @@ const Blocks = {
       div.replaceWith(p);
     }
     this.tidyNodes(copy);
-    for (const a of copy.querySelectorAll('a[data-plasmid], a[data-note], a[data-seed], a[data-stock], a[data-track], a[data-attachment]')) {
+    for (const a of copy.querySelectorAll('a[data-plasmid], a[data-note], a[data-seed], a[data-stock], a[data-track], a[data-task], a[data-attachment]')) {
       for (const attr of ['href', 'class', 'title']) a.removeAttribute(attr);
     }
     for (const img of copy.querySelectorAll('img[data-attachment]')) {
@@ -1762,6 +1771,11 @@ const Blocks = {
       a.classList.add('track-link');
       a.title = 'Open in the Genome Browser';
     }
+    for (const a of area.querySelectorAll('a[data-task]')) {
+      a.href = '#';
+      a.classList.add('task-link-tag');
+      a.title = "Open the task's page: this shows there, under Talked about";
+    }
     for (const img of area.querySelectorAll('img[data-attachment]')) {
       img.src = attachmentUrl(img.dataset.attachment);
       img.loading = 'lazy';
@@ -1779,7 +1793,7 @@ const Blocks = {
     const chosen = await this.chooseLink();
     if (!chosen) return;
     const { kind, target, label } = chosen;
-    const link = el('a', { [`data-${kind}`]: kind === 'plasmid' || kind === 'track' || kind === 'note' ? target.id : target.code }, label);
+    const link = el('a', { [`data-${kind}`]: ['plasmid', 'track', 'note', 'task'].includes(kind) ? target.id : target.code }, label);
     range.deleteContents();
     range.insertNode(link);
     link.after(document.createTextNode(' '));
@@ -1805,12 +1819,22 @@ const Blocks = {
       modal({
         title: 'Link to…',
         onClose: () => resolve(choice),
-        build: (body, close) => body.append(el('div', { class: 'choice-row' },
-          el('button', { class: 'btn btn-primary', onclick: () => { choice = 'plasmid'; close(); } }, glyph('plasmid'), ' A plasmid'),
-          el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'seed'; close(); } }, glyph('plant'), ' A seed lot, plant or line'),
-          el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'stock'; close(); } }, glyph('stocks'), ' A stock, primer, chemical, antibody or plant material'),
-          el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'track'; close(); } }, glyph('trace'), ' A genome track'),
-          el('button', { class: 'btn btn-secondary', onclick: () => { choice = 'note'; close(); } }, glyph('text'), ' A page or protocol'))),
+        // Each kind a tile of the same size: what it is, and where it lives.
+        build: (body, close) => {
+          const tile = (kind, icon, name, where) => el('button', {
+            class: 'link-choice', type: 'button', onclick: () => { choice = kind; close(); },
+          }, el('span', { class: 'link-choice-icon' }, glyph(icon)),
+          el('span', { class: 'link-choice-text' }, el('b', {}, name), el('span', { class: 'hint' }, where)));
+          const tiles = el('div', { class: 'link-choices' },
+            tile('plasmid', 'plasmid', 'Plasmid', 'Opens in the Sequence Editor'),
+            tile('stock', 'stocks', 'Stock', 'Glycerol stock, primer, chemical, antibody or plant material, in Lab Stocks'),
+            tile('seed', 'plant', 'Seeds', 'Seed lot, plant or line, in the Seed Bank'),
+            tile('track', 'trace', 'Genome track', 'In the Genome Browser'),
+            tile('note', 'text', 'Page or protocol', 'In a notebook or the protocol library'),
+            tile('task', 'cube', 'Task', 'Of a project you are in'));
+          body.append(tiles);
+          tiles.querySelector('button').focus();
+        },
         buttons: [{ label: 'Just type @', kind: 'secondary' }],
       });
     });
@@ -1819,7 +1843,8 @@ const Blocks = {
     try {
       target = kind === 'plasmid' ? await pickPlasmid() : kind === 'seed' ? await pickSeed()
         : kind === 'stock' ? await pickStock() : kind === 'track' ? await pickTrack()
-          : await pickNote([], 'Link to a page or protocol');
+          : kind === 'task' ? await pickTask()
+            : await pickNote([], 'Link to a page or protocol');
     } catch (err) { toast(err.message, 'error'); return null; }
     if (!target) return null;
     return { kind, target,
@@ -1834,7 +1859,7 @@ const Blocks = {
     const chosen = await this.chooseLink();
     if (!chosen) { input.focus(); return; }
     const { kind, target, label } = chosen;
-    const token = cellToken(kind, kind === 'plasmid' || kind === 'track' || kind === 'note' ? target.id : target.code, label);
+    const token = cellToken(kind, ['plasmid', 'track', 'note', 'task'].includes(kind) ? target.id : target.code, label);
     const value = String(row.cells[c] ?? '');
     if (pos === null) {
       // From a cell that takes formatting: the "@" that opened this is the last one in the cell,

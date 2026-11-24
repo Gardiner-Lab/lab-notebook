@@ -171,6 +171,13 @@ def pick_from_projects(person):
     return jsonify({'projects': projects.pickable(person)})
 
 
+@api.get('/projects/tasks')
+@signed_in
+def find_tasks(person):
+    """The tasks of their projects matching ?q=, to tag one with @."""
+    return jsonify({'tasks': projects.taggable(person, request.args.get('q', ''))})
+
+
 @api.get('/projects/section')
 @signed_in
 def project_section(person):
