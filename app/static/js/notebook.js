@@ -3909,37 +3909,75 @@ const App = {
         Blocks.linkAt(area, sel.getRangeAt(0), sync);
       } }, '@'));
     /**
-     * Just above the text being written in, and always in sight. A long section is taller than the
-     * window, so once it has scrolled the bar would sit above the top of the screen and out of
-     * reach - which is what kept headings and bullets from being used in a long one. It stops under
-     * the page's own bar instead, and never goes past the end of the section it belongs to.
+     * Just above the line being written on - where the caret is, not the top of the section, which in a
+     * long section may be far up the page or off the screen - and below that line when there is no room
+     * above it. Always in sight: never above the page's own bar, nor off the sides of the window.
      */
     const place = () => {
-      const r = area.getBoundingClientRect();
-      const gap = (bar.offsetHeight || 34) + 4;
-      // Under the page's own bar, measured rather than assumed: it is sticky, it sits above this
-      // one, and it grows taller when its buttons wrap, so a fixed number hides the bar behind it.
+      const box = area.getBoundingClientRect();
+      const gap = (bar.offsetHeight || 34) + 6;
+      // Under the page's own bar, measured rather than assumed: it is sticky, and grows taller when
+      // its buttons wrap, so a fixed number hides this bar behind it.
       const head = document.querySelector('header.tt-bar');
       const under = (head ? head.getBoundingClientRect().bottom : 52) + 4;
-      const lowest = Math.max(r.bottom - gap, under);
-      bar.style.top = `${Math.min(Math.max(r.top - gap, under), lowest)}px`;
-      bar.style.left = `${r.left}px`;
+      let line = null;
+      const sel = window.getSelection();
+      if (sel.rangeCount && area.contains(sel.anchorNode)) {
+        const range = sel.getRangeAt(0).cloneRange();
+        range.collapse(false);
+        const rects = range.getClientRects();
+        line = rects.length ? rects[rects.length - 1] : null;
+        // An empty line has no box of its own: the element the caret is in has one.
+        if (!line || (!line.height && !line.top)) {
+          const node = sel.focusNode?.nodeType === Node.ELEMENT_NODE ? sel.focusNode : sel.focusNode?.parentElement;
+          line = node && area.contains(node) ? node.getBoundingClientRect() : null;
+        }
+      }
+      const top = line ? line.top : box.top;
+      const bottom = line ? line.bottom : box.top + 24;
+      let y = top - gap;
+      if (y < under) y = Math.min(bottom + 6, window.innerHeight - gap);
+      bar.style.top = `${Math.max(y, under)}px`;
+      const width = bar.offsetWidth || 420;
+      const x = Math.min(Math.max((line ? line.left : box.left) - 12, box.left, 8), window.innerWidth - width - 8);
+      bar.style.left = `${Math.max(x, 8)}px`;
     };
-    place();
+    // One bar for the page, and one section it belongs to at a time: moving from one section to the next,
+    // the first one's leaving must not hide the bar the second has just shown.
+    bar._owner = area;
     bar.hidden = false;
-    // Scrolling the page or any pane it sits in, and resizing, keep it with the section.
-    const follow = () => { if (!bar.hidden) place(); };
+    place();
+    if (bar._follow) {
+      window.removeEventListener('scroll', bar._follow, true);
+      window.removeEventListener('resize', bar._follow);
+      document.removeEventListener('selectionchange', bar._follow);
+    }
+    // Scrolling, resizing, and the caret moving (a click further down, typing onto a new line) keep it
+    // with the line being written on.
+    const follow = () => { if (!bar.hidden && bar._owner === area) place(); };
+    bar._follow = follow;
     window.addEventListener('scroll', follow, true);
     window.addEventListener('resize', follow);
+    document.addEventListener('selectionchange', follow);
     const hide = () => {
       setTimeout(() => {
-        if (bar.matches(':hover') || document.activeElement === area) return;
+        if (bar._owner !== area) return;            // another section has it now
+        if (bar.matches(':hover') || document.activeElement === area || bar.contains(document.activeElement)) return;
         bar.hidden = true;
         window.removeEventListener('scroll', follow, true);
         window.removeEventListener('resize', follow);
+        document.removeEventListener('selectionchange', follow);
+        bar._follow = null;
       }, 150);
     };
     area.addEventListener('blur', hide, { once: true });
+    // Clicked in again while still being written in, and the bar is gone for any reason: back it comes.
+    if (!area._barOnClick) {
+      area._barOnClick = true;
+      area.addEventListener('mouseup', () => {
+        if (document.activeElement === area && (bar.hidden || bar._owner !== area)) App.showFormatBar(area, sync);
+      });
+    }
   },
 };
 

@@ -5,6 +5,16 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.35.1] - 2026-11-24
+
+### Fixed
+- **The black formatting bar no longer goes missing.** Moving from one text box straight into
+  another, the first one's leaving hid the bar the second had just shown, and clicking in the
+  second again did not bring it back: only clicking outside and in again did. Each box now hides
+  only its own bar. And the bar sits just above the line being written on, following the caret,
+  instead of above the top of the box: in a long box, clicked far down, the top could be off the
+  screen, so the bar seemed not to come at all. Found by the lab on 24-11-2026.
+
 ## [0.35.0] - 2026-11-24
 
 ### Added
