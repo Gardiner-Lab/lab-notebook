@@ -1129,12 +1129,13 @@ def _snippet(text: str, words: List[str], width: int = 70) -> str:
 
 
 def search(person: Person, query: str, types: Optional[List[str]] = None, limit: int = 30,
-           editable: bool = False) -> List[dict]:
+           editable: bool = False, own: bool = False) -> List[dict]:
     """
     Notes this person may open, by the words in their title and content (all of
     them must appear): title matches first, then the most recently changed.
     editable: only those they may change (to choose a page to put something on),
     left out before the limit so the places in the list are not spent on others.
+    own: only their own notebook, leaving out the library and pages others share with them.
     "#name" or "#name=value" finds notes by label instead, as in Trilium.
     """
     query = (query or '').strip()
@@ -1154,6 +1155,9 @@ def search(person: Person, query: str, types: Optional[List[str]] = None, limit:
     if types:
         sql += f' AND type IN ({",".join("?" * len(types))})'
         args += types
+    if own:
+        sql += " AND space = 'notebook' AND owner = ?"
+        args.append(person.username)
     sql += ' ORDER BY updated_at DESC LIMIT 1000'
     with connect() as conn:
         rows = [r for r in conn.execute(sql, args).fetchall()

@@ -31,3 +31,13 @@ The Lab Notebook is a separate program, written for the Gardiner Lab suite in
 Python and plain JavaScript. It contains no code copied from Trilium. It is
 released under the same licence as Trilium, the AGPL v3.0, so that ideas and,
 where useful, code can move between the two.
+
+The 3D viewer uses, unchanged, in app/static/vendor/ with their licences:
+
+  - three.js 0.187.0 (https://threejs.org), MIT licence, (c) three.js authors:
+    the core, and the OrbitControls, GLTF, DRACO, PLY and USD loaders, the
+    GLTF exporter, RoomEnvironment, and the Draco, meshopt and fflate decoders;
+  - Spark 2.4.0 (https://sparkjs.dev), MIT licence, (c) World Labs
+    Technologies, Inc.: the Gaussian splat renderer;
+  - mp4-muxer 5.2.2 (https://github.com/Vanilagy/mp4-muxer), MIT licence,
+    (c) Vanilagy: writes the recorded videos as MP4.

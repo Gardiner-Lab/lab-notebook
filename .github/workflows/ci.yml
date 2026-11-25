@@ -23,7 +23,8 @@ jobs:
           node-version: '22'
       - name: Check the page scripts and table arithmetic
         run: |
-          for f in app/static/js/*.js; do node --check "$f"; done
+          # model3d.js and usdz.js are ES modules (import ...), checked as such.
+          for f in app/static/js/*.js; do if grep -q "^import " "$f"; then node --input-type=module --check < "$f"; else node --check "$f"; fi || exit 1; done
           node tests/js/sheet.test.js
           node tests/js/clip.test.js
           node tests/js/merge.test.js

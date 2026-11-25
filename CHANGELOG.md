@@ -5,6 +5,21 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-11-25
+
+### Added
+- **3D models and scans open in the notebook.** A GLB, glTF, USDZ or PLY model, or a Gaussian
+  splat (3DGS: PLY, SPZ, SPLAT, KSPLAT, SOG), opens in a 3D viewer over the page: drag to turn it,
+  right-drag to move it, scroll to zoom, and stand a scan up that came in lying down or upside down.
+  three.js and Spark draw it, kept with the notebook, so nothing is fetched from the internet.
+- **A video of a model turning round**, from the view on the screen: choose the size (HD, square,
+  upright, 4K), the length and how far it turns, and it is saved as an MP4, every frame drawn in
+  turn (WebCodecs), however slow the computer. A picture of the view saves as a PNG.
+- **A USDZ becomes a GLB**, saved or attached to the page beside it, with its textures.
+  tests/test_usdz_to_glb.py checks the conversion in a real browser on a scan (it needs Playwright).
+- **Search only your own notebook**: "Only my notebook" under the search box leaves out the
+  protocol library and the pages others share with you. It is remembered on each computer.
+
 ## [0.38.2] - 2026-11-25
 
 ### Changed

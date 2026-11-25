@@ -519,7 +519,8 @@ def import_to_day(person):
 def search(person):
     types = [t for t in request.args.get('types', '').split(',') if t]
     return jsonify({'notes': notes.search(person, request.args.get('q', ''), types or None,
-                                          editable=request.args.get('editable') == '1')})
+                                          editable=request.args.get('editable') == '1',
+                                          own=request.args.get('own') == '1')})
 
 
 @api.get('/protocols')

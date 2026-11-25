@@ -8,7 +8,9 @@ in the notebook's database, so the suite's backup takes them with the rest.
 Any kind of file can be attached: Word, PowerPoint, Excel, PDF, data files.
 Photos in common formats are shown in pages, and PDFs open in the browser's
 own PDF viewer; so do Word, PowerPoint and Excel files, turned into a PDF by
-the suite's converter (viewer.py), and text files open as plain text. The
+the suite's converter (viewer.py), and text files open as plain text. 3D models
+(GLB, glTF, USDZ, PLY) and Gaussian splats (3DGS: PLY, SPZ, SPLAT, KSPLAT, SOG) open in
+a 3D viewer in the page, which can turn them and record a video. The
 original is always there to download. Everything else is sent as a download, with its real type so
 it opens in Word, PowerPoint and so on; SVG, HTML and other types a browser
 could run as a page are sent as plain bytes, so a file cannot run scripts in
@@ -24,6 +26,7 @@ a marked-up picture again replaces it on the list; the original stays.
 import hashlib
 import json
 import mimetypes
+import os
 import re
 from typing import Dict, List, Optional
 
@@ -45,6 +48,7 @@ KINDS = [('pdf', ('application/pdf',)),
          ('word', ('msword', 'wordprocessingml', 'opendocument.text', 'rtf')),
          ('powerpoint', ('powerpoint', 'presentationml', 'opendocument.presentation')),
          ('excel', ('excel', 'spreadsheetml', 'opendocument.spreadsheet', 'text/csv', 'tab-separated')),
+         ('model', ('model/gltf', 'usdz', 'x-ply', 'x-gaussian-splat', 'x-ksplat', 'x-spz', 'x-sog')),
          ('archive', ('zip', 'x-7z', 'x-tar', 'gzip', 'x-rar')),
          ('sequence', ('genbank', 'x-snapgene', 'fasta')),
          ('text', ('text/',))]
@@ -56,6 +60,13 @@ for ext in ('.gb', '.gbk', '.ape'):
 mimetypes.add_type('application/x-snapgene', '.dna')
 for ext in ('.fasta', '.fa', '.fna'):
     mimetypes.add_type('chemical/x-fasta', ext)
+# 3D: meshes, and Gaussian splats (3DGS). A .ply can be either; the viewer reads which from its header.
+MODEL_TYPES = {'.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.usdz': 'model/vnd.usdz+zip',
+               '.ply': 'application/x-ply',
+               '.splat': 'application/x-gaussian-splat', '.ksplat': 'application/x-ksplat',
+               '.spz': 'application/x-spz', '.sog': 'application/x-sog'}
+for ext, mime in MODEL_TYPES.items():
+    mimetypes.add_type(mime, ext)
 _SIGNATURES = [(b'\x89PNG\r\n\x1a\n', 'image/png'), (b'\xff\xd8\xff', 'image/jpeg'), (b'GIF8', 'image/gif'),
                (b'BM', 'image/bmp')]
 
@@ -74,9 +85,12 @@ def _sniff(data: bytes, filename: str) -> str:
     return 'application/octet-stream' if guessed in INLINE_TYPES | PREVIEW_TYPES else guessed
 
 
-def kind(mime: str) -> str:
+def kind(mime: str, filename: str = '') -> str:
     if mime in INLINE_TYPES:
         return 'image'
+    # Files attached before the notebook knew these endings were kept as plain bytes.
+    if mime == 'application/octet-stream' and os.path.splitext(filename.lower())[1] in MODEL_TYPES:
+        return 'model'
     for name, marks in KINDS:
         if any(m in mime for m in marks):
             return name
@@ -97,7 +111,8 @@ def _summary(row) -> dict:
     keys = row.keys()
     return {'id': row['id'], 'note_id': row['note_id'], 'filename': row['filename'], 'mime': row['mime'],
             'size': row['size'], 'image': row['mime'] in INLINE_TYPES,
-            'preview': row['mime'] in PREVIEW_TYPES, 'kind': kind(row['mime']),
+            'preview': row['mime'] in PREVIEW_TYPES, 'kind': kind(row['mime'], row['filename']),
+            'model': kind(row['mime'], row['filename']) == 'model',
             'view': viewer.converted(kind(row['mime'])) or kind(row['mime']) in viewer.TEXT_KINDS,
             'created_by': row['created_by'], 'created_at': row['created_at'],
             # Marked up from another photo of the note: which.
@@ -154,7 +169,7 @@ def fetch(person: Person, att_id: str) -> Dict:
         raise notes.Forbidden('This file is not yours to open')
     return {'data': bytes(row['data']), 'mime': row['mime'], 'filename': row['filename'],
             'inline': row['mime'] in INLINE_TYPES, 'preview': row['mime'] in PREVIEW_TYPES,
-            'sha256': row['sha256'], 'kind': kind(row['mime'])}
+            'sha256': row['sha256'], 'kind': kind(row['mime'], row['filename'])}
 
 
 def remove(person: Person, att_id: str) -> None:

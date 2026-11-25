@@ -7,6 +7,15 @@
     <link rel="icon" type="image/svg+xml" href="{{ request.script_root }}/static/trellis/notebook.svg">
     <link rel="stylesheet" href="{{ request.script_root }}/static/trellis/trellis.css?v={{ version }}">
     <link rel="stylesheet" href="{{ request.script_root }}/static/css/notebook.css?v={{ version }}">
+    {# The 3D viewer's libraries (static/vendor), loaded only when a 3D file is opened. #}
+    <script type="importmap">
+    {"imports": {
+        "three": "{{ request.script_root }}/static/vendor/three/three.module.js",
+        "three/addons/": "{{ request.script_root }}/static/vendor/three/addons/",
+        "@sparkjsdev/spark": "{{ request.script_root }}/static/vendor/spark/spark.module.js",
+        "mp4-muxer": "{{ request.script_root }}/static/vendor/mp4-muxer/mp4-muxer.js"
+    }}
+    </script>
 </head>
 <body class="tt">
 <header class="tt-bar">
@@ -31,6 +40,9 @@
         <div class="search-box">
             <input type="search" id="searchInput" placeholder="Search notes and protocols…"
                    title="Words in titles and text; #label or #label=value for labels" autocomplete="off">
+            <label class="search-own" title="Leave out the protocol library and pages others share with you">
+                <input type="checkbox" id="searchOwn"> Only my notebook
+            </label>
         </div>
         <section class="search-results" id="searchResults" hidden></section>
         <div id="sidebarTrees">
@@ -96,6 +108,7 @@
 <script>
     window.NB = {
         base: {{ request.script_root | tojson }},
+        version: {{ version | tojson }},
         editor: {{ links.editor | tojson }},
         seeds: {{ links.seeds | tojson }},
         stocks: {{ links.stocks | tojson }},

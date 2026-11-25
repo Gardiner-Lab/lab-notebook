@@ -275,6 +275,23 @@ def test_search_finds_words_in_pages_and_labels(as_user):
     assert [n['id'] for n in ana.get('/api/search?q=western').get_json()['notes']] == [gel['id']]
 
 
+def test_search_can_keep_to_your_own_notebook(as_user):
+    ana, lead = as_user('ana'), as_user('lead')
+    mine = _page(ana, _me(ana)['notebook'], 'Agarose gel')
+    lead_page = _page(lead, _me(lead)['notebook'], 'Agarose for the class')
+    protocol = ana.post('/api/notes', json={'parent_id': _me(ana)['library'], 'title': 'Agarose protocol',
+                                            'type': 'protocol'}).get_json()['note']
+
+    everything = {n['id'] for n in lead.get('/api/search?q=agarose').get_json()['notes']}
+    assert {mine['id'], lead_page['id'], protocol['id']} <= everything, 'a lead sees the lab and the library'
+    # Only my notebook: neither the lab's pages nor the protocol library.
+    assert [n['id'] for n in lead.get('/api/search?q=agarose&own=1').get_json()['notes']] == [lead_page['id']]
+    assert [n['id'] for n in ana.get('/api/search?q=agarose&own=1').get_json()['notes']] == [mine['id']]
+    ana.post(f"/api/notes/{mine['id']}/attributes", json={'name': 'project', 'value': 'GFP'})
+    assert [n['id'] for n in ana.get('/api/search?q=%23project&own=1').get_json()['notes']] == [mine['id']]
+    assert lead.get('/api/search?q=%23project&own=1').get_json()['notes'] == []
+
+
 def test_the_protocol_list_and_favourites(as_user):
     ana, ben = as_user('ana'), as_user('ben')
     library = _me(ana)['library']
@@ -485,6 +502,32 @@ def test_files_that_could_run_as_a_page_only_download(as_user):
         assert a['image'] is False
         r = ana.get(f"/api/attachments/{a['id']}")
         assert r.headers['Content-Disposition'].startswith('attachment') and r.mimetype == 'application/octet-stream'
+
+
+def test_3d_models_and_gaussian_splats_open_in_the_3d_viewer(as_user, world):
+    ana = as_user('ana')
+    page = _page(ana, _me(ana)['notebook'], 'Scans')
+    nl = chr(10)
+    files = [('plant.glb', b'glTF' + bytes([2, 0, 0, 0])), ('plant.usdz', b'PK' + bytes([3, 4]) + b'usdc'),
+             ('mesh.gltf', b'{}'), ('scan.ply', f'ply{nl}format binary_little_endian 1.0{nl}end_header{nl}'.encode()),
+             ('scan.splat', bytes(32)), ('scan.ksplat', bytes(8)), ('scan.spz', bytes([31, 139])), ('scan.sog', b'PK'),
+             ('notes.txt', b'not a model')]
+    found = {a['filename']: a for a in _attach(ana, page['id'], *files).get_json()['attachments']}
+    for name, _ in files[:-1]:
+        assert found[name]['model'] is True and found[name]['kind'] == 'model', name
+        assert found[name]['image'] is False and found[name]['preview'] is False
+    assert found['notes.txt']['model'] is False and found['notes.txt']['kind'] == 'text'
+    # The viewer fetches the bytes; they are sent as a download, never as a page.
+    r = ana.get(f"/api/attachments/{found['plant.glb']['id']}?download")
+    assert r.data.startswith(b'glTF') and r.headers['Content-Disposition'].startswith('attachment')
+    assert 'sandbox' in r.headers['Content-Security-Policy']
+
+    # A scan attached before the notebook knew these endings, kept as plain bytes, opens in the viewer too.
+    import sqlite3
+    with sqlite3.connect(world['paths']['notebook']) as db:
+        db.execute("UPDATE attachments SET mime = 'application/octet-stream' WHERE id = ?", (found['scan.spz']['id'],))
+    again = {a['filename']: a for a in ana.get(f"/api/notes/{page['id']}").get_json()['note']['attachments']}
+    assert again['scan.spz']['model'] is True and again['scan.spz']['kind'] == 'model'
 
 
 def test_who_may_see_and_add_attachments(as_user):

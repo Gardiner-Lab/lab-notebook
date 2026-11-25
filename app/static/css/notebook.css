@@ -333,6 +333,8 @@ div.step-text:empty::before { content: attr(data-placeholder); color: var(--mute
 .search-box { padding: 0 .4rem .6rem; }
 .search-box input { font: inherit; font-size: .9rem; width: 100%; padding: .4rem .6rem; border: 1px solid var(--border); border-radius: .4rem; background: var(--bg); }
 .search-box input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); background: #fff; }
+.search-own { display: flex; align-items: center; gap: .35rem; margin-top: .35rem; font-size: .8rem; color: var(--muted, #666); cursor: pointer; user-select: none; }
+.search-own input { width: auto; margin: 0; padding: 0; }
 .search-list { list-style: none; margin: 0; padding: 0; }
 .search-hit { padding: .4rem .5rem; border-radius: .35rem; cursor: pointer; }
 .search-hit:hover, .search-hit:focus { background: var(--hover); outline: none; }
@@ -683,3 +685,34 @@ span.task-priority { cursor: default; }
 .sheet .cell-view { position: absolute; inset: 0; padding: .3rem .4rem; overflow: hidden; white-space: nowrap;
   text-overflow: ellipsis; cursor: text; }
 .sheet .cell-view a { color: var(--accent, #2563eb); text-decoration: underline; cursor: pointer; }
+
+/* --- the 3D viewer (model3d.js) --------------------------------------------------------- */
+.viewer-3d { position: absolute; inset: 0; }
+.m3d { position: absolute; inset: 0; display: flex; flex-direction: column; background: #1f1d1a; color: #f3efe8; }
+.m3d[data-background="white"], .m3d[data-background="grey"] { color: var(--text); }
+.m3d-view { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.m3d-view canvas { display: block; touch-action: none; cursor: grab; }
+.m3d-view canvas:active { cursor: grabbing; }
+.m3d-view.framed { background: repeating-linear-gradient(45deg, rgba(0,0,0,.35) 0 8px, rgba(0,0,0,.45) 8px 16px); }
+.m3d-view.framed canvas { outline: 2px solid var(--accent); }
+.m3d-help { position: absolute; top: .5rem; left: .7rem; font-size: .75rem; opacity: .7; pointer-events: none; }
+.m3d-bar { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; padding: .45rem .6rem; background: var(--card); color: var(--text); border-top: 1px solid var(--border); }
+.m3d-bar .btn.active { border-color: var(--accent); color: var(--accent); }
+.m3d-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 .15rem; }
+.m3d-select { font: inherit; font-size: .85rem; padding: .2rem .35rem; border: 1px solid var(--border); border-radius: .35rem; background: var(--card); color: var(--text); }
+.m3d-status { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); padding: .5rem .9rem; border-radius: .4rem;
+  background: rgba(0,0,0,.55); color: #fff; font-size: .9rem; max-width: min(36rem, 90%); text-align: center; }
+.m3d-status:empty { display: none; }
+.m3d-status.m3d-error { background: #8b2a1f; }
+.m3d-panel { position: absolute; top: .6rem; right: .6rem; width: min(19rem, calc(100% - 1.2rem)); max-height: calc(100% - 4.5rem); overflow: auto;
+  background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: .5rem; padding: .7rem .8rem; box-shadow: 0 6px 24px rgba(0,0,0,.3); }
+.m3d-panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .3rem; }
+.m3d-panel > p { margin: .3rem 0 .6rem; }
+.m3d-fields { display: grid; gap: .45rem; margin-bottom: .7rem; }
+.m3d-field { display: grid; gap: .15rem; font-size: .8rem; }
+.m3d-field .m3d-select { width: 100%; }
+.m3d-progress { width: 100%; margin-top: .6rem; }
+.m3d-note { margin: .5rem 0 0; }
+.m3d-saved { margin-top: .5rem; display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.m3d-saved a.btn { text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+@media (max-width: 640px) { .m3d-help { display: none; } .m3d-panel { top: auto; bottom: 3.6rem; } }

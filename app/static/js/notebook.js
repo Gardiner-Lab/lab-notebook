@@ -164,7 +164,7 @@ const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (ch) => `&#${ch.charCodeA
 const sizeLabel = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} kB`);
 /** One of Trellis Tools' small icons (static/trellis/glyphs/), in place of an emoji. */
 const glyph = (name) => el('img', { class: 'tt-glyph', src: url(`/static/trellis/glyphs/${name}.svg`), alt: '' });
-const FILE_ICONS = { pdf: 'pdf', word: 'doc', powerpoint: 'slides', excel: 'sheet', archive: 'archive', sequence: 'line', text: 'text', image: 'image', file: 'attach' };
+const FILE_ICONS = { pdf: 'pdf', word: 'doc', powerpoint: 'slides', excel: 'sheet', archive: 'archive', sequence: 'line', text: 'text', image: 'image', model: 'cube', file: 'attach' };
 /** An attachment as it sits in text: a photo shown, any other file a link (its icon is the stylesheet's, a[data-attachment]). */
 const attachmentHtml = (a) => (a.image
   ? `<p><img data-attachment="${a.id}" alt="${escapeHtml(a.filename)}"></p>`
@@ -489,6 +489,14 @@ const Search = {
       if (e.key === 'Escape') { input.value = ''; this.run(''); }
       if (e.key === 'Enter') document.querySelector('.search-hit')?.click();
     });
+    // Only my notebook: remembered on this computer, and the search runs again when it changes.
+    const own = document.getElementById('searchOwn');
+    try { own.checked = localStorage.getItem('nb.searchOwn') === '1'; } catch (err) { /* no storage */ }
+    own.addEventListener('change', () => {
+      try { localStorage.setItem('nb.searchOwn', own.checked ? '1' : '0'); } catch (err) { /* no storage */ }
+      if (input.value.trim()) this.run(input.value);
+      input.focus();
+    });
     // Ctrl+K (or /) jumps to search, from anywhere outside a text field. In a page's text Ctrl+K
     // makes a web link instead (as in a word processor); that handler has taken the key by then.
     document.addEventListener('keydown', (e) => {
@@ -511,7 +519,8 @@ const Search = {
     this.ticket = (this.ticket || 0) + 1;
     const mine = this.ticket;
     let notes = [];
-    try { notes = (await api('GET', `/search?q=${encodeURIComponent(q)}`)).notes; } catch (err) { toast(err.message, 'error'); }
+    const own = document.getElementById('searchOwn').checked;
+    try { notes = (await api('GET', `/search?q=${encodeURIComponent(q)}${own ? '&own=1' : ''}`)).notes; } catch (err) { toast(err.message, 'error'); }
     if (mine !== this.ticket) return;
     const words = q.startsWith('#') ? [] : q.toLowerCase().split(/\s+/).filter(Boolean);
     const mark = (text) => {
@@ -531,7 +540,8 @@ const Search = {
       el('div', { class: 'hint' }, [n.space === 'library' ? 'Protocol library' : (n.owner !== NB.person.username ? `${who(n.owner)}'s notebook` : ''),
         n.where].filter(Boolean).join(' › ')),
       n.snippet ? el('div', { class: 'search-snippet' }, mark(n.snippet)) : null)))
-        : el('p', { class: 'hint', style: 'padding:.4rem' }, q.startsWith('#') ? 'No notes with that label.' : 'Nothing found. Try fewer words.'));
+        : el('p', { class: 'hint', style: 'padding:.4rem' }, (q.startsWith('#') ? 'No notes with that label' : 'Nothing found')
+          + (own ? ' in your notebook. Untick "Only my notebook" to search everything you can open.' : (q.startsWith('#') ? '.' : '. Try fewer words.'))));
   },
 };
 
@@ -567,12 +577,12 @@ const Marker = { on: false, colour: 'yellow' };
 /* --- attached documents, shown in the page ------------------------------------------- */
 
 /**
- * A note's photos, PDFs, Word, PowerPoint and Excel files and text files, opened over the page rather than
- * in another tab: ‹ › (or the arrow keys) go through the others on the note, ⤓ downloads the original, ↗ opens
+ * A note's photos, PDFs, Word, PowerPoint and Excel files, text files and 3D models (GLB, PLY, Gaussian
+ * splats: model3d.js), opened over the page rather than in another tab: ‹ › (or the arrow keys) go through the others on the note, ⤓ downloads the original, ↗ opens
  * it in a tab of its own. Other files download, as before.
  */
 const Viewer = {
-  shows: (a) => !!(a && (a.image || a.preview || a.view)),
+  shows: (a) => !!(a && (a.image || a.preview || a.view || a.model)),
 
   /** Open the attachment with this id; false when it is not one the viewer shows (the caller does as before). */
   open(id) {
@@ -587,7 +597,9 @@ const Viewer = {
     const tab = el('a', { class: 'btn btn-secondary btn-sm', target: '_blank', rel: 'noopener', title: 'Open it in a tab of its own' }, '↗ New tab');
     const prev = el('button', { class: 'btn btn-secondary btn-sm', title: 'The one before (←)', onclick: () => go(-1) }, '‹');
     const next = el('button', { class: 'btn btn-secondary btn-sm', title: 'The next one (→)', onclick: () => go(1) }, '›');
-    const close = () => { box.remove(); document.removeEventListener('keydown', keys); };
+    let shown3d = null;      // the 3D viewer, put away when moving on
+    const leave3d = () => { shown3d?.then((v) => v?.dispose()); shown3d = null; };
+    const close = () => { leave3d(); box.remove(); document.removeEventListener('keydown', keys); };
     const box = el('div', { class: 'viewer-backdrop', id: 'docViewer', role: 'dialog', 'aria-modal': 'true' },
       el('div', { class: 'viewer' },
         el('div', { class: 'viewer-head' }, title, count,
@@ -600,6 +612,17 @@ const Viewer = {
       count.textContent = list.length > 1 ? ` ${at + 1} of ${list.length}` : '';
       download.href = attachmentUrl(a.id, true);
       tab.href = a.image ? attachmentUrl(a.id) : viewUrl(a.id);
+      tab.hidden = !!a.model;
+      leave3d();
+      if (a.model) {
+        const host = el('div', { class: 'viewer-3d' });
+        put(stage, host);
+        shown3d = import(`${NB.base}/static/js/model3d.js?v=${NB.version}`)
+          .then((m) => (host.isConnected ? m.mount(host, { url: attachmentUrl(a.id, true), filename: a.filename,
+            attach: App.note?.can_edit && App.note.id === a.note_id ? (file) => App.upload(App.note, [file]) : null }) : null))
+          .catch((err) => { put(stage, el('p', { class: 'viewer-waiting hint' }, `The 3D viewer could not start: ${err.message}`)); return null; });
+        return;
+      }
       if (a.image) { put(stage, el('img', { class: 'viewer-image', src: attachmentUrl(a.id), alt: a.filename })); return; }
       // A Word, PowerPoint or Excel file is turned into a PDF the first time, which can take a moment: it is
       // fetched first (and then shown from the browser's cache), or what went wrong said.
@@ -614,6 +637,7 @@ const Viewer = {
     };
     const go = (step) => { at = (at + step + list.length) % list.length; show(); };
     const keys = (e) => {
+      if (e.target.closest?.('input, select, textarea')) return;   // the 3D viewer's video settings
       if (e.key === 'Escape') close();
       else if (e.key === 'ArrowLeft' && list.length > 1) go(-1);
       else if (e.key === 'ArrowRight' && list.length > 1) go(1);
