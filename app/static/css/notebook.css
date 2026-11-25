@@ -466,6 +466,11 @@ div.step-text:empty::before { content: attr(data-placeholder); color: var(--mute
 .meeting-field input, .meeting-field select, .meeting-field textarea { font: inherit; padding: .35rem .5rem;
     border: 1px solid var(--border); border-radius: .35rem; min-width: 0; width: 100%; box-sizing: border-box; }
 .meeting-field textarea { resize: vertical; }
+/* A day box with the calendar button inside it (withCalendar); the browser's own date box hidden. */
+.date-field { position: relative; display: block; }
+.date-field input[type=text] { padding-right: 2.2rem; cursor: pointer; }
+.date-field .icon-btn { position: absolute; right: .25rem; top: 50%; transform: translateY(-50%); padding: .1rem .3rem; }
+.date-field input[type=date] { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; pointer-events: none; }
 /* One height for every one-line box and list, so boxes side by side line up. */
 .meeting-field input:not([type=checkbox]):not([type=radio]):not(.lag), .meeting-field select { height: 2.25rem; line-height: 1.2; }
 .meeting-field [hidden], .meeting-field[hidden] { display: none; }
@@ -490,6 +495,9 @@ div.step-text:empty::before { content: attr(data-placeholder); color: var(--mute
 .week-hours span:first-child { transform: none; }
 .week-day { position: relative; border-right: 1px solid var(--tt-line); }
 .week-day:last-child { border-right: 0; }
+.week-day { cursor: crosshair; touch-action: none; user-select: none; }
+.week-sel { position: absolute; left: 3px; right: 3px; z-index: 2; pointer-events: none; font-size: .75rem; padding: .1rem .3rem;
+    background: rgba(47, 143, 70, .16); border: 2px dashed var(--tt-green-ink, #2f8f46); border-radius: .35rem; color: var(--tt-green-ink, #2f8f46); }
 .week-day.is-today { background: #fbfdf9; }
 .week-hour-line { position: absolute; left: 0; right: 0; border-top: 1px solid var(--tt-line); }
 .week-event { position: absolute; display: flex; flex-direction: column; align-items: flex-start; gap: 0; overflow: hidden;

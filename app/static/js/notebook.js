@@ -112,6 +112,30 @@ function isoFromDayMonthYear(text) {
   return `${y}-${pad(mo)}-${pad(d)}`;
 }
 
+/**
+ * A dd-mm-yyyy box that brings up the browser's calendar when clicked (or from the button beside it);
+ * a day can still be typed. The browser's own date box is kept hidden: it shows days in its language's
+ * order, often mm/dd/yyyy.
+ */
+function withCalendar(input) {
+  const calendar = el('input', { type: 'date', tabindex: '-1', 'aria-hidden': 'true' });
+  const open = () => {
+    const iso = isoFromDayMonthYear(input.value);
+    if (iso) calendar.value = iso;
+    try { calendar.showPicker(); } catch { /* an older browser: type the day */ }
+  };
+  calendar.addEventListener('change', () => {
+    if (!calendar.value) return;
+    input.value = dayMonthYear(calendar.value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  input.addEventListener('click', open);
+  return el('span', { class: 'date-field' }, input,
+    el('button', { type: 'button', class: 'icon-btn', title: 'Choose the day on a calendar',
+      onclick: (e) => { e.preventDefault(); open(); } }, glyph('calendar')),
+    calendar);
+}
+
 /** "YYYY-MM-DD" as dd-mm-yyyy. */
 function dayMonthYear(iso) {
   const [y, m, d] = String(iso).split('-');
@@ -640,7 +664,10 @@ const Blocks = {
       // A meeting's agenda ends with a button for one more point: under its last point, or under its heading.
       const isPoint = (b) => b?.type === 'section' && b.source?.kind === 'agenda';
       const isAgendaHead = (b) => b?.type === 'text' && App.note?.type === 'meeting' && /^<h3>Agenda<\/h3>/.test(b.html || '');
-      if ((isPoint(block) || isAgendaHead(block)) && !isPoint(list[index + 1])) {
+      // A task or work package put on a meeting's agenda is part of it too.
+      const onAgenda = (b) => isPoint(b) || (b?.type === 'section' && App.note?.type === 'meeting'
+        && ['task', 'workpackage'].includes(b.source?.kind));
+      if ((onAgenda(block) || isAgendaHead(block)) && !onAgenda(list[index + 1])) {
         box.append(el('button', {
           class: 'btn btn-secondary btn-sm agenda-add', title: 'One more point on the agenda, with room under it for its minutes',
           onclick: () => {
@@ -2413,7 +2440,7 @@ const Meetings = {
   },
 
   /** Set up a meeting (m null), on a day if given, or change one. */
-  async edit(m, { day = null, data = null } = {}) {
+  async edit(m, { day = null, from = null, to = null, data = null } = {}) {
     try { data = data || await api('GET', '/meetings'); } catch (err) { toast(err.message, 'error'); return; }
     const pad = (n) => String(n).padStart(2, '0');
     const now = new Date();
@@ -2429,13 +2456,13 @@ const Meetings = {
     const title = el('input', { type: 'text', value: m?.title || '', placeholder: 'e.g. Lab meeting', maxlength: 120 });
     const first = el('input', { type: 'text', inputmode: 'numeric', placeholder: 'dd-mm-yyyy',
       value: dayMonthYear(m?.starts_on || day || todayIso) });
-    const start = el('input', { type: 'text', inputmode: 'numeric', placeholder: 'HH:MM', maxlength: 5, value: m?.start_time || '10:00' });
-    const end = el('input', { type: 'text', inputmode: 'numeric', placeholder: 'HH:MM', maxlength: 5, value: m?.end_time || '11:00' });
+    const start = el('input', { type: 'text', inputmode: 'numeric', placeholder: 'HH:MM', maxlength: 5, value: m?.start_time || from || '10:00' });
+    const end = el('input', { type: 'text', inputmode: 'numeric', placeholder: 'HH:MM', maxlength: 5, value: m?.end_time || to || '11:00' });
     const repeat = el('select', {}, Object.entries(data.repeats).map(([value, label]) =>
       el('option', { value, selected: (m?.repeat || 'weekly') === value || null }, label)));
     const until = el('input', { type: 'text', inputmode: 'numeric', placeholder: 'dd-mm-yyyy, or leave empty',
       value: m?.until ? dayMonthYear(m.until) : '' });
-    const untilField = field('Last date', until, 'Empty: it goes on until you end it.');
+    const untilField = field('Last date', withCalendar(until), 'Empty: it goes on until you end it.');
     const showUntil = () => { untilField.hidden = repeat.value === 'none'; };
     repeat.addEventListener('change', showUntil);
     showUntil();
@@ -2471,7 +2498,7 @@ const Meetings = {
       };
       const { meeting } = m ? await api('PUT', `/meetings/${m.id}`, body) : await api('POST', '/meetings', body);
       toast(m ? 'Meeting changed' : `Meeting set up: ${meeting.when}`, 'success');
-      await this.after();
+      await this.after(m ? null : meeting);
     };
     const buttons = [{ label: 'Cancel', kind: 'secondary' }];
     if (m) {
@@ -2483,7 +2510,7 @@ const Meetings = {
       wide: true,
       build: (body) => body.append(el('div', { class: 'meeting-form' },
         field('Title', title),
-        el('div', { class: 'meeting-row' }, field('First date', first), field('From', start, '24-hour clock'), field('To', end)),
+        el('div', { class: 'meeting-row' }, field('First date', withCalendar(first)), field('From', start, '24-hour clock'), field('To', end)),
         el('div', { class: 'meeting-row' }, field('Repeats', repeat), untilField),
         field('Where', place),
         field('Agenda', agenda, 'One point per line. On each meeting’s page every point gets a box of its own for its minutes; each page can then be written on by itself.'),
@@ -2514,8 +2541,13 @@ const Meetings = {
   },
 
   /** After a change: the tree, and the page shown, as they are now. */
-  async after() {
-    if (App.note) {
+  /** After a meeting is set up, changed or ended: what is shown, again. On the Meetings tab its week
+   *  schedule at once (for a new meeting, the week of its first date); on a page, the page. */
+  async after(meeting = null) {
+    if (!document.getElementById('meetingsView').hidden) {
+      await App.reloadTrees();
+      await MeetingWeek.show(meeting?.starts_on || null);
+    } else if (App.note) {
       try { await App.refresh(); } catch { await App.reloadTrees(); }
     } else {
       await App.reloadTrees();

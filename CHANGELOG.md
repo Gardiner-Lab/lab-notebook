@@ -5,6 +5,20 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-11-25
+
+### Added
+- **Drag over the time on the Meetings tab to set up a meeting**, as in Booking: in steps of a
+  quarter of an hour, an hour if only clicked. The new meeting's form opens with that day and time.
+- **A calendar for a meeting's dates.** Clicking the first date (or the last date) of a meeting
+  brings up the browser's calendar; a day can still be typed as dd-mm-yyyy.
+
+### Fixed
+- **The Meetings tab shows a meeting as soon as it is set up**, changed or ended, in the week of a
+  new meeting's first date; before, only the sidebar was brought up to date.
+- **One ＋ Agenda point per meeting page.** With a project's task straight after the Agenda heading,
+  a second button showed under the heading; tasks on the agenda now count as part of it.
+
 ## [0.36.0] - 2026-11-25
 
 ### Added

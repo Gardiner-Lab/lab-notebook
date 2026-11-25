@@ -57,7 +57,7 @@ const MeetingWeek = {
           el('button', { class: 'btn btn-secondary btn-sm', onclick: () => Meetings.list() }, 'All meetings…'),
           el('button', { class: 'btn btn-primary btn-sm', onclick: () => Meetings.edit(null, { day: data.start <= data.today && data.today <= data.end ? data.today : data.start }) },
             '＋ New meeting'))),
-      el('p', { class: 'hint' }, 'The meetings you set up or are invited to. Click one to open its page: the agenda, who came, notes and action items.'),
+      el('p', { class: 'hint' }, 'The meetings you set up or are invited to. Click one to open its page: the agenda, who came, notes and action items. Drag over a day’s time to set up a new one then.'),
       this.grid(days, data));
   },
 
@@ -78,7 +78,8 @@ const MeetingWeek = {
         return { m, s, e, lane };
       });
       const width = 100 / Math.max(1, lanes.length);
-      return el('div', { class: `week-day ${iso === data.today ? 'is-today' : ''}`, style: `height:${hours.length * HOUR}px` },
+      const col = el('div', { class: `week-day ${iso === data.today ? 'is-today' : ''}`, style: `height:${hours.length * HOUR}px`,
+        title: 'Drag over the time (or click it) to set up a meeting then' },
         hours.map((h, i) => el('div', { class: 'week-hour-line', style: `top:${i * HOUR}px` })),
         placed.map(({ m, s, e, lane }) => el('button', {
           class: `week-event ${m.skipped ? 'skipped' : ''}`,
@@ -87,9 +88,12 @@ const MeetingWeek = {
           title: `${m.title}\n${m.start_time}–${m.end_time}${m.location ? ` · ${m.location}` : ''}\n${m.when}`
             + `${m.people.length ? `\nWith ${[m.owner, ...m.people].map(who).join(', ')}` : ''}${m.skipped ? '\nSkipped: its page was deleted' : ''}`,
           onclick: () => this.open(m),
+          onpointerdown: (e) => e.stopPropagation(),
         }, el('b', {}, m.title), el('span', {}, `${m.start_time}–${m.end_time}`),
         m.location ? el('span', { class: 'week-where' }, m.location) : null,
         m.skipped ? el('span', {}, 'skipped') : null)));
+      this.pickOn(col, iso, first * 60, hours.length * 60, HOUR / 60);
+      return col;
     };
     return el('div', { class: 'week-wrap' }, el('div', { class: 'week-grid' },
       el('div', { class: 'week-corner' }),
@@ -99,6 +103,50 @@ const MeetingWeek = {
         hours.map((h, i) => el('span', { style: `top:${i * HOUR}px` }, `${String(h).padStart(2, '0')}:00`))),
       days.map(column)),
     items.length ? null : el('p', { class: 'hint week-empty' }, 'No meetings this week.'));
+  },
+
+  /** Drag over free time in a day (or click it) to set up a meeting then: in steps of a quarter, an hour if only clicked. */
+  pickOn(col, iso, dayStart, dayLength, pxPerMin) {
+    const STEP = 15;
+    const hm = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+    const at = (e) => Math.max(0, Math.min(dayLength, (e.clientY - col.getBoundingClientRect().top) / pxPerMin));
+    let from = null;
+    let sel = null;
+    let moved = false;
+    const span = (to) => {
+      const a = Math.floor(Math.min(from, to) / STEP) * STEP;
+      const b = moved ? Math.max(a + STEP, Math.ceil(Math.max(from, to) / STEP) * STEP) : a + 60;
+      return [a, Math.min(b, dayLength)];
+    };
+    const draw = (to) => {
+      const [a, b] = span(to);
+      sel.style.top = `${a * pxPerMin}px`;
+      sel.style.height = `${(b - a) * pxPerMin}px`;
+      sel.textContent = `${hm(dayStart + a)}–${hm(dayStart + b)}`;
+    };
+    col.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      from = at(e);
+      moved = false;
+      col.setPointerCapture(e.pointerId);
+      sel = el('div', { class: 'week-sel' });
+      col.append(sel);
+      draw(from);
+    });
+    col.addEventListener('pointermove', (e) => {
+      if (!sel) return;
+      if (Math.abs(at(e) - from) >= STEP / 2) moved = true;
+      draw(at(e));
+    });
+    col.addEventListener('pointerup', (e) => {
+      if (!sel) return;
+      const [a, b] = span(at(e));
+      sel.remove();
+      sel = null;
+      Meetings.edit(null, { day: iso, from: hm(dayStart + a), to: hm(dayStart + b) });
+    });
+    col.addEventListener('pointercancel', () => { if (sel) { sel.remove(); sel = null; } });
   },
 
   async open(m) {
