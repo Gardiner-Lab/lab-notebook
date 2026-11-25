@@ -4080,9 +4080,9 @@ const App = {
         Blocks.linkAt(area, sel.getRangeAt(0), sync);
       } }, '@'));
     /**
-     * Just above the line being written on - where the caret is, not the top of the section, which in a
-     * long section may be far up the page or off the screen - and below that line when there is no room
-     * above it. Always in sight: never above the page's own bar, nor off the sides of the window.
+     * Just above the text box, covering none of what is written; in a long box whose top is off the
+     * screen, just below the line being written on (where the caret is). Always in sight: never above
+     * the page's own bar, nor off the sides of the window.
      */
     const place = () => {
       const box = area.getBoundingClientRect();
@@ -4104,9 +4104,10 @@ const App = {
           line = node && area.contains(node) ? node.getBoundingClientRect() : null;
         }
       }
-      const top = line ? line.top : box.top;
+      // Above the box, where it hides none of what is written; when the top of a long box is off the
+      // screen, just under the line being written on instead, so the lines above stay in sight.
       const bottom = line ? line.bottom : box.top + 24;
-      let y = top - gap;
+      let y = box.top - gap;
       if (y < under) y = Math.min(bottom + 6, window.innerHeight - gap);
       bar.style.top = `${Math.max(y, under)}px`;
       const width = bar.offsetWidth || 420;

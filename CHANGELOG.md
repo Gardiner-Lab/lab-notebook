@@ -5,6 +5,12 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.38.1] - 2026-11-25
+
+### Fixed
+- **The formatting bar no longer covers the lines above the one being written.** It sits just above
+  the text box; in a long box whose top is off the screen, just below the line being written on.
+
 ## [0.38.0] - 2026-11-25
 
 ### Added
