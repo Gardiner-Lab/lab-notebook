@@ -5,6 +5,13 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.38.2] - 2026-11-25
+
+### Changed
+- **The formatting bar sits on the row of the tabs** (Notebook, Protocols, Meetings, Projects), at
+  its right: always in the same place and over none of the text. It is greyed out when no text is
+  being written in, and shows on a page only, not on the Meetings or Projects tab.
+
 ## [0.38.1] - 2026-11-25
 
 ### Fixed

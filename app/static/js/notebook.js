@@ -2674,6 +2674,9 @@ const App = {
 
   /** Show one of the main views (note, library, deleted, or none), hiding the others. */
   view(name) {
+    // The formatting bar belongs to a page: not over the Meetings or Projects tab, nor Deleted.
+    const bar = document.getElementById('formatBar');
+    if (bar) { bar.hidden = name !== 'note'; bar.classList.add('idle'); }
     for (const [id, key] of [['note', 'note'], ['library', 'library'], ['deletedView', 'deleted'], ['emptyState', 'empty'],
       ['meetingsView', 'meetings'], ['projectsView', 'projects']]) {
       document.getElementById(id).hidden = key !== name;
@@ -4023,10 +4026,11 @@ const App = {
   },
 
   showFormatBar(area, sync) {
+    // On the row of the notebook's tabs, at its right: always in the same place, over none of the text.
     let bar = document.getElementById('formatBar');
     if (!bar) {
       bar = el('div', { class: 'format-bar', id: 'formatBar' });
-      document.body.append(bar);
+      (document.querySelector('header.tt-bar .view-tabs') || document.body).append(bar);
     }
     const cmd = (command, value) => (e) => {
       e.preventDefault();
@@ -4079,67 +4083,16 @@ const App = {
         if (!sel.rangeCount || !area.contains(sel.anchorNode)) return;
         Blocks.linkAt(area, sel.getRangeAt(0), sync);
       } }, '@'));
-    /**
-     * Just above the text box, covering none of what is written; in a long box whose top is off the
-     * screen, just below the line being written on (where the caret is). Always in sight: never above
-     * the page's own bar, nor off the sides of the window.
-     */
-    const place = () => {
-      const box = area.getBoundingClientRect();
-      const gap = (bar.offsetHeight || 34) + 6;
-      // Under the page's own bar, measured rather than assumed: it is sticky, and grows taller when
-      // its buttons wrap, so a fixed number hides this bar behind it.
-      const head = document.querySelector('header.tt-bar');
-      const under = (head ? head.getBoundingClientRect().bottom : 52) + 4;
-      let line = null;
-      const sel = window.getSelection();
-      if (sel.rangeCount && area.contains(sel.anchorNode)) {
-        const range = sel.getRangeAt(0).cloneRange();
-        range.collapse(false);
-        const rects = range.getClientRects();
-        line = rects.length ? rects[rects.length - 1] : null;
-        // An empty line has no box of its own: the element the caret is in has one.
-        if (!line || (!line.height && !line.top)) {
-          const node = sel.focusNode?.nodeType === Node.ELEMENT_NODE ? sel.focusNode : sel.focusNode?.parentElement;
-          line = node && area.contains(node) ? node.getBoundingClientRect() : null;
-        }
-      }
-      // Above the box, where it hides none of what is written; when the top of a long box is off the
-      // screen, just under the line being written on instead, so the lines above stay in sight.
-      const bottom = line ? line.bottom : box.top + 24;
-      let y = box.top - gap;
-      if (y < under) y = Math.min(bottom + 6, window.innerHeight - gap);
-      bar.style.top = `${Math.max(y, under)}px`;
-      const width = bar.offsetWidth || 420;
-      const x = Math.min(Math.max((line ? line.left : box.left) - 12, box.left, 8), window.innerWidth - width - 8);
-      bar.style.left = `${Math.max(x, 8)}px`;
-    };
-    // One bar for the page, and one section it belongs to at a time: moving from one section to the next,
-    // the first one's leaving must not hide the bar the second has just shown.
+    // One bar for the page, and one text box it belongs to at a time: moving from one box to the next, the
+    // first one's leaving must not grey out the bar the second has just taken.
     bar._owner = area;
     bar.hidden = false;
-    place();
-    if (bar._follow) {
-      window.removeEventListener('scroll', bar._follow, true);
-      window.removeEventListener('resize', bar._follow);
-      document.removeEventListener('selectionchange', bar._follow);
-    }
-    // Scrolling, resizing, and the caret moving (a click further down, typing onto a new line) keep it
-    // with the line being written on.
-    const follow = () => { if (!bar.hidden && bar._owner === area) place(); };
-    bar._follow = follow;
-    window.addEventListener('scroll', follow, true);
-    window.addEventListener('resize', follow);
-    document.addEventListener('selectionchange', follow);
+    bar.classList.remove('idle');
     const hide = () => {
       setTimeout(() => {
-        if (bar._owner !== area) return;            // another section has it now
+        if (bar._owner !== area) return;            // another box has it now
         if (bar.matches(':hover') || document.activeElement === area || bar.contains(document.activeElement)) return;
-        bar.hidden = true;
-        window.removeEventListener('scroll', follow, true);
-        window.removeEventListener('resize', follow);
-        document.removeEventListener('selectionchange', follow);
-        bar._follow = null;
+        bar.classList.add('idle');                  // stays where it is, greyed out, until a box is written in
       }, 150);
     };
     area.addEventListener('blur', hide, { once: true });
@@ -4147,7 +4100,7 @@ const App = {
     if (!area._barOnClick) {
       area._barOnClick = true;
       area.addEventListener('mouseup', () => {
-        if (document.activeElement === area && (bar.hidden || bar._owner !== area)) App.showFormatBar(area, sync);
+        if (document.activeElement === area && (bar.hidden || bar.classList.contains('idle') || bar._owner !== area)) App.showFormatBar(area, sync);
       });
     }
   },
