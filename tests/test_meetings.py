@@ -78,7 +78,7 @@ def test_a_weekly_meeting_is_a_page_under_this_and_next_weeks_days_of_everyone(a
     assert page['meeting']['date'] == MONDAY.isoformat() and page['meeting']['people'] == ['ben']
     assert page['meeting']['location'] == 'Room 2.12' and not page['meeting']['can_edit']
     kinds = [(b['type'], b.get('title')) for b in page['content']]
-    assert kinds == [('text', None), ('section', 'Updates'), ('steps', 'Attendance'), ('text', None),
+    assert kinds == [('text', None), ('section', 'Updates'), ('steps', 'Attendance'), ('section', 'Notes'),
                      ('tasks', 'Action items')]
     assert page['content'][1]['source']['kind'] == 'agenda'
     assert [i['html'] for i in page['content'][2]['items']] == ['ana', 'ben']
@@ -126,9 +126,10 @@ def test_anyone_in_trellis_is_invited_and_those_not_invited_do_not_see_it(as_use
     assert [p['title'] for p in shared] == ['Collaboration · 14:00']
     note = _get(zoe, shared[0]['id'])
     assert note['can_edit'] and not note['can_share'] and not note['meeting']['can_edit']
-    note['content'][3]['html'] = '<h3>Notes</h3><p>Seeds sent on Friday</p>'
+    note['content'][3]['blocks'] = [{'id': 'z1', 'type': 'text', 'html': '<p>Seeds sent on Friday</p>', 'by': 'zoe'}]
     assert zoe.put(f"/api/notes/{note['id']}", json={'content': note['content']}).status_code == 200
-    assert 'Seeds sent' in _get(ana, note['id'])['content'][3]['html']
+    notes = _get(ana, note['id'])['content'][3]
+    assert notes['title'] == 'Notes' and [(b['by'], b['html']) for b in notes['blocks']] == [('zoe', '<p>Seeds sent on Friday</p>')]
     # Only the organiser changes or ends the meeting.
     change = {'title': 'Mine now', 'starts_on': MONDAY.isoformat(), 'repeat': 'weekly',
               'start_time': '10:00', 'end_time': '11:00', 'people': []}
@@ -153,7 +154,7 @@ def test_changing_a_meeting_remakes_pages_nobody_wrote_on_and_keeps_written_ones
     # Monday this week is gone by (today is Wednesday); it is kept as it was.
     # Next week's is written on.
     page = _get(ana, next_week['id'])
-    page['content'][3]['html'] = '<h3>Notes</h3><p>Talk about the grant</p>'
+    page['content'][3]['blocks'] = [{'id': 'a1', 'type': 'text', 'html': '<p>Talk about the grant</p>', 'by': 'ana'}]
     assert ana.put(f"/api/notes/{page['id']}", json={'content': page['content']}).status_code == 200
     r = ana.put(f"/api/meetings/{m['id']}", json={'title': 'Group meeting', 'starts_on': MONDAY.isoformat(),
                                                    'repeat': 'weekly', 'start_time': '09:30', 'end_time': '10:30',
@@ -164,7 +165,7 @@ def test_changing_a_meeting_remakes_pages_nobody_wrote_on_and_keeps_written_ones
     assert _get(ana, this_week['id'])['title'] == 'Lab meeting · 14:00'
     # Written on: kept, renamed; ben off it, lead on it and on the attendance list.
     kept = _get(ana, next_week['id'])
-    assert kept['title'] == 'Group meeting · 09:30' and 'grant' in kept['content'][3]['html']
+    assert kept['title'] == 'Group meeting · 09:30' and 'grant' in kept['content'][3]['blocks'][0]['html']
     assert [i['html'] for i in kept['content'][2]['items']] == ['ana', 'ben', 'lead']
     assert ben.get(f"/api/notes/{kept['id']}").status_code == 403
     assert [p['id'] for p in _meeting_pages(lead, MONDAY + timedelta(days=7))] == [kept['id']]
@@ -300,16 +301,61 @@ def test_each_point_of_the_agenda_has_room_for_its_minutes(as_user):
         'Updates', 'Grant report', 'Seeds', 'AOB']
     _meeting(ana, agenda='<p>Updates</p><p>Grant report</p>')
     page = _get(ben, _meeting_pages(ben, MONDAY)[0]['id'])
-    points = [b for b in page['content'] if b['type'] == 'section']
-    assert [(b['title'], b['source']['kind'], [x['type'] for x in b['blocks']]) for b in points] == [
-        ('Updates', 'agenda', ['text']), ('Grant report', 'agenda', ['text'])]
-    # Ben takes the minutes of the second point; ana sees them, and they are found by search.
-    points[1]['blocks'][0]['html'] = '<p>Report due on Friday; ana writes it</p>'
+    points = [b for b in page['content'] if b['type'] == 'section' and b['source']['kind'] == 'agenda']
+    assert [(b['title'], b['source']['kind'], b['blocks']) for b in points] == [
+        ('Updates', 'agenda', []), ('Grant report', 'agenda', [])]
+    # Ben takes the minutes of the second point, in a box of his own; ana sees them.
+    points[1]['blocks'] = [{'id': 'b1', 'type': 'text', 'html': '<p>Report due on Friday; ana writes it</p>', 'by': 'ben'}]
     r = ben.put(f"/api/notes/{page['id']}", json={'content': page['content'], 'base_version': page['version']})
     assert r.status_code == 200, r.get_json()
-    seen = [b for b in _get(ana, page['id'])['content'] if b['type'] == 'section']
-    assert 'Report due on Friday' in seen[1]['blocks'][0]['html'] and seen[0]['blocks'][0]['html'] == ''
+    seen = [b for b in _get(ana, page['id'])['content'] if b['type'] == 'section' and b['source']['kind'] == 'agenda']
+    assert [(x['by'], x['html']) for x in seen[1]['blocks']] == [('ben', '<p>Report due on Friday; ana writes it</p>')]
     # No agenda: an empty one to write on, and no points.
     _meeting(ana, title='Journal club', agenda='', starts_on=(MONDAY + timedelta(days=1)).isoformat())
     club = _get(ana, _meeting_pages(ana, MONDAY + timedelta(days=1))[0]['id'])
-    assert [b['type'] for b in club['content']] == ['text', 'steps', 'text', 'tasks']
+    assert [b['type'] for b in club['content']] == ['text', 'steps', 'section', 'tasks']
+
+
+def test_a_meeting_may_be_at_any_hour_and_end_at_midnight(as_user):
+    ana = as_user('ana')
+    m = _meeting(ana, start_time='21:30', end_time='24:00', repeat='none', people=[])
+    assert (m['start_time'], m['end_time']) == ('21:30', '24:00')
+    early = _meeting(ana, start_time='00:00', end_time='06:15', repeat='none', people=[])
+    assert early['start_time'] == '00:00'
+    # Not starting at 24:00, nor past it.
+    for start, end in (('24:00', '24:00'), ('22:00', '24:30'), ('22:00', '25:00')):
+        r = ana.post('/api/meetings', json={'title': 'Late', 'starts_on': MONDAY.isoformat(), 'repeat': 'none',
+                                            'start_time': start, 'end_time': end, 'people': []})
+        assert r.status_code == 400, (start, end)
+
+
+def test_minutes_of_a_point_are_kept_apart_per_person(as_user):
+    ana, ben = as_user('ana'), as_user('ben')
+    _meeting(ana, agenda='<p>Updates</p>')
+    page = _get(ben, _meeting_pages(ben, MONDAY)[0]['id'])
+    point = lambda content: next(b for b in content if b['type'] == 'section')
+    # Both open the page; ana saves her minutes first.
+    hers = _get(ana, page['id'])
+    point(hers['content'])['blocks'] = [{'id': 'a1', 'type': 'text', 'html': '<p>Ana: seeds sown</p>', 'by': 'ana'}]
+    assert ana.put(f"/api/notes/{page['id']}", json={'content': hers['content']}).status_code == 200
+    # Ben saves over it, from his older copy without her box, and with a box claiming to be hers: hers stays as she wrote it.
+    point(page['content'])['blocks'] = [
+        {'id': 'b1', 'type': 'text', 'html': '<p>Ben: primers ordered</p>', 'by': 'ben'},
+        {'id': 'a1', 'type': 'text', 'html': '<p>changed by ben</p>', 'by': 'ana'},
+        {'id': 'x1', 'type': 'text', 'html': '<p>pretending</p>', 'by': 'ana'},
+        {'id': 'b2', 'type': 'text', 'html': '<p> </p>', 'by': 'ben'},          # empty: not kept
+        {'id': 's1', 'type': 'text', 'html': ''}]                                # nor an empty shared one (0.36.0)
+    assert ben.put(f"/api/notes/{page['id']}", json={'content': page['content']}).status_code == 200
+    stored = point(_get(ana, page['id'])['content'])['blocks']
+    assert [(b['id'], b['by'], b['html']) for b in stored] == [
+        ('a1', 'ana', '<p>Ana: seeds sown</p>'), ('b1', 'ben', '<p>Ben: primers ordered</p>')]
+    # Ana changes hers; ben's stays. Each may still remove their own.
+    hers = _get(ana, page['id'])
+    point(hers['content'])['blocks'] = [{'id': 'a1', 'type': 'text', 'html': '<p>Ana: seeds sown on Monday</p>', 'by': 'ana'}]
+    assert ana.put(f"/api/notes/{page['id']}", json={'content': hers['content']}).status_code == 200
+    stored = point(_get(ben, page['id'])['content'])['blocks']
+    assert [(b['by'], b['html']) for b in stored] == [('ana', '<p>Ana: seeds sown on Monday</p>'),
+                                                    ('ben', '<p>Ben: primers ordered</p>')]
+    # Saved on an older version still asks (the page merges it); minutes never go by the page's other rules.
+    r = ben.put(f"/api/notes/{page['id']}", json={'content': hers['content'], 'base_version': page['version']})
+    assert r.status_code == 409

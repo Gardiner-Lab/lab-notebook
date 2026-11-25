@@ -260,7 +260,11 @@ class _Cleaner:
         kind = block.get('type')
         bid = self._id(block.get('id'))
         if kind == 'text':
-            return {'id': bid, 'type': 'text', 'html': clean_html(block.get('html'))}
+            out = {'id': bid, 'type': 'text', 'html': clean_html(block.get('html'))}
+            # Someone's own minutes of a point on a meeting's page: whose they are (keep_minutes).
+            if block.get('by'):
+                out['by'] = _text(block.get('by'), 80)
+            return out
         if kind == 'steps':
             items = []
             for item in (block.get('items') or [])[:MAX_ITEMS]:
@@ -357,6 +361,46 @@ def clean_blocks(blocks: Any, previous: Optional[List[dict]] = None, username: s
 
 
 _TAG = re.compile(r'<[^>]+>')
+
+
+def _empty(block: dict) -> bool:
+    text = block.get('html') or ''
+    return not strip_tags(text).strip() and '<img' not in text
+
+
+def keep_minutes(blocks: List[dict], previous: List[dict], username: str) -> List[dict]:
+    """
+    A meeting's page as someone saves it, with everyone else's minutes kept as they are stored. Under each
+    point of the agenda (any section) each person writes in a text box of their own (marked 'by'): what this
+    person sends for another's box - an older copy, or none - is not taken; the stored one is. So people
+    writing at once never write over each other. A box is theirs who first wrote in it; one left empty goes, as
+    does an empty shared box from before (Lab Notebook 0.36.0).
+    """
+    before = {b.get('id'): b for b in previous or [] if b.get('type') == 'section'}
+    for section in blocks:
+        if section.get('type') != 'section':
+            continue
+        old = (before.get(section.get('id')) or {}).get('blocks') or []
+        sent = {b.get('id'): b for b in section.get('blocks') or []}
+        out = []
+        for b in old:
+            if b.get('by') and b['by'] != username:
+                out.append(b)                       # someone else's: as stored
+            elif b.get('id') in sent:
+                out.append(sent[b['id']])
+        known = {b.get('id') for b in old}
+        for b in section.get('blocks') or []:
+            if b.get('id') in known:
+                continue
+            if b.get('by'):
+                if b['by'] != username:
+                    continue                        # another's box no longer stored: deleted by them
+                b['by'] = username
+            out.append(b)
+        # An empty box goes: one of this person's, or one shared by everyone from before minutes were kept apart.
+        section['blocks'] = [b for b in out if not (b.get('type') == 'text' and b.get('by') in (username, None, '')
+                                                    and _empty(b))]
+    return blocks
 
 
 def plain_text(blocks: List[dict]) -> str:

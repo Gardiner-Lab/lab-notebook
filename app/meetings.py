@@ -12,7 +12,7 @@ the organiser changes the meeting itself (its time, place, agenda, repeats and w
 
 A meeting's page holds its agenda (each point a section of its own, the minutes of that point written
 under it), an attendance list (one line per person, ticked as present, by
-whom and when), notes, and action items (a task list, whose tasks may link with @ as the to-do
+whom and when), notes (each person's in a box of their own, as the minutes), and action items (a task list, whose tasks may link with @ as the to-do
 list's do).
 
 Changing a meeting changes its pages to come (from today on): one nobody has written on yet is made
@@ -45,6 +45,8 @@ from app.people import Person
 MEETING_TYPE = 'meeting'
 # A point of the agenda on a meeting's page: a section, its minutes written under it.
 AGENDA_KIND = 'agenda'
+# A meeting's notes besides the agenda, on its page: a section of everyone's own boxes too.
+NOTES_KIND = 'meeting-notes'
 REPEATS = {'none': 'Once', 'weekly': 'Every week', 'fortnightly': 'Every two weeks',
            'four-weekly': 'Every four weeks', 'monthly': 'Every month, on the same weekday'}
 MAX_PEOPLE = 60
@@ -179,13 +181,16 @@ def for_note(conn, person: Person, note_id: str) -> Optional[dict]:
 
 # --- checking what is asked -------------------------------------------------------------
 
-def _time(value) -> str:
+def _time(value, end: bool = False) -> str:
+    """A time of day as HH:MM; a meeting may end at 24:00, at midnight."""
     text = str(value or '').strip()
     try:
         hours, minutes = text.split(':')
         h, m = int(hours), int(minutes)
     except ValueError:
         raise ValueError('Give times as HH:MM, e.g. 14:00')
+    if end and (h, m) == (24, 0):
+        return '24:00'
     if not (0 <= h <= 23 and 0 <= m <= 59):
         raise ValueError('Give times as HH:MM, e.g. 14:00')
     return f'{h:02d}:{m:02d}'
@@ -209,7 +214,7 @@ def _clean(person: Person, data: dict, owner: str) -> dict:
     until = _day(data.get('until'), 'The last date') if data.get('until') and repeat != 'none' else None
     if until and until < starts_on:
         raise ValueError('The last date is before the first')
-    start_time, end_time = _time(data.get('start_time')), _time(data.get('end_time'))
+    start_time, end_time = _time(data.get('start_time')), _time(data.get('end_time'), end=True)
     if end_time <= start_time:
         raise ValueError('The meeting ends before it starts')
     asked = data.get('people') or []
@@ -256,15 +261,17 @@ def agenda_points(agenda: str) -> List[str]:
 
 def _blocks(meeting, everyone: Iterable[str], names) -> List[dict]:
     points = agenda_points(meeting['agenda'] or '')
-    # Each point of the agenda a section of its own, with room under it for the minutes of that point.
-    agenda = [{'type': 'section', 'title': point, 'source': {'kind': AGENDA_KIND},
-               'blocks': [{'type': 'text', 'html': ''}]} for point in points]
+    # Each point of the agenda a section of its own; under it everyone writes their minutes of it in a box of
+    # their own (content.keep_minutes), made on the page as they start.
+    agenda = [{'type': 'section', 'title': point, 'source': {'kind': AGENDA_KIND}, 'blocks': []}
+              for point in points]
     return [
         {'type': 'text', 'html': '<h3>Agenda</h3>' + ('' if points else '<p></p>')},
         *agenda,
         {'type': 'steps', 'title': 'Attendance',
          'items': [{'id': content_mod.new_id(), 'html': escape(people_mod.shown(u, names))} for u in everyone]},
-        {'type': 'text', 'html': '<h3>Notes</h3><p></p>'},
+        # The meeting's other notes: as the minutes of a point, each person writes in a box of their own.
+        {'type': 'section', 'title': 'Notes', 'source': {'kind': NOTES_KIND}, 'blocks': []},
         {'type': 'tasks', 'title': 'Action items', 'items': []},
     ]
 

@@ -98,6 +98,7 @@ thead { display: table-header-group; }
 tr { break-inside: avoid; }
 .section { border: 0.8pt solid #c7d2fe; border-radius: 1.5mm; padding: 2mm 3mm; margin: 3mm 0; }
 .section-head { font-weight: bold; color: #3730a3; margin-bottom: 1mm; }
+.minutes-by { font-size: 8pt; font-weight: bold; color: #6b7280; margin-top: 1.5mm; }
 .section-head .origin { font-weight: normal; color: #6b7280; font-size: 8pt; margin-left: 2mm; }
 .files-head { font-weight: bold; margin: 4mm 0 1mm; border-top: 0.6pt solid #e5e7eb; padding-top: 2mm; }
 figure { margin: 2mm 0; break-inside: avoid; }
@@ -229,6 +230,8 @@ class _Builder:
             else:
                 node.attrs = {k: v for k, v in node.attrs.items() if k == 'class'}
         out = f'<div class="text">{_html(tree)}</div>'
+        if block.get('by'):          # someone's minutes of a point of a meeting
+            out = f'<div class="minutes-by">{esc(self.ctx.who(block["by"]))}</div>' + out
         for att in dict.fromkeys(after):
             self.mentioned.add(att)
             out += f'<div id="att-{att}">{self.shown(att)}</div>'

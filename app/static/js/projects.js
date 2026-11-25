@@ -64,9 +64,12 @@ const MeetingWeek = {
   grid(days, data) {
     const items = data.items;
     const HOUR = 46;
-    const first = Math.min(8, ...items.map((m) => Math.floor(minutes(m.start_time) / 60)));
-    const last = Math.max(18, ...items.map((m) => Math.ceil(minutes(m.end_time) / 60)));
-    const hours = [...Array(last - first).keys()].map((i) => first + i);
+    // The whole day, to set up a meeting at any hour; the box shows the hours of the week's meetings
+    // (at least 08:00 to 18:00), scrolled to the first, and the rest of the day a scroll away.
+    const first = 0;
+    const hours = [...Array(24).keys()];
+    this.from = Math.min(8, ...items.map((m) => Math.floor(minutes(m.start_time) / 60)));
+    this.to = Math.max(18, ...items.map((m) => Math.ceil(minutes(m.end_time) / 60)));
     const column = (iso) => {
       const mine = items.filter((m) => m.date === iso);
       // Side by side when they overlap: each takes the first lane free at its start.
@@ -95,7 +98,8 @@ const MeetingWeek = {
       this.pickOn(col, iso, first * 60, hours.length * 60, HOUR / 60);
       return col;
     };
-    return el('div', { class: 'week-wrap' }, el('div', { class: 'week-grid' },
+    const wrap = el('div', { class: 'week-wrap', style: `max-height:min(calc(${(this.to - this.from) * HOUR}px + 2.6rem), 78vh)` },
+      el('div', { class: 'week-grid' },
       el('div', { class: 'week-corner' }),
       days.map((iso, i) => el('div', { class: `week-day-head ${iso === data.today ? 'is-today' : ''}` },
         el('b', {}, DAY_NAMES[i]), ` ${shortDay(iso)}`)),
@@ -103,6 +107,9 @@ const MeetingWeek = {
         hours.map((h, i) => el('span', { style: `top:${i * HOUR}px` }, `${String(h).padStart(2, '0')}:00`))),
       days.map(column)),
     items.length ? null : el('p', { class: 'hint week-empty' }, 'No meetings this week.'));
+    // Opened at the first hour of the week's meetings (or 08:00), once it is on the page.
+    requestAnimationFrame(() => { wrap.scrollTop = this.from * HOUR; });
+    return wrap;
   },
 
   /** Drag over free time in a day (or click it) to set up a meeting then: in steps of a quarter, an hour if only clicked. */

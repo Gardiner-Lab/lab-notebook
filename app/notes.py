@@ -735,6 +735,8 @@ def save(person: Person, note_id: str, title: Optional[str] = None, content: Opt
         new_title = row['title']
     previous = json.loads(row['content'] or '[]')
     blocks = previous if content is None else content_mod.clean_blocks(content, previous, person.username)
+    if row['type'] == 'meeting' and content is not None:
+        blocks = content_mod.keep_minutes(blocks, previous, person.username)
     body = json.dumps(blocks)
     if new_title == row['title'] and body == row['content']:
         return get(person, note_id)

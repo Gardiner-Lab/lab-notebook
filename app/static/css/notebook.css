@@ -127,6 +127,10 @@ input.note-title:focus { outline: none; border-bottom: 2px solid var(--accent-so
 }
 .block:hover > .block-gutter, .block:focus-within > .block-gutter { opacity: 1; }
 .agenda-add { display: block; margin-top: .55rem; }
+/* Each person's minutes of a point, named (Blocks.minutes); the others' as they last saved them. */
+.minutes-box { padding-top: .1rem; }
+.minutes-by { font-size: .74rem; font-weight: 600; color: var(--muted); padding: .2rem .9rem 0; }
+.minutes-box .text-block[contenteditable=false] { color: var(--text); }
 .text-block { min-height: 1.6em; outline: none; line-height: 1.55; }
 .text-block:empty::before { content: attr(data-placeholder); color: var(--muted); }
 .text-block p { margin: .25rem 0; }
@@ -485,7 +489,7 @@ div.step-text:empty::before { content: attr(data-placeholder); color: var(--mute
 .week-nav, .week-actions, .wp-actions { display: inline-flex; gap: .35rem; align-items: center; flex-wrap: wrap; }
 .week-actions { margin-left: auto; }
 .week-label { margin-left: .4rem; }
-.week-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: .6rem; background: var(--card); }
+.week-wrap { overflow: auto; border: 1px solid var(--border); border-radius: .6rem; background: var(--card); }
 .week-grid { display: grid; grid-template-columns: 3.4rem repeat(7, minmax(7.5rem, 1fr)); min-width: 58rem; }
 .week-corner, .week-day-head { position: sticky; top: 0; background: var(--card); border-bottom: 1px solid var(--border);
     padding: .45rem .4rem; font-size: .88rem; z-index: 1; }

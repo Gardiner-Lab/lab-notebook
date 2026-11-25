@@ -637,7 +637,7 @@ const Blocks = {
   wrap(block, index, list, container, ctx) {
     const body = this.render(block, ctx);
     const box = el('div', { class: `block block-${block.type}`, 'data-block': block.id }, body);
-    if (ctx.editable) {
+    if (ctx.editable && !ctx.minutes) {
       const move = (delta) => {
         const j = index + delta;
         if (j < 0 || j >= list.length) return;
@@ -671,7 +671,7 @@ const Blocks = {
         box.append(el('button', {
           class: 'btn btn-secondary btn-sm agenda-add', title: 'One more point on the agenda, with room under it for its minutes',
           onclick: () => {
-            const point = { id: newId(), type: 'section', title: '', source: { kind: 'agenda' }, blocks: [{ id: newId(), type: 'text', html: '' }] };
+            const point = { id: newId(), type: 'section', title: '', source: { kind: 'agenda' }, blocks: [] };
             list.splice(index + 1, 0, point);
             this.renderList(list, container, ctx);
             ctx.changed();
@@ -2058,16 +2058,16 @@ const Blocks = {
           el('a', { href: '#', onclick: (e) => { e.preventDefault(); Projects.openSource(src); } }, 'open it'),
           el('span', {}, ' · what is written here shows on it'))
       : src.kind === 'agenda' ? el('span', {}, 'Agenda point · the minutes of it go here')
+      : src.kind === 'meeting-notes' ? el('span', {}, 'Anything else from the meeting · each person writes in their own box')
       : src.kind === 'moclo-reaction' ? el('span', {}, 'From the MoClo Library Tool')
         : IMPORTED[src.kind] ? el('span', {}, IMPORTED[src.kind][1]) : null;
     const inner = el('div', { class: 'section-blocks' });
-    // Under an agenda point: what was said and decided about it.
-    this.renderList(block.blocks, inner, src.kind === 'agenda'
-      ? Object.assign(Object.create(ctx), { placeholder: 'Minutes: what was said and decided on this point. Type @ to link.' }) : ctx);
+    if (ctx.meeting && ['agenda', 'task', 'workpackage', 'meeting-notes'].includes(src.kind)) this.minutes(block, inner, ctx);
+    else this.renderList(block.blocks, inner, ctx);
     return el('div', { class: 'section-box' },
       el('div', { class: 'section-head' },
         el('span', { class: 'section-icon' }, glyph(src.kind === 'moclo-reaction' ? 'cassette' : src.kind === 'task' ? 'steps'
-          : src.kind === 'agenda' ? 'pencil'
+          : src.kind === 'agenda' || src.kind === 'meeting-notes' ? 'pencil'
           : src.kind === 'workpackage' ? 'cube' : IMPORTED[src.kind]?.[0] || 'protocol')),
         ctx.editable
           ? el('input', { type: 'text', class: 'section-title', value: block.title || '',
@@ -2075,6 +2075,34 @@ const Blocks = {
           : el('span', { class: 'section-title', text: block.title }),
         el('span', { class: 'hint' }, origin)),
       inner);
+  },
+
+  /**
+   * The minutes of a point of a meeting's agenda: each person writes in a box of their own, named, and sees the
+   * others' boxes as they were last saved. Nobody writes over anyone else: the server keeps each box as its own
+   * writer saved it (content.keep_minutes), and saves made at once are merged (App.absorb). A box from before
+   * minutes were kept apart (no writer) is written on by everyone, as it was.
+   */
+  minutes(block, inner, ctx) {
+    const me = NB.person.username;
+    // The one shared box under each point in Lab Notebook 0.36.0: kept if written in, else each person's own.
+    block.blocks = (block.blocks || []).filter((b) => b.by || b.type !== 'text' || /<img|[^\s]/.test((b.html || '').replace(/<(?!img)[^>]*>|&nbsp;/g, '')));
+    if (ctx.editable && !block.blocks.some((b) => b.type === 'text' && b.by === me)) {
+      // Its id the same every time it is made, so a box not yet written in keeps its place when the page is drawn again.
+      block.blocks.push({ id: `${block.id}.${me}`.slice(0, 40), type: 'text', html: '', by: me });
+    }
+    const mine = Object.assign(Object.create(ctx), { minutes: true,
+      placeholder: block.source?.kind === 'meeting-notes' ? 'Your notes of the meeting. Type @ to link.'
+        : 'Your minutes of this point: what was said and decided. Type @ to link.' });
+    const theirs = Object.assign(Object.create(ctx), { minutes: true, editable: false });
+    put(inner, ...block.blocks.map((b, i) => {
+      const own = !b.by || b.by === me;
+      const box = this.wrap(b, i, block.blocks, inner, own ? mine : theirs);
+      box.classList.add('minutes-box');
+      if (b.by) box.prepend(el('div', { class: 'minutes-by' }, b.by === me
+        ? (block.source?.kind === 'meeting-notes' ? 'Your notes' : 'Your minutes') : who(b.by)));
+      return box;
+    }));
   },
 
   /* tables ------------------------------------------------------------------ */
@@ -2565,6 +2593,7 @@ const App = {
   timer: null,
 
   async init() {
+    setInterval(() => this.refreshMeeting(), 15000);
     try {
       this.me = await api('GET', '/me');
       NB.names = this.me.names || {};
@@ -2790,6 +2819,14 @@ const App = {
   show(note) {
     this.note = note;
     this.dirty = false;
+    // The content as last stored, to merge with what someone else saves meanwhile (absorb).
+    note._base = JSON.parse(JSON.stringify(note.content || []));
+    // A meeting's page from before notes were kept apart: its one shared Notes box, if nothing is written in it
+    // yet, becomes everyone's own boxes (saved with the next change; one written in stays as it is).
+    if (note.type === 'meeting') {
+      note.content = note.content.map((b) => (b.type === 'text' && /^<h3>Notes<\/h3>(<p>(<br>)?<\/p>)?$/.test(b.html || '')
+        ? { id: b.id, type: 'section', title: 'Notes', source: { kind: 'meeting-notes' }, blocks: [] } : b));
+    }
     store.set('last', note.id);
     if (this.hashNote() !== note.id || location.hash.startsWith('#protocols')) {
       history.pushState(null, '', `#note=${note.id}`);
@@ -3008,7 +3045,7 @@ const App = {
       note.type === 'meeting' ? el('button', {
         class: 'btn btn-secondary btn-sm', title: 'A point of the agenda, with room under it for its minutes',
         onclick: () => {
-          const point = { id: newId(), type: 'section', title: '', source: { kind: 'agenda' }, blocks: [{ id: newId(), type: 'text', html: '' }] };
+          const point = { id: newId(), type: 'section', title: '', source: { kind: 'agenda' }, blocks: [] };
           add(point);
           withAgenda(point);
           blocks.querySelector(`[data-block="${point.id}"] .section-title`)?.focus();
@@ -3022,6 +3059,7 @@ const App = {
           let section;
           try { section = await Projects.pickSection(); } catch (err) { toast(err.message, 'error'); return; }
           if (!section) return;
+          if (note.type === 'meeting') section.blocks = [];       // everyone's minutes in a box of their own
           add(section);
           withAgenda(section);
         },
@@ -3770,6 +3808,7 @@ const App = {
       try {
         const { note: saved } = await api('PUT', `/notes/${note.id}`, body);
         if (this.note !== note) return;
+        note._base = body.content;
         note.version = saved.version;
         note.revision = saved.revision;
         note.updated_at = saved.updated_at;
@@ -3779,7 +3818,15 @@ const App = {
         this.setState(this.dirty ? 'Unsaved changes…' : `Saved ${localTime(saved.updated_at).slice(11)}`, 'ok');
       } catch (err) {
         this.dirty = true;
-        if (err.payload?.stale) { this.setState('Changed elsewhere', 'error'); this.stale(note, err.payload.note); return; }
+        if (err.payload?.stale) {
+          // On a meeting's page, written on by several people at once: what each changed is put together.
+          if (this.note === note && note.type === 'meeting' && this.absorb(err.payload.note)) {
+            this.setState('Merged with changes by others…');
+            setTimeout(() => this.save(), 0);          // once this save has finished
+            return;
+          }
+          this.setState('Changed elsewhere', 'error'); this.stale(note, err.payload.note); return;
+        }
         this.setState(`Not saved: ${err.message}`, 'error');
         toast(`Not saved: ${err.message}`, 'error', 7000);
       } finally {
@@ -3827,6 +3874,68 @@ const App = {
         label.textContent = key.split('|').length === 2 ? `✓ ${who(s.by)} · ${localTime(s.at)}` : `${who(s.by)} · ${localTime(s.at)}`;
       }
     }
+  },
+
+  /**
+   * Someone else's save of the page put together with this one's changes since the content last stored
+   * (note._base; merge.js): a block (or a step, a task) changed on one side only takes that side's; changed on
+   * both, or changed on one and deleted on the other, it cannot be put together, and nothing is (false). Shown
+   * at once, keeping the place being written in.
+   */
+  absorb(theirs) {
+    const note = this.note;
+    const merged = Merge.content(note._base, note.content, theirs.content);
+    if (!merged) return false;
+    // Where the caret is, to put it back after the page is drawn again.
+    const sel = window.getSelection();
+    const area = document.activeElement?.closest?.('.text-block');
+    const where = area && sel.rangeCount ? (() => {
+      const r = sel.getRangeAt(0).cloneRange();
+      r.selectNodeContents(area);
+      r.setEnd(sel.getRangeAt(0).endContainer, sel.getRangeAt(0).endOffset);
+      return { id: area.closest('[data-block]')?.dataset.block, offset: r.toString().length };
+    })() : null;
+    note.content.splice(0, note.content.length, ...merged);
+    note._base = JSON.parse(JSON.stringify(theirs.content));
+    note.version = theirs.version;
+    note.updated_at = theirs.updated_at;
+    note.updated_by = theirs.updated_by;
+    const { blocks, ctx } = this._blocks || {};
+    // Drawn again where it was: whatever scrolls the page keeps its place.
+    const scrolled = [];
+    for (let e = blocks?.parentElement; e; e = e.parentElement) if (e.scrollTop) scrolled.push([e, e.scrollTop]);
+    const pageY = window.scrollY;
+    if (blocks) Blocks.renderList(note.content, blocks, ctx);
+    for (const [e, top] of scrolled) e.scrollTop = top;
+    window.scrollTo(window.scrollX, pageY);
+    const again = where?.id && document.querySelector(`[data-block="${CSS.escape(where.id)}"] .text-block`);
+    if (again) {
+      again.focus({ preventScroll: true });
+      const walker = document.createTreeWalker(again, NodeFilter.SHOW_TEXT);
+      let left = where.offset; let n;
+      const range = document.createRange();
+      range.selectNodeContents(again);
+      range.collapse(false);
+      while ((n = walker.nextNode())) {
+        if (left <= n.textContent.length) { range.setStart(n, left); range.collapse(true); break; }
+        left -= n.textContent.length;
+      }
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    return true;
+  },
+
+  /** A meeting's page open: what others write on it comes in every quarter of a minute. */
+  async refreshMeeting() {
+    const note = this.note;
+    if (!note || note.type !== 'meeting' || this.saving || document.visibilityState !== 'visible') return;
+    let theirs;
+    try { ({ note: theirs } = await api('GET', `/notes/${note.id}`)); } catch { return; }
+    if (this.note !== note || this.saving || theirs.version === note.version) return;
+    if (!this.absorb(theirs)) return;              // the next save asks what to keep
+    if (this.dirty) this.changed();
+    else this.setState(`Updated ${localTime(theirs.updated_at).slice(11)}`, 'ok');
   },
 
   stale(mine, theirs) {

@@ -212,6 +212,8 @@ class _Writer:
     # --- text -------------------------------------------------------------------------------
 
     def text(self, block: dict) -> None:
+        if block.get('by'):          # someone's minutes of a point of a meeting
+            self.doc.add_paragraph().add_run(self.ctx.who(block['by'])).bold = True
         tree = richtext.parse(block.get('html') or '')
         after: List[str] = []
         self._flow(tree, after, {})

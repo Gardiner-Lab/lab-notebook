@@ -5,6 +5,25 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-11-25
+
+### Added
+- **Everyone's own minutes and notes on a meeting's page.** Under each point of the agenda (a
+  project's task on it too) and under Notes, each person writes in a box of their own, with their
+  name on it, beside everyone else's. Nobody writes over anyone else: the server keeps each box as
+  its writer saved it. Others' writing comes in on its own every quarter of a minute, and the Word
+  and PDF exports name whose minutes are whose.
+- **Saves made at once are put together.** On a meeting's page, a save that crosses someone
+  else's no longer asks "Changed since you opened it": what each changed (attendance ticks, action
+  items, agenda points, minutes) is merged, and the question is only asked when both changed the
+  very same thing.
+- **A meeting at any hour.** The Meetings tab's week runs from 00:00 to 24:00, opened at the hours
+  of that week's meetings (at least 08:00 to 18:00), and a meeting may end at 24:00.
+
+### Changed
+- Pages made by 0.36.0 and 0.37.0 lose their empty shared box under each point, and an empty
+  shared Notes box becomes everyone's own; boxes already written in stay as they are.
+
 ## [0.37.0] - 2026-11-25
 
 ### Added
