@@ -215,9 +215,9 @@ def _task_marks(blocks: List[dict]) -> Dict[str, dict]:
 
 TASK_MARKS = ('moved', 'from_item', 'from_week', 'from_note')
 
-# A task's priority. A list is kept in this order, high first; within a level, in the order its
+# A task's priority ('normal' is none). A list is kept in this order, high first and none last; within a level, in the order its
 # person put the tasks.
-PRIORITIES = ('high', 'medium', 'normal', 'low')
+PRIORITIES = ('high', 'medium', 'low', 'normal')
 
 
 def task_priority(value: Any) -> str:
@@ -226,7 +226,7 @@ def task_priority(value: Any) -> str:
 
 
 def sort_tasks(items: List[dict]) -> List[dict]:
-    """The tasks grouped high, normal, low, each group in its own order (a stable sort), in place."""
+    """The tasks grouped high, medium, low, none, each group in its own order (a stable sort), in place."""
     items.sort(key=lambda item: PRIORITIES.index(task_priority(item.get('priority'))))
     return items
 
@@ -273,7 +273,7 @@ class _Cleaner:
             return {'id': bid, 'type': 'steps', 'title': _text(block.get('title')), 'items': items}
         if kind == 'tasks':
             # A to-do list: each task a line of text that may link (@) a plasmid, stock, seed lot,
-            # track or page; ticked by whom and when, as steps are; high, normal or low priority,
+            # track or page; ticked by whom and when, as steps are; high, medium, low or no priority,
             # the list kept grouped by it.
             items = []
             for item in (block.get('items') or [])[:MAX_ITEMS]:

@@ -5,6 +5,21 @@ and the project uses [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-11-25
+
+### Added
+- **Minutes under each agenda point.** On a meeting's page each point of the agenda (one per line
+  of the meeting's agenda) is a section of its own, with a box under it for the minutes: what was
+  said and decided on that point. The general Notes stay as they were. A new **＋ Agenda point**
+  under the last point (and **Agenda point** in the bar at the foot of the page) adds one during
+  the meeting. Pages already made keep their layout; one nobody has written on is made again the
+  next time the meeting is saved.
+
+### Changed
+- **A task's priority goes None → Low → Medium → High → None** when its marker is clicked, on a
+  meeting's action items and the week's to-do list alike, and lists are grouped high, medium, low,
+  then the tasks with no priority at the bottom.
+
 ## [0.35.1] - 2026-11-24
 
 ### Fixed

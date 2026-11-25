@@ -10,7 +10,8 @@ with those invited, so it is one page that all of them read and take notes on to
 organiser's notebook. Anyone with an account in Trellis Tools may be invited, whatever their lab; only
 the organiser changes the meeting itself (its time, place, agenda, repeats and who is invited).
 
-A meeting's page holds its agenda, an attendance list (one line per person, ticked as present, by
+A meeting's page holds its agenda (each point a section of its own, the minutes of that point written
+under it), an attendance list (one line per person, ticked as present, by
 whom and when), notes, and action items (a task list, whose tasks may link with @ as the to-do
 list's do).
 
@@ -29,6 +30,7 @@ and changing it under the people at the meeting would make their saves clash.
 """
 
 import json
+import re
 from datetime import date, timedelta
 from html import escape
 from typing import Iterable, List, Optional
@@ -41,6 +43,8 @@ from app.db import connect
 from app.people import Person
 
 MEETING_TYPE = 'meeting'
+# A point of the agenda on a meeting's page: a section, its minutes written under it.
+AGENDA_KIND = 'agenda'
 REPEATS = {'none': 'Once', 'weekly': 'Every week', 'fortnightly': 'Every two weeks',
            'four-weekly': 'Every four weeks', 'monthly': 'Every month, on the same weekday'}
 MAX_PEOPLE = 60
@@ -241,10 +245,23 @@ def _title(meeting) -> str:
     return f"{meeting['title']} · {meeting['start_time']}"
 
 
+_POINT_END = re.compile(r'<\s*br\s*/?\s*>|</\s*(p|div|li|h[1-6]|pre|blockquote)\s*>', re.I)
+
+
+def agenda_points(agenda: str) -> List[str]:
+    """The points of an agenda, one per line (paragraph, list item or line break), as plain words."""
+    lines = (content_mod.strip_tags(part).strip() for part in _POINT_END.sub('\n', agenda or '').split('\n'))
+    return [re.sub(r'\s+', ' ', line)[:300] for line in lines if line]
+
+
 def _blocks(meeting, everyone: Iterable[str], names) -> List[dict]:
-    agenda = meeting['agenda'] or ''
+    points = agenda_points(meeting['agenda'] or '')
+    # Each point of the agenda a section of its own, with room under it for the minutes of that point.
+    agenda = [{'type': 'section', 'title': point, 'source': {'kind': AGENDA_KIND},
+               'blocks': [{'type': 'text', 'html': ''}]} for point in points]
     return [
-        {'type': 'text', 'html': '<h3>Agenda</h3>' + (agenda or '<p></p>')},
+        {'type': 'text', 'html': '<h3>Agenda</h3>' + ('' if points else '<p></p>')},
+        *agenda,
         {'type': 'steps', 'title': 'Attendance',
          'items': [{'id': content_mod.new_id(), 'html': escape(people_mod.shown(u, names))} for u in everyone]},
         {'type': 'text', 'html': '<h3>Notes</h3><p></p>'},

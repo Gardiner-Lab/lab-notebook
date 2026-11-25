@@ -126,6 +126,7 @@ input.note-title:focus { outline: none; border-bottom: 2px solid var(--accent-so
     position: absolute; right: .3rem; top: .3rem; display: flex; gap: .1rem; opacity: 0; transition: opacity .1s;
 }
 .block:hover > .block-gutter, .block:focus-within > .block-gutter { opacity: 1; }
+.agenda-add { display: block; margin-top: .55rem; }
 .text-block { min-height: 1.6em; outline: none; line-height: 1.55; }
 .text-block:empty::before { content: attr(data-placeholder); color: var(--muted); }
 .text-block p { margin: .25rem 0; }

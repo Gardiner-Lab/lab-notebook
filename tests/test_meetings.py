@@ -78,19 +78,20 @@ def test_a_weekly_meeting_is_a_page_under_this_and_next_weeks_days_of_everyone(a
     assert page['meeting']['date'] == MONDAY.isoformat() and page['meeting']['people'] == ['ben']
     assert page['meeting']['location'] == 'Room 2.12' and not page['meeting']['can_edit']
     kinds = [(b['type'], b.get('title')) for b in page['content']]
-    assert kinds == [('text', None), ('steps', 'Attendance'), ('text', None), ('tasks', 'Action items')]
-    assert 'Updates' in page['content'][0]['html']
-    assert [i['html'] for i in page['content'][1]['items']] == ['ana', 'ben']
+    assert kinds == [('text', None), ('section', 'Updates'), ('steps', 'Attendance'), ('text', None),
+                     ('tasks', 'Action items')]
+    assert page['content'][1]['source']['kind'] == 'agenda'
+    assert [i['html'] for i in page['content'][2]['items']] == ['ana', 'ben']
     # Ben writes on it, ticks himself present, and adds an action item: ana sees it.
-    page['content'][1]['items'][1]['done'] = True
-    page['content'][3]['items'] = [{'id': 'a1', 'html': 'Order primers'}]
+    page['content'][2]['items'][1]['done'] = True
+    page['content'][4]['items'] = [{'id': 'a1', 'html': 'Order primers'}]
     r = ben.put(f"/api/notes/{page['id']}", json={'content': page['content'], 'title': 'Renamed',
                                                   'base_version': page['version']})
     assert r.status_code == 200, r.get_json()
     seen = _get(ana, page['id'])
     assert seen['title'] == 'Lab meeting · 14:00'        # named by its meeting
-    assert seen['content'][1]['items'][1]['by'] == 'ben'
-    assert seen['content'][3]['items'][0]['html'] == 'Order primers'
+    assert seen['content'][2]['items'][1]['by'] == 'ben'
+    assert seen['content'][4]['items'][0]['html'] == 'Order primers'
 
 
 def test_pages_are_made_when_someone_invited_opens_their_notebook(as_user, monkeypatch):
@@ -125,9 +126,9 @@ def test_anyone_in_trellis_is_invited_and_those_not_invited_do_not_see_it(as_use
     assert [p['title'] for p in shared] == ['Collaboration · 14:00']
     note = _get(zoe, shared[0]['id'])
     assert note['can_edit'] and not note['can_share'] and not note['meeting']['can_edit']
-    note['content'][2]['html'] = '<h3>Notes</h3><p>Seeds sent on Friday</p>'
+    note['content'][3]['html'] = '<h3>Notes</h3><p>Seeds sent on Friday</p>'
     assert zoe.put(f"/api/notes/{note['id']}", json={'content': note['content']}).status_code == 200
-    assert 'Seeds sent' in _get(ana, note['id'])['content'][2]['html']
+    assert 'Seeds sent' in _get(ana, note['id'])['content'][3]['html']
     # Only the organiser changes or ends the meeting.
     change = {'title': 'Mine now', 'starts_on': MONDAY.isoformat(), 'repeat': 'weekly',
               'start_time': '10:00', 'end_time': '11:00', 'people': []}
@@ -152,7 +153,7 @@ def test_changing_a_meeting_remakes_pages_nobody_wrote_on_and_keeps_written_ones
     # Monday this week is gone by (today is Wednesday); it is kept as it was.
     # Next week's is written on.
     page = _get(ana, next_week['id'])
-    page['content'][2]['html'] = '<h3>Notes</h3><p>Talk about the grant</p>'
+    page['content'][3]['html'] = '<h3>Notes</h3><p>Talk about the grant</p>'
     assert ana.put(f"/api/notes/{page['id']}", json={'content': page['content']}).status_code == 200
     r = ana.put(f"/api/meetings/{m['id']}", json={'title': 'Group meeting', 'starts_on': MONDAY.isoformat(),
                                                    'repeat': 'weekly', 'start_time': '09:30', 'end_time': '10:30',
@@ -163,8 +164,8 @@ def test_changing_a_meeting_remakes_pages_nobody_wrote_on_and_keeps_written_ones
     assert _get(ana, this_week['id'])['title'] == 'Lab meeting · 14:00'
     # Written on: kept, renamed; ben off it, lead on it and on the attendance list.
     kept = _get(ana, next_week['id'])
-    assert kept['title'] == 'Group meeting · 09:30' and 'grant' in kept['content'][2]['html']
-    assert [i['html'] for i in kept['content'][1]['items']] == ['ana', 'ben', 'lead']
+    assert kept['title'] == 'Group meeting · 09:30' and 'grant' in kept['content'][3]['html']
+    assert [i['html'] for i in kept['content'][2]['items']] == ['ana', 'ben', 'lead']
     assert ben.get(f"/api/notes/{kept['id']}").status_code == 403
     assert [p['id'] for p in _meeting_pages(lead, MONDAY + timedelta(days=7))] == [kept['id']]
     assert _meeting_pages(ben, MONDAY + timedelta(days=7)) == []
@@ -216,33 +217,33 @@ def test_open_action_items_go_on_to_the_next_meeting(as_user, monkeypatch):
     first = _get(ana, _meeting_pages(ana, MONDAY)[0]['id'])
     second_id = _meeting_pages(ana, MONDAY + timedelta(days=7))[0]['id']
     # Monday's meeting: three action items, one done, one empty.
-    first['content'][3]['items'] = [{'id': 'a1', 'html': 'Order primers', 'priority': 'high'},
+    first['content'][4]['items'] = [{'id': 'a1', 'html': 'Order primers', 'priority': 'high'},
                                     {'id': 'a2', 'html': 'Book the confocal', 'done': True},
                                     {'id': 'a3', 'html': ''}]
     first = _ok_put(ben, first)
     # The next meeting's page, opened: the open one is on it, marked where it came from.
     second = _get(ben, second_id)
-    items = second['content'][3]['items']
+    items = second['content'][4]['items']
     assert [(i['html'], i['from_week'], i['priority']) for i in items] == [('Order primers', MONDAY.isoformat(), 'high')]
-    before = _get(ana, first['id'])['content'][3]['items']
+    before = _get(ana, first['id'])['content'][4]['items']
     assert [(i['id'], i['moved']) for i in before if i['moved']] == [('a1', (MONDAY + timedelta(days=7)).isoformat())]
     # Added during the meeting, after: follows on the next opening; nothing doubled.
     first = _get(ana, first['id'])
-    first['content'][3]['items'].append({'id': 'a4', 'html': 'Send seeds to Zoe'})
+    first['content'][4]['items'].append({'id': 'a4', 'html': 'Send seeds to Zoe'})
     _ok_put(ana, first)
-    items = _get(ben, second_id)['content'][3]['items']
+    items = _get(ben, second_id)['content'][4]['items']
     assert sorted(i['html'] for i in items) == ['Order primers', 'Send seeds to Zoe']
     # On the next meeting's own day its items stay put: the page is being written on.
     monkeypatch.setattr(meetings, 'today', lambda: MONDAY + timedelta(days=7))
     ana.get('/api/me')
     third_id = _meeting_pages(ana, MONDAY + timedelta(days=14))[0]['id']
-    assert _get(ana, third_id)['content'][3]['items'] == []
+    assert _get(ana, third_id)['content'][4]['items'] == []
     monkeypatch.setattr(meetings, 'today', lambda: TODAY + timedelta(days=7))
     second = _get(ana, second_id)
-    second['content'][3]['items'][0]['done'] = True        # 'Order primers' done at the second meeting
+    second['content'][4]['items'][0]['done'] = True        # 'Order primers' done at the second meeting
     _ok_put(ana, second)
     # Once the second meeting's day has come, what is still open there goes on to the third.
-    items = _get(ana, third_id)['content'][3]['items']
+    items = _get(ana, third_id)['content'][4]['items']
     assert [(i['html'], i['from_week']) for i in items] == [('Send seeds to Zoe', (MONDAY + timedelta(days=7)).isoformat())]
 
 
@@ -258,7 +259,7 @@ def test_an_action_item_goes_on_ones_own_to_do_list(as_user, monkeypatch):
     ana, ben, zoe = as_user('ana'), as_user('ben'), as_user('zoe')
     _meeting(ana)
     page = _get(ana, _meeting_pages(ana, MONDAY)[0]['id'])
-    page['content'][3]['items'] = [{'id': 'a1', 'html': 'Order primers', 'priority': 'high'},
+    page['content'][4]['items'] = [{'id': 'a1', 'html': 'Order primers', 'priority': 'high'},
                                    {'id': 'a2', 'html': 'Book the confocal'}, {'id': 'a3', 'html': ''}]
     page = _ok_put(ana, page)
     version = page['version']
@@ -291,3 +292,24 @@ def test_an_action_item_goes_on_ones_own_to_do_list(as_user, monkeypatch):
     _ok_put(ben, saved)
     assert [t['username'] for t in _get(ana, page['id'])['on_todo']['a1']] == ['ana']
     assert ben.post(f"/api/notes/{page['id']}/tasks/a1/todo").status_code == 200
+
+
+def test_each_point_of_the_agenda_has_room_for_its_minutes(as_user):
+    ana, ben = as_user('ana'), as_user('ben')
+    assert meetings.agenda_points('<p>Updates</p><ul><li>Grant <b>report</b></li></ul><p> </p>Seeds<br>AOB') == [
+        'Updates', 'Grant report', 'Seeds', 'AOB']
+    _meeting(ana, agenda='<p>Updates</p><p>Grant report</p>')
+    page = _get(ben, _meeting_pages(ben, MONDAY)[0]['id'])
+    points = [b for b in page['content'] if b['type'] == 'section']
+    assert [(b['title'], b['source']['kind'], [x['type'] for x in b['blocks']]) for b in points] == [
+        ('Updates', 'agenda', ['text']), ('Grant report', 'agenda', ['text'])]
+    # Ben takes the minutes of the second point; ana sees them, and they are found by search.
+    points[1]['blocks'][0]['html'] = '<p>Report due on Friday; ana writes it</p>'
+    r = ben.put(f"/api/notes/{page['id']}", json={'content': page['content'], 'base_version': page['version']})
+    assert r.status_code == 200, r.get_json()
+    seen = [b for b in _get(ana, page['id'])['content'] if b['type'] == 'section']
+    assert 'Report due on Friday' in seen[1]['blocks'][0]['html'] and seen[0]['blocks'][0]['html'] == ''
+    # No agenda: an empty one to write on, and no points.
+    _meeting(ana, title='Journal club', agenda='', starts_on=(MONDAY + timedelta(days=1)).isoformat())
+    club = _get(ana, _meeting_pages(ana, MONDAY + timedelta(days=1))[0]['id'])
+    assert [b['type'] for b in club['content']] == ['text', 'steps', 'text', 'tasks']

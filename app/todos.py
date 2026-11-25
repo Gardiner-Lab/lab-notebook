@@ -11,7 +11,7 @@ A task can be moved on to next week's list: it stays on this week's, marked as m
 goes onto next week's, or waits (``todo_pending``) until next week's list is made. It can be
 brought back while its copy is not ticked.
 
-Each task is high, medium, normal or low priority (app/content.py PRIORITIES); the list is kept grouped
+Each task is high, medium, low or no ('normal') priority (app/content.py PRIORITIES); the list is kept grouped
 high first, in its person's order within each group. A task moved on keeps its priority.
 """
 

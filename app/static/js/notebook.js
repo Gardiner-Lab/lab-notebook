@@ -637,6 +637,21 @@ const Blocks = {
             });
           },
         }, '✕')));
+      // A meeting's agenda ends with a button for one more point: under its last point, or under its heading.
+      const isPoint = (b) => b?.type === 'section' && b.source?.kind === 'agenda';
+      const isAgendaHead = (b) => b?.type === 'text' && App.note?.type === 'meeting' && /^<h3>Agenda<\/h3>/.test(b.html || '');
+      if ((isPoint(block) || isAgendaHead(block)) && !isPoint(list[index + 1])) {
+        box.append(el('button', {
+          class: 'btn btn-secondary btn-sm agenda-add', title: 'One more point on the agenda, with room under it for its minutes',
+          onclick: () => {
+            const point = { id: newId(), type: 'section', title: '', source: { kind: 'agenda' }, blocks: [{ id: newId(), type: 'text', html: '' }] };
+            list.splice(index + 1, 0, point);
+            this.renderList(list, container, ctx);
+            ctx.changed();
+            container.querySelector(`[data-block="${point.id}"] .section-title`)?.focus();
+          },
+        }, '＋ Agenda point'));
+      }
     }
     return box;
   },
@@ -676,7 +691,7 @@ const Blocks = {
    * an empty one removes it. "→ Next week" moves a task on to next week's list; it stays here,
    * marked, and can be brought back while not done there.
    *
-   * Each task is high, medium, normal or low priority (app/content.py PRIORITIES), changed with the marker
+   * Each task is high, medium, low or no ('normal') priority (app/content.py PRIORITIES), changed with the marker
    * at its left; the list is kept grouped high first. Within a level, tasks are put in order by
    * dragging the handle or with Alt+↑ / Alt+↓; dragged or stepped into another level, a task takes
    * that level.
@@ -686,12 +701,12 @@ const Blocks = {
     // A meeting's action items carry a title; a week's to-do list is the page itself, and has none.
     const wrap = el('div', { class: 'tasks' }, block.title ? el('div', { class: 'block-title', text: block.title }) : null, list);
     const dmy = (iso) => String(iso || '').split('-').reverse().join('-');
-    const RANK = { high: 0, medium: 1, normal: 2, low: 3 };
-    // Clicked, the marker goes up a level, from high on to low, and from low back to normal.
-    const NEXT_LEVEL = { normal: 'medium', medium: 'high', high: 'low', low: 'normal' };
-    const LEVEL_NAME = { high: 'High', medium: 'Medium', normal: 'Normal', low: 'Low' };
+    const RANK = { high: 0, medium: 1, low: 2, normal: 3 };
+    // Clicked, the marker goes up a level: none (kept as 'normal'), low, medium, high, and from high back to none.
+    const NEXT_LEVEL = { normal: 'low', low: 'medium', medium: 'high', high: 'normal' };
+    const LEVEL_NAME = { high: 'High', medium: 'Medium', normal: 'No', low: 'Low' };
     const level = (item) => (item && item.priority in RANK ? item.priority : 'normal');
-    // Grouped high, normal, low; each group in its own order, as the server keeps it.
+    // Grouped high, medium, low, none; each group in its own order, as the server keeps it.
     const regroup = () => {
       const sorted = block.items.map((item, n) => [item, n])
         .sort((a, b) => RANK[level(a[0])] - RANK[level(b[0])] || a[1] - b[1]).map(([item]) => item);
@@ -843,12 +858,12 @@ const Blocks = {
           draw();
           ctx.changed();
         } }, '✕'));
-      // Its priority: a marker that, clicked, goes Normal → Medium → High → Low → Normal.
+      // Its priority: a marker that, clicked, goes None → Low → Medium → High → None.
       const lvl = level(item);
       const priority = editable
         ? el('button', {
           type: 'button', class: `task-priority priority-${lvl}`,
-          title: `${LEVEL_NAME[lvl]} priority: click for ${LEVEL_NAME[NEXT_LEVEL[lvl]].toLowerCase()}`,
+          title: `${LEVEL_NAME[lvl]} priority: click for ${NEXT_LEVEL[lvl] === 'normal' ? 'none' : NEXT_LEVEL[lvl]}`,
           'aria-label': `${LEVEL_NAME[lvl]} priority`,
           onclick: () => { item.priority = NEXT_LEVEL[lvl]; changedOrder(); },
         }, lvl === 'normal' ? '•' : LEVEL_NAME[lvl])
@@ -1025,7 +1040,7 @@ const Blocks = {
   text(block, ctx) {
     const area = el('div', {
       class: 'text-block', contenteditable: ctx.editable ? 'true' : 'false',
-      'data-placeholder': ctx.editable ? 'Write here. Type @ to link a plasmid or a note.' : '',
+      'data-placeholder': ctx.editable ? ctx.placeholder || 'Write here. Type @ to link a plasmid or a note.' : '',
     });
     area.innerHTML = block.html || '';          // cleaned by the server
     this.decorateLinks(area);
@@ -2015,13 +2030,17 @@ const Blocks = {
         ? el('span', {}, src.kind === 'task' ? 'Task' : 'Work package', src.name ? ` of ${src.name}` : '', ' · ',
           el('a', { href: '#', onclick: (e) => { e.preventDefault(); Projects.openSource(src); } }, 'open it'),
           el('span', {}, ' · what is written here shows on it'))
+      : src.kind === 'agenda' ? el('span', {}, 'Agenda point · the minutes of it go here')
       : src.kind === 'moclo-reaction' ? el('span', {}, 'From the MoClo Library Tool')
         : IMPORTED[src.kind] ? el('span', {}, IMPORTED[src.kind][1]) : null;
     const inner = el('div', { class: 'section-blocks' });
-    this.renderList(block.blocks, inner, ctx);
+    // Under an agenda point: what was said and decided about it.
+    this.renderList(block.blocks, inner, src.kind === 'agenda'
+      ? Object.assign(Object.create(ctx), { placeholder: 'Minutes: what was said and decided on this point. Type @ to link.' }) : ctx);
     return el('div', { class: 'section-box' },
       el('div', { class: 'section-head' },
         el('span', { class: 'section-icon' }, glyph(src.kind === 'moclo-reaction' ? 'cassette' : src.kind === 'task' ? 'steps'
+          : src.kind === 'agenda' ? 'pencil'
           : src.kind === 'workpackage' ? 'cube' : IMPORTED[src.kind]?.[0] || 'protocol')),
         ctx.editable
           ? el('input', { type: 'text', class: 'section-title', value: block.title || '',
@@ -2467,7 +2486,7 @@ const Meetings = {
         el('div', { class: 'meeting-row' }, field('First date', first), field('From', start, '24-hour clock'), field('To', end)),
         el('div', { class: 'meeting-row' }, field('Repeats', repeat), untilField),
         field('Where', place),
-        field('Agenda', agenda, 'Put at the top of every meeting\'s page; each page can then be written on by itself.'),
+        field('Agenda', agenda, 'One point per line. On each meeting’s page every point gets a box of its own for its minutes; each page can then be written on by itself.'),
         el('div', { class: 'meeting-field' }, el('span', {}, 'Invite ', count), filter, boxes,
           el('span', { class: 'hint' }, 'Anyone in Trellis Tools. Its pages are shared with them and show under their days: they take notes on them, '
             + 'and only you change the meeting itself.')),
@@ -2931,6 +2950,17 @@ const App = {
       added?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       added?.querySelector('.text-block, input')?.focus();
     };
+    // On a meeting's page a point or an item of the agenda goes with the agenda: before the attendance list.
+    const withAgenda = (block) => {
+      const at = note.type === 'meeting' ? note.content.findIndex((b) => b.type === 'steps' && b.title === 'Attendance') : -1;
+      const now = note.content.indexOf(block);
+      if (at < 0 || now < at) return;
+      note.content.splice(now, 1);
+      note.content.splice(at, 0, block);
+      Blocks.renderList(note.content, blocks, ctx);
+      this.changed();
+      blocks.querySelector(`[data-block="${block.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    };
     return el('div', { class: 'insert-bar' },
       el('span', { class: 'hint' }, 'Add:'),
       el('button', { class: 'btn btn-secondary btn-sm', onclick: () => add({ id: newId(), type: 'text', html: '' }) }, '¶ Text'),
@@ -2943,6 +2973,15 @@ const App = {
       el('button', { class: 'btn btn-secondary btn-sm', onclick: () => add({ id: newId(), type: 'steps', title: '', items: [{ id: newId(), text: '' }] }) }, glyph('steps'), ' Steps'),
       el('button', { class: 'btn btn-secondary btn-sm', title: 'A gel photo: click the wells you used, and name the sample in each',
         onclick: () => this.addGel(note, add) }, '▥ Gel photo…'),
+      note.type === 'meeting' ? el('button', {
+        class: 'btn btn-secondary btn-sm', title: 'A point of the agenda, with room under it for its minutes',
+        onclick: () => {
+          const point = { id: newId(), type: 'section', title: '', source: { kind: 'agenda' }, blocks: [{ id: newId(), type: 'text', html: '' }] };
+          add(point);
+          withAgenda(point);
+          blocks.querySelector(`[data-block="${point.id}"] .section-title`)?.focus();
+        },
+      }, glyph('pencil'), ' Agenda point') : null,
       note.space === 'notebook' ? el('button', {
         class: 'btn btn-secondary btn-sm',
         title: note.type === 'meeting' ? 'Put a task or work package of your projects on the agenda: what is written under it shows on the task'
@@ -2952,16 +2991,7 @@ const App = {
           try { section = await Projects.pickSection(); } catch (err) { toast(err.message, 'error'); return; }
           if (!section) return;
           add(section);
-          // On a meeting's page an agenda item goes with the agenda: before the attendance list.
-          const at = note.type === 'meeting' ? note.content.findIndex((b) => b.type === 'steps' && b.title === 'Attendance') : -1;
-          const now = note.content.indexOf(section);
-          if (at >= 0 && now > at) {
-            note.content.splice(now, 1);
-            note.content.splice(at, 0, section);
-            Blocks.renderList(note.content, blocks, ctx);
-            this.changed();
-            blocks.querySelector(`[data-block="${section.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-          }
+          withAgenda(section);
         },
       }, glyph('cube'), note.type === 'meeting' ? ' Agenda item…' : ' Task…') : null,
       note.space !== 'library' ? el('button', { class: 'btn btn-secondary btn-sm', onclick: async () => {
